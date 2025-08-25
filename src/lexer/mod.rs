@@ -1,8 +1,11 @@
+mod token;
+mod extensions;
+
 use crate::common::SourceLocation;
-use crate::lexer::TokenType::Identifier;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
+use crate::lexer::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
+use crate::lexer::token::{Token, TokenType, PUNCTS};
 
 pub struct Lexer {
     filepath: Rc<str>,
@@ -252,92 +255,6 @@ impl Lexer {
     }
 }
 
-#[derive(Debug)]
-pub struct Token {
-    pub kind: TokenType,
-
-    pub integer: i32,
-    pub double: f32,
-    string: Rc<str>,
-
-    pub loc: SourceLocation,
-}
-
-impl Token {
-    pub fn integer(value: i32, loc: SourceLocation) -> Self {
-        Self {
-            kind: TokenType::Integer,
-            loc,
-            integer: value,
-            double: 0f32,
-            string: Default::default(),
-        }
-    }
-
-    pub fn double(value: f32, loc: SourceLocation) -> Self {
-        Token {
-            kind: TokenType::Double,
-            loc,
-            integer: 0,
-            double: value,
-            string: Default::default(),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum TokenType {
-    EOF,
-
-    // Keywords
-    Func,
-
-    // Punctuation
-    OpenParen,
-    CloseParen,
-    OpenBrace,
-    CloseBrace,
-    Dot,
-    Semicolon,
-
-    // Logical operators
-    Equal,
-    EqualEqual,
-    Bang,
-    BangEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-
-    // Other operators
-    Plus,
-    Minus,
-    Star,
-    Slash,
-
-    // Other terminals
-    Identifier,
-    Integer,
-    Double,
-    String,
-}
-
-impl TokenType {
-    pub fn from_punct(p: &str) -> Self {
-        PUNCTS.with(|c| c[&p])
-    }
-}
-
-thread_local! {
-static PUNCTS: HashMap<&'static str, TokenType> = HashMap::from([
-    ("(", TokenType::OpenParen),
-    (")", TokenType::CloseParen),
-    ("{", TokenType::OpenBrace),
-    ("}", TokenType::CloseBrace),
-]);
-}
-
 #[derive(Copy, Clone)]
 pub struct LexerState {
     current: usize,
@@ -362,49 +279,6 @@ impl Default for LexerState {
             current: 0,
             line_start: 0,
             line_number: 0,
-        }
-    }
-}
-
-trait OptionCharExtensions {
-    fn is(&self, c: char) -> Option<char>;
-    fn is_not(&self, c: char) -> Option<char>;
-}
-
-impl OptionCharExtensions for Option<char> {
-    fn is(&self, c: char) -> Option<char> {
-        self.filter(|&ch| ch == c)
-    }
-    fn is_not(&self, c: char) -> Option<char> {
-        self.filter(|&ch| ch != c)
-    }
-}
-
-trait CharExtensions {
-    fn is_id_start(&self) -> bool;
-    fn is_id_continue(&self) -> bool;
-}
-
-impl CharExtensions for char {
-    fn is_id_start(&self) -> bool {
-        self.is_alphabetic() || *self == '_'
-    }
-
-    fn is_id_continue(&self) -> bool {
-        self.is_alphanumeric() || *self == '_'
-    }
-}
-
-trait StringExtensions {
-    fn to_token_type(&self) -> TokenType;
-}
-
-impl StringExtensions for str {
-    fn to_token_type(&self) -> TokenType {
-        use TokenType::*;
-        match self {
-            "func" => Func,
-            _ => Identifier,
         }
     }
 }
