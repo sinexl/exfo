@@ -30,11 +30,11 @@ impl Lexer {
         use TokenType::*;
 
         self.skip_whitespaces_and_comments()?;
-        let state = self.save();
+        let saved = self.save();
         let c = if let Some(c) = self.next_char() {
             c
         } else {
-            return Ok(Token::eof(self.source_loc(state)));
+            return Ok(Token::eof(self.source_loc(self.state)));
         };
         self.token_start = self.state;
 
@@ -49,15 +49,15 @@ impl Lexer {
             }
 
             '"' => {
-                self.restore(state);
+                self.restore(saved);
                 self.scan_string()?
             }
             digit if digit.is_digit(10) => {
-                self.restore(state);
+                self.restore(saved);
                 self.scan_number()
             }
             ch if ch.is_id_start() => {
-                self.restore(state);
+                self.restore(saved);
                 self.scan_identifier_or_keyword()
             }
             c => {
@@ -102,7 +102,6 @@ impl Lexer {
                     nested -= 1;
                 }
             } else if self.starts_with("//") {
-                // TODO: Comments are broken when at end of the file
                 while self.peek_char().is_not('\n').is_some() {
                     self.skip_char();
                 }
@@ -262,8 +261,9 @@ impl Lexer {
     }
 
     pub fn starts_with_peek(&self, s: &str) -> bool {
+        assert!(s.len() > 0);
         let current = self.idx();
-        if self.is_eof_at(current + s.len()) {
+        if self.is_eof_at(current + s.len() - 1) {
             return false;
         }
         if self.src[current..].starts_with(s) {
