@@ -2,7 +2,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Default)]
 pub struct SourceLocation {
     pub line: usize,
     pub offset: usize,

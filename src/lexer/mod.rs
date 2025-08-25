@@ -1,11 +1,13 @@
 mod extensions;
 mod token;
 
+use std::fmt::{Display, Formatter};
 use crate::common::{CompilerError, SourceLocation};
 use crate::lexer::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
-pub(crate) use crate::lexer::token::{TokenType};
+pub(crate) use crate::lexer::token::TokenType;
 use crate::lexer::token::{is_punct, Token, SINGLE_PUNCTS};
 use crate::lexer::LexerErrorKind::{UnterminatedComment, UnterminatedString};
+use crate::lexer::TokenType::EOF;
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -24,6 +26,24 @@ impl Lexer {
             state: Default::default(),
             token_start: LexerState::default(),
         }
+    }
+
+    pub fn accumulate(&mut self) -> (Vec<Token>, Vec<LexerError>) {
+        let mut tokens = Vec::new();
+        let mut errors = Vec::new();
+        loop {
+            let x = self.next_token();
+            if let Ok(x) = x {
+                let kind = x.kind;
+                tokens.push(x);
+                if kind == EOF {
+                    break;
+                }
+            } else if let Err(x) = x {
+                errors.push(x);
+            }
+        }
+        (tokens, errors)
     }
 
     pub fn next_token(&mut self) -> Result<Token, LexerError> {
@@ -196,21 +216,9 @@ impl Lexer {
             loc: self.source_loc(self.token_start),
         }
     }
-
-    /// Peeks a character.
-    /// If character == `if_true`, consumes it and returns if_true,
-    /// Otherwise, returns `if_false` without consuming
-    fn match_type(&mut self, expected: char, if_true: TokenType, if_not: TokenType) -> TokenType {
-        let actual = self.peek_char().unwrap();
-        if actual != expected {
-            return if_not;
-        }
-        self.skip_char();
-
-        if_true
-    }
 }
 
+// helpers
 impl Lexer {
     fn peek_char(&self) -> Option<char> {
         self.src.chars().nth(self.idx()) // nice language you've got here
@@ -270,6 +278,19 @@ impl Lexer {
             return true;
         }
         false
+    }
+
+    /// Peeks a character.
+    /// If character == `if_true`, consumes it and returns if_true,
+    /// Otherwise, returns `if_false` without consuming
+    fn match_type(&mut self, expected: char, if_true: TokenType, if_not: TokenType) -> TokenType {
+        let actual = self.peek_char().unwrap();
+        if actual != expected {
+            return if_not;
+        }
+        self.skip_char();
+
+        if_true
     }
 
     fn create_punct(&self, kind: TokenType) -> Token {
@@ -348,5 +369,11 @@ impl CompilerError for LexerError {
             UnterminatedComment => &format!("comment begins here: {}", self.location),
         };
         Some(v.to_string())
+    }
+}
+
+impl Display for LexerError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self as &dyn CompilerError, f)
     }
 }

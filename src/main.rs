@@ -1,21 +1,25 @@
 use crate::lexer::Lexer;
-use crate::lexer::TokenType;
 use std::fs;
 
 pub mod common;
 pub mod lexer;
+mod ast;
+mod simple_interpreter;
+
 fn main() -> Result<(), ()> {
     let path = "test.exfo";
     let file = fs::read_to_string(path).map_err(|e| eprintln!("{}", e))?;
 
-    let mut lexer = Lexer::new(&file, path);
+    let (tokens, errors) = Lexer::new(&file, path).accumulate();
 
-    while let Ok(tk) = lexer.next_token() {
-        println!("{tk}");
-        if tk.kind == TokenType::EOF {
-            break;
-        }
+    for token in tokens {
+        println!("{}", token);
     }
+    for error in errors {
+        println!("{}", error)
+    }
+
+
 
     Ok(())
 }
