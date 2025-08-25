@@ -1,9 +1,11 @@
 mod extensions;
 mod token;
 
-use crate::common::SourceLocation;
+use crate::common::{CompilerError, SourceLocation};
 use crate::lexer::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
-use crate::lexer::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
+pub(crate) use crate::lexer::token::{TokenType};
+use crate::lexer::token::{is_punct, Token, SINGLE_PUNCTS};
+use crate::lexer::LexerErrorKind::{UnterminatedComment, UnterminatedString};
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -24,15 +26,16 @@ impl Lexer {
         }
     }
 
-    pub fn next_token(&mut self) -> Option<Token> {
+    pub fn next_token(&mut self) -> Result<Token, LexerError> {
         use TokenType::*;
 
-        self.skip_whitespaces_and_comments();
-        if self.is_eof() {
-            return None;
-        }
+        self.skip_whitespaces_and_comments()?;
         let state = self.save();
-        let c = self.next_char()?;
+        let c = if let Some(c) = self.next_char() {
+            c
+        } else {
+            return Ok(Token::eof(self.source_loc(state)));
+        };
         self.token_start = self.state;
 
         let tk = match c {
@@ -47,7 +50,7 @@ impl Lexer {
 
             '"' => {
                 self.restore(state);
-                self.scan_string()
+                self.scan_string()?
             }
             digit if digit.is_digit(10) => {
                 self.restore(state);
@@ -63,7 +66,7 @@ impl Lexer {
             }
         };
 
-        Some(tk)
+        Ok(tk)
     }
 
     // this function is mainly needed to counter borrow checker which forbids inlining
@@ -76,13 +79,14 @@ impl Lexer {
         self.create_punct(x)
     }
 
-    pub fn skip_whitespaces_and_comments(&mut self) {
-        loop {
+    pub fn skip_whitespaces_and_comments(&mut self) -> Result<(), LexerError> {
+        'comments: loop {
             if self.peek_char().filter(|c| c.is_whitespace()).is_some() {
                 while self.peek_char().filter(|c| c.is_whitespace()).is_some() {
                     self.skip_char();
                 }
             } else if self.starts_with("/*") {
+                let loc = self.source_loc(self.state);
                 let mut nested = 1;
                 while nested > 0 {
                     while !self.starts_with("*/") {
@@ -91,8 +95,7 @@ impl Lexer {
                         }
 
                         if self.is_eof() {
-                            eprintln!("unterminated */"); // todo: proper error handling
-                            return;
+                            return Err(LexerError::new(loc, UnterminatedComment));
                         }
                         self.skip_char();
                     }
@@ -107,9 +110,10 @@ impl Lexer {
                     self.skip_char()
                 }
             } else {
-                break;
+                break 'comments;
             }
         }
+        Ok(())
     }
 
     pub fn save(&self) -> LexerState {
@@ -119,8 +123,13 @@ impl Lexer {
         self.state = state;
     }
 
-    fn scan_string(&mut self) -> Token {
+    pub fn source_loc(&self, state: LexerState) -> SourceLocation {
+        state.source_loc(self.filepath.clone())
+    }
+
+    fn scan_string(&mut self) -> Result<Token, LexerError> {
         assert_eq!(self.peek_char().unwrap(), '"');
+        let start_loc = self.source_loc(self.state);
         self.skip_char();
         let start = self.idx();
 
@@ -130,20 +139,19 @@ impl Lexer {
         }
 
         if self.is_eof() {
-            eprintln!("unterminated string");
-            panic!(); // todo: proper error handling.
+            return Err(LexerError::new(start_loc, UnterminatedString));
         }
 
         self.skip_char(); // "
         let val: Rc<str> = Rc::from(&self.src[start..self.idx() - 1]);
 
-        Token {
-            loc: self.token_start.source_loc(self.filepath.clone()),
+        Ok(Token {
+            loc: self.source_loc(self.token_start),
             kind: TokenType::String,
             integer: 0,
             double: 0f32,
             string: val,
-        }
+        })
     }
 
     fn scan_number(&mut self) -> Token {
@@ -164,13 +172,13 @@ impl Lexer {
 
         let str: Rc<str> = Rc::from(&self.src[start..self.idx()]);
 
-        let location = self.token_start.source_loc(self.filepath.clone());
+        let location = self.source_loc(self.token_start);
         if is_floating {
             let value = f32::from_str(&str).unwrap();
             return Token::double(value, location);
         }
         let value = i32::from_str(&str).unwrap();
-        Token::integer(value, self.token_start.source_loc(self.filepath.clone()))
+        Token::integer(value, location)
     }
 
     fn scan_identifier_or_keyword(&mut self) -> Token {
@@ -186,7 +194,7 @@ impl Lexer {
             integer: 0,
             double: 0f32,
             string: word,
-            loc: self.token_start.source_loc(self.filepath.clone()),
+            loc: self.source_loc(self.token_start),
         }
     }
 
@@ -267,7 +275,7 @@ impl Lexer {
     fn create_punct(&self, kind: TokenType) -> Token {
         Token {
             kind,
-            loc: self.token_start.source_loc(self.filepath.clone()),
+            loc: self.source_loc(self.token_start),
             integer: 0,
             double: 0f32,
             string: Default::default(), // TODO: the character itself
@@ -300,5 +308,45 @@ impl Default for LexerState {
             line_start: 0,
             line_number: 1,
         }
+    }
+}
+
+pub struct LexerError {
+    location: SourceLocation,
+    kind: LexerErrorKind,
+}
+
+impl LexerError {
+    pub fn new(location: SourceLocation, kind: LexerErrorKind) -> LexerError {
+        LexerError { location, kind }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum LexerErrorKind {
+    UnterminatedString,
+    UnterminatedComment,
+}
+
+impl CompilerError for LexerError {
+    fn location(&self) -> SourceLocation {
+        self.location.clone()
+    }
+
+    fn message(&self) -> String {
+        use LexerErrorKind::*;
+        match self.kind {
+            UnterminatedString => "Unterminated string".to_string(),
+            UnterminatedComment => "unclosed comment".to_string(),
+        }
+    }
+
+    fn note(&self) -> Option<String> {
+        use LexerErrorKind::*;
+        let v = match self.kind {
+            UnterminatedString => &format!("string literal begins here: {}", self.location),
+            UnterminatedComment => &format!("comment begins here: {}", self.location),
+        };
+        Some(v.to_string())
     }
 }

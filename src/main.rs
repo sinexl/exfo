@@ -1,4 +1,5 @@
 use crate::lexer::Lexer;
+use crate::lexer::TokenType;
 use std::fs;
 
 pub mod common;
@@ -9,8 +10,11 @@ fn main() -> Result<(), ()> {
 
     let mut lexer = Lexer::new(&file, path);
 
-    while let Some(tk) = lexer.next_token() {
+    while let Ok(tk) = lexer.next_token() {
         println!("{tk}");
+        if tk.kind == TokenType::EOF {
+            break;
+        }
     }
 
     Ok(())

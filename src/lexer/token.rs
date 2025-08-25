@@ -18,7 +18,7 @@ pub struct Token {
 impl Token {
     pub fn integer(value: i32, loc: SourceLocation) -> Self {
         Self {
-            kind: TokenType::Integer,
+            kind: Integer,
             loc,
             integer: value,
             double: 0f32,
@@ -28,11 +28,21 @@ impl Token {
 
     pub fn double(value: f32, loc: SourceLocation) -> Self {
         Token {
-            kind: TokenType::Double,
+            kind: Double,
             loc,
             integer: 0,
             double: value,
             string: Default::default(),
+        }
+    }
+
+    pub fn eof(loc: SourceLocation) -> Self {
+        Token {
+            kind: EOF,
+            integer: 0,
+            double: 0f32,
+            string: Default::default(),
+            loc,
         }
     }
 }
@@ -40,19 +50,18 @@ impl Token {
 impl Display for Token {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{loc}: {kind:?}", loc = self.loc, kind = self.kind)?;
-        match self.kind
-        {
+        match self.kind {
             String => write!(f, " \"{}\"", self.string),
             Integer => write!(f, " ({})", self.integer),
             Double => write!(f, " ({})", self.double),
             Identifier => write!(f, " `{}`", self.string),
-            _ => { Ok(()) }
+            _ => Ok(()),
         }
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum TokenType {
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum TokenType {
     EOF,
 
     // Keywords
