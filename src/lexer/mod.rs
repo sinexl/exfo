@@ -26,29 +26,20 @@ impl Lexer {
 
     pub fn next_token(&mut self) -> Option<Token> {
         use TokenType::*;
+
         self.skip_whitespaces_and_comments();
         if self.is_eof() {
             return None;
         }
         let state = self.save();
         let c = self.next_char()?;
+        self.token_start = self.state;
+
         let tk = match c {
-            '!' => {
-                let x = self.match_type('=', BangEqual, Bang);
-                self.create_punct(x)
-            }
-            '=' => {
-                let x = self.match_type('=', EqualEqual, Equal);
-                self.create_punct(x)
-            }
-            '>' => {
-                let x = self.match_type('=', GreaterEqual, Greater);
-                self.create_punct(x)
-            }
-            '<' => {
-                let x = self.match_type('=', LessEqual, Less);
-                self.create_punct(x)
-            }
+            '!' => self.create_punct_with_equal(BangEqual, Bang),
+            '=' => self.create_punct_with_equal(EqualEqual, Equal),
+            '>' => self.create_punct_with_equal(GreaterEqual, Greater),
+            '<' => self.create_punct_with_equal(LessEqual, Less),
             punct if is_punct(punct) => {
                 let kind = SINGLE_PUNCTS.with(|c| c[&punct]);
                 self.create_punct(kind)
@@ -73,6 +64,16 @@ impl Lexer {
         };
 
         Some(tk)
+    }
+
+    // this function is mainly needed to counter borrow checker which forbids inlining
+    fn create_punct_with_equal(
+        &mut self,
+        if_has_equal: TokenType,
+        if_doesnt_have: TokenType,
+    ) -> Token {
+        let x = self.match_type('=', if_has_equal, if_doesnt_have);
+        self.create_punct(x)
     }
 
     pub fn skip_whitespaces_and_comments(&mut self) {
@@ -263,7 +264,7 @@ impl Lexer {
         false
     }
 
-    pub fn create_punct(&self, kind: TokenType) -> Token {
+    fn create_punct(&self, kind: TokenType) -> Token {
         Token {
             kind,
             loc: self.token_start.source_loc(self.filepath.clone()),
@@ -297,7 +298,7 @@ impl Default for LexerState {
         LexerState {
             current: 0,
             line_start: 0,
-            line_number: 0,
+            line_number: 1,
         }
     }
 }
