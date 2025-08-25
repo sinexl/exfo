@@ -1,5 +1,7 @@
 use crate::common::SourceLocation;
+use crate::lexer::token::TokenType::{Bang, Equal};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -35,8 +37,22 @@ impl Token {
     }
 }
 
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{loc}: {kind:?}", loc = self.loc, kind = self.kind)?;
+        match self.kind
+        {
+            String => write!(f, " \"{}\"", self.string),
+            Integer => write!(f, " ({})", self.integer),
+            Double => write!(f, " ({})", self.double),
+            Identifier => write!(f, " `{}`", self.string),
+            _ => { Ok(()) }
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
-pub enum TokenType {
+pub(crate) enum TokenType {
     EOF,
 
     // Keywords
@@ -79,11 +95,42 @@ impl TokenType {
     }
 }
 
+use TokenType::*;
 thread_local! {
-pub static PUNCTS: HashMap<&'static str, TokenType> = HashMap::from([
-    ("(", TokenType::OpenParen),
-    (")", TokenType::CloseParen),
-    ("{", TokenType::OpenBrace),
-    ("}", TokenType::CloseBrace),
-]);
+    pub static PUNCTS: HashMap<&'static str, TokenType> = HashMap::from([
+        ("(", OpenParen),
+        (")", CloseParen),
+        ("{", OpenBrace),
+        ("}", CloseBrace),
+        (".", Dot),
+        (";", Semicolon),
+        ("+", Plus),
+        ("-", Minus),
+        ("*", Star),
+        ("/", Slash),
+        (">", Greater), (">=", GreaterEqual),
+        ("<", Less), ("<=", LessEqual),
+        ("=", Equal), ("==", EqualEqual),
+        ("!", Bang), ("!=", BangEqual),
+    ]);
+
+    pub static SINGLE_PUNCTS: HashMap<char, TokenType> = HashMap::from([
+        ('(', OpenParen),
+        (')', CloseParen),
+        ('{', OpenBrace),
+        ('}', CloseBrace),
+        ('.', Dot),
+        (';', Semicolon),
+        ('+', Plus),
+        ('-', Minus),
+        ('*', Star),
+        ('/', Slash),
+        ('>', Greater),
+        ('<', Less),
+        ('=', Equal),
+        ('!', Bang),
+    ]);
+}
+pub fn is_punct(p: char) -> bool {
+    SINGLE_PUNCTS.with(|c| c.contains_key(&p))
 }

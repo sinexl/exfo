@@ -1,4 +1,10 @@
-// Hello, World
-"hello" 123.
-// Hello, World
-237.94 594.4 identifier
+1 hello * /*comment*/ (2 + 3)
+hello /* nested /* multi
+  line */ comment */ 123 helo
+// this is a comment
+/* this is also
+      a comment */
+(( )){} // grouping stuff
+!*+-/=<> <= == // operators
+"String Literal" 474 og
+//

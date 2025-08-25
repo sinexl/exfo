@@ -10,7 +10,7 @@ fn main() -> Result<(), ()> {
     let mut lexer = Lexer::new(&file, path);
 
     while let Some(tk) = lexer.next_token() {
-        println!("{tk:#?}");
+        println!("{tk}");
     }
 
     Ok(())

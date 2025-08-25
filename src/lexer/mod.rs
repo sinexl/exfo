@@ -1,11 +1,11 @@
-mod token;
 mod extensions;
+mod token;
 
 use crate::common::SourceLocation;
+use crate::lexer::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
+use crate::lexer::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
 use std::rc::Rc;
 use std::str::FromStr;
-use crate::lexer::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
-use crate::lexer::token::{Token, TokenType, PUNCTS};
 
 pub struct Lexer {
     filepath: Rc<str>,
@@ -33,16 +33,27 @@ impl Lexer {
         let state = self.save();
         let c = self.next_char()?;
         let tk = match c {
-            '(' => self.create_punct(OpenParen),
-            ')' => self.create_punct(CloseParen),
-            '{' => self.create_punct(OpenBrace),
-            '}' => self.create_punct(CloseBrace),
-            ';' => self.create_punct(Semicolon),
-            '+' => self.create_punct(Plus),
-            '-' => self.create_punct(Minus),
-            '*' => self.create_punct(Star),
-            '/' => self.create_punct(Slash),
-            '.' => self.create_punct(Dot),
+            '!' => {
+                let x = self.match_type('=', BangEqual, Bang);
+                self.create_punct(x)
+            }
+            '=' => {
+                let x = self.match_type('=', EqualEqual, Equal);
+                self.create_punct(x)
+            }
+            '>' => {
+                let x = self.match_type('=', GreaterEqual, Greater);
+                self.create_punct(x)
+            }
+            '<' => {
+                let x = self.match_type('=', LessEqual, Less);
+                self.create_punct(x)
+            }
+            punct if is_punct(punct) => {
+                let kind = SINGLE_PUNCTS.with(|c| c[&punct]);
+                self.create_punct(kind)
+            }
+
             '"' => {
                 self.restore(state);
                 self.scan_string()
@@ -87,6 +98,7 @@ impl Lexer {
                     nested -= 1;
                 }
             } else if self.starts_with("//") {
+                // TODO: Comments are broken when at end of the file
                 while self.peek_char().is_not('\n').is_some() {
                     self.skip_char();
                 }
@@ -172,16 +184,23 @@ impl Lexer {
             kind,
             integer: 0,
             double: 0f32,
-            string: Default::default(),
+            string: word,
             loc: self.token_start.source_loc(self.filepath.clone()),
         }
     }
-}
 
-fn is_punct(p: char) -> bool {
-    let binding = [p as u8];
-    let s = str::from_utf8(&binding).unwrap();
-    PUNCTS.with(|c| c.contains_key(s))
+    /// Peeks a character.
+    /// If character == `if_true`, consumes it and returns if_true,
+    /// Otherwise, returns `if_false` without consuming
+    fn match_type(&mut self, expected: char, if_true: TokenType, if_not: TokenType) -> TokenType {
+        let actual = self.peek_char().unwrap();
+        if actual != expected {
+            return if_not;
+        }
+        self.skip_char();
+
+        if_true
+    }
 }
 
 impl Lexer {
