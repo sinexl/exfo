@@ -2,7 +2,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
-#[derive(Debug, Hash, Default)]
+#[derive(Debug, Hash, Default, Clone)] 
 pub struct SourceLocation {
     pub line: usize,
     pub offset: usize,
@@ -18,16 +18,6 @@ impl SourceLocation {
 impl Display for SourceLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}:{}", self.file, self.line, self.offset)
-    }
-}
-
-impl Clone for SourceLocation {
-    fn clone(&self) -> Self {
-        Self {
-            line: self.line,
-            offset: self.offset,
-            file: self.file.clone(),
-        }
     }
 }
 

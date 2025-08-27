@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
-#[derive(Debug)]
-pub struct Token {
+#[derive(Debug, Clone)]
+pub(crate) struct Token {
     pub kind: TokenType,
 
     pub integer: i32,
@@ -61,7 +61,7 @@ impl Display for Token {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum TokenType {
+pub(crate) enum TokenType {
     EOF,
 
     // Keywords
