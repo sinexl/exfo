@@ -7,6 +7,18 @@ pub(crate) enum BinopKind {
     Multiplication,
     Division,
 }
+
+impl BinopKind {
+    pub(crate) fn name(&self) -> &'static str {
+        match self {
+            BinopKind::Addition => "Addition",
+            BinopKind::Subtraction => "Subtraction",
+            BinopKind::Multiplication => "Multiplication",
+            BinopKind::Division => "Division",
+        }
+    }
+}
+
 impl BinopKind {
     fn from_operator(token: TokenType) -> Option<Self> {
         use crate::lexer::token::TokenType::*;

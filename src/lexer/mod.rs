@@ -11,7 +11,6 @@ use std::fmt::{Display, Formatter};
 use std::fs;
 use std::rc::Rc;
 use std::str::FromStr;
-use crate::lexer::token::TokenType::Semicolon;
 
 pub(crate) struct Lexer {
     filepath: Rc<str>,
@@ -42,7 +41,7 @@ impl Lexer {
             if let Ok(x) = x {
                 let kind = x.kind;
                 tokens.push(x);
-                if kind == TokenType::EOF {
+                if kind == TokenType::Eof {
                     break;
                 }
             } else if let Err(x) = x {
@@ -78,7 +77,7 @@ impl Lexer {
                 self.restore(saved);
                 self.scan_string()?
             }
-            digit if digit.is_digit(10) => {
+            digit if digit.is_ascii_digit() => {
                 self.restore(saved);
                 self.scan_number()
             }
@@ -182,15 +181,15 @@ impl Lexer {
     fn scan_number(&mut self) -> Token {
         let start = self.idx();
 
-        while self.peek_char().filter(|c| c.is_digit(10)).is_some() {
+        while self.peek_char().filter(|c| c.is_ascii_digit()).is_some() {
             self.skip_char()
         }
         let mut is_floating = false;
 
-        if self.peek_char().is('.').is_some() && self.peek_next().is_digit(10) {
+        if self.peek_char().is('.').is_some() && self.peek_next().is_ascii_digit() {
             is_floating = true;
             self.skip_char(); // skip .
-            while self.peek_char().filter(|c| c.is_digit(10)).is_some() {
+            while self.peek_char().filter(|c| c.is_ascii_digit()).is_some() {
                 self.skip_char();
             }
         }
@@ -275,7 +274,7 @@ impl Lexer {
     }
 
     pub fn starts_with_peek(&self, s: &str) -> bool {
-        assert!(s.len() > 0);
+        assert!(!s.is_empty());
         let current = self.idx();
         if self.is_eof_at(current + s.len() - 1) {
             return false;

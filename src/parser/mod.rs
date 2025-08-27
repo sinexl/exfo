@@ -9,14 +9,14 @@ use crate::parser::ParserErrorKind::AtEof;
 use bumpalo::Bump;
 use std::rc::Rc;
 
-/// Operator Precedence
-/// Factor: Multiplication / Division
-/// Term:   Addition / Subtraction
-///
-/// Comparison (>=, >, <, <=)
-/// Equality (==, !=)
+// Operator Precedence
+// Factor: Multiplication / Division
+// Term:   Addition / Subtraction
+//
+// Comparison (>=, >, <, <=)
+// Equality (==, !=)
 
-// Parser
+/// Parser
 pub struct Parser<'a> {
     current: usize,
     tokens: Rc<[Token]>,

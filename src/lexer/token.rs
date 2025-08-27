@@ -38,7 +38,7 @@ impl Token {
 
     pub fn eof(loc: SourceLocation) -> Self {
         Token {
-            kind: EOF,
+            kind: Eof,
             integer: 0,
             double: 0f32,
             string: Default::default(),
@@ -62,7 +62,7 @@ impl Display for Token {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TokenType {
-    EOF,
+    Eof,
 
     // Keywords
     Func,

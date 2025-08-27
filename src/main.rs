@@ -27,5 +27,8 @@ fn main() -> Result<(), ()> {
         .parse_expression()
         .map_err(|e| eprintln!("{:?}", e))?;
 
+    println!("{}", ast);
+
+
     Ok(())
 }

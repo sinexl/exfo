@@ -1,4 +1,5 @@
 pub mod binop;
+pub mod printer;
 
 use crate::ast::binop::BinopKind;
 use crate::common::SourceLocation;
@@ -36,4 +37,12 @@ pub enum ExpressionKind<'a> {
 #[derive(Hash)]
 pub enum UnaryKind {
     Negation,
+}
+
+impl UnaryKind {
+    pub(crate) fn name(&self) -> &'static str {
+        match self { 
+            UnaryKind::Negation => "Negation",
+        }
+    }
 }

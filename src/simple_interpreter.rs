@@ -1,5 +1,5 @@
-use crate::ast::{Expression, ExpressionKind, ExpressionVisitor, UnaryKind};
 use crate::ast::binop::BinopKind;
+use crate::ast::{Expression, ExpressionKind, ExpressionVisitor, UnaryKind};
 
 pub struct Interpreter {}
 
@@ -10,6 +10,7 @@ impl ExpressionVisitor<f32> for Interpreter {
 }
 
 impl Interpreter {
+    #[allow(clippy::only_used_in_recursion)]
     fn evaluate(&mut self, expression: &Expression) -> f32 {
         match &expression.kind {
             ExpressionKind::Binop{left, right, kind}  => {
@@ -24,10 +25,9 @@ impl Interpreter {
                 res
             }
             ExpressionKind::Unary { item, operator } => {
-                let result = match operator {
-                    UnaryKind::Negation => -self.evaluate(&item),
-                };
-                result
+                match operator {
+                    UnaryKind::Negation => -self.evaluate(item),
+                }
             }
             ExpressionKind::Grouping(inner) => self.evaluate(inner),
             &ExpressionKind::Literal(x) => x,
