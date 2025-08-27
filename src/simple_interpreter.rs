@@ -1,5 +1,5 @@
-use crate::ast::{Binop, UnaryKind};
-use crate::ast::{BinopKind, Expression, ExpressionKind, ExpressionVisitor};
+use crate::ast::{Expression, ExpressionKind, ExpressionVisitor, UnaryKind};
+use crate::ast::binop::BinopKind;
 
 pub struct Interpreter {}
 
@@ -12,8 +12,7 @@ impl ExpressionVisitor<f32> for Interpreter {
 impl Interpreter {
     fn evaluate(&mut self, expression: &Expression) -> f32 {
         match &expression.kind {
-            ExpressionKind::Binop(binop) => {
-                let Binop { left, right, kind } = binop;
+            ExpressionKind::Binop{left, right, kind}  => {
                 let left = self.evaluate(left);
                 let right = self.evaluate(right);
                 let res = match kind {
@@ -39,7 +38,6 @@ impl Interpreter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast;
     use crate::ast::ExpressionKind::{Binop, Literal};
     use crate::common::SourceLocation;
     use bumpalo::Bump;
@@ -49,7 +47,7 @@ mod tests {
         let zero: SourceLocation = Default::default();
         let alloc = Bump::new();
         let expression = Expression {
-            kind: Binop(ast::Binop {
+            kind: Binop{
                 left: alloc.alloc::<Expression>(Expression {
                     kind: Literal(10f32),
                     loc: zero.clone(),
@@ -59,7 +57,7 @@ mod tests {
                     loc: zero.clone(),
                 }),
                 kind: BinopKind::Addition,
-            }),
+            },
             loc: zero,
         };
 

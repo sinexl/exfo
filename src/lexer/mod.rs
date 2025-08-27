@@ -1,17 +1,19 @@
 mod extensions;
-mod token;
+pub mod token;
+#[cfg(test)]
+mod test;
 
-use std::fmt::{Display, Formatter};
 use crate::common::{CompilerError, SourceLocation};
 use crate::lexer::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
-pub(crate) use crate::lexer::token::TokenType;
-use crate::lexer::token::{is_punct, Token, SINGLE_PUNCTS};
+use crate::lexer::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
 use crate::lexer::LexerErrorKind::{UnterminatedComment, UnterminatedString};
-use crate::lexer::TokenType::EOF;
+use std::fmt::{Display, Formatter};
+use std::fs;
 use std::rc::Rc;
 use std::str::FromStr;
+use crate::lexer::token::TokenType::Semicolon;
 
-pub struct Lexer {
+pub(crate) struct Lexer {
     filepath: Rc<str>,
     src: Rc<str>,
     state: LexerState,
@@ -27,6 +29,10 @@ impl Lexer {
             token_start: LexerState::default(),
         }
     }
+    pub fn file(path: &str) -> Self {
+        let contents = fs::read_to_string(path).expect("Could not read file");
+        Self::new(contents.as_str(), path)
+    }
 
     pub fn accumulate(&mut self) -> (Vec<Token>, Vec<LexerError>) {
         let mut tokens = Vec::new();
@@ -36,7 +42,7 @@ impl Lexer {
             if let Ok(x) = x {
                 let kind = x.kind;
                 tokens.push(x);
-                if kind == EOF {
+                if kind == TokenType::EOF {
                     break;
                 }
             } else if let Err(x) = x {
