@@ -26,7 +26,7 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
             parenthesize(f, op, &[item])
         }
         ExpressionKind::Assignment { target, value } => {
-            parenthesize(f, "assignment", &[target, value])
+            parenthesize(f, "=", &[target, value])
         }
         ExpressionKind::Literal(lit) => write!(f, "{}", lit),
         ExpressionKind::VariableAccess(name) => write!(f, "{}", name.name),
