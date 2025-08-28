@@ -228,7 +228,7 @@ impl CompilerError for ParseError {
         match &self.kind {
             AtEof => None,
             UnbalancedParens => Some(format!("last parenthesis located here: {}", self.location)),
-            InvalidAssignment(_) => todo!(),
+            InvalidAssignment(_) => None,
         }
     }
 }

@@ -1,44 +1,58 @@
 use crate::lexer::token::TokenType;
-use crate::lexer::token::TokenType::{Minus, Plus, Slash, Star};
 
-#[derive(Hash, Eq, PartialEq, Debug)]
-pub(crate) enum BinopKind {
-    Addition,
-    Subtraction,
-    Multiplication,
-    Division,
+macro_rules! binop_enum {
+    ($name:ident
+        { $($variant:ident => $token:ident),* $(,)?}
+    ) => {
+        #[derive(Hash, Eq, PartialEq, Debug, )]
+        pub(crate) enum $name {
+            $($variant),*
+        }
+
+        impl $name {
+            pub fn name(&self) -> &'static str {
+                match self {
+                    $(Self::$variant => stringify!($variant)),*
+                }
+            }
+
+            pub fn from_operator(token: TokenType) -> Option<Self> {
+                match token {
+                    $(TokenType::$token => Some(Self::$variant)),*,
+                    _ => None
+                }
+            }
+        }
+    };
 }
 
+binop_enum! {
+    BinopKind {
+        // Arithmetic
+        Addition       => Plus,
+        Subtraction    => Minus,
+        Multiplication => Star,
+        Division       => Slash,
+        // Comparison
+        Equality       => EqualEqual,
+        Inequality     => BangEqual,
+        GreaterThan    => Greater,
+        GreaterEq      => GreaterEqual,
+        LessThan       => Less,
+        LessEq         => LessEqual,
+    }
+}
 /// higher index = higher precedence
 pub const PRECEDENCE: &[&[BinopKind]] = &[
+    &[BinopKind::Equality, BinopKind::Inequality],
+    &[BinopKind::LessThan, BinopKind::LessEq, BinopKind::GreaterThan, BinopKind::GreaterEq],
     &[BinopKind::Addition, BinopKind::Subtraction],
     &[BinopKind::Multiplication, BinopKind::Division],
-
 ];
 
 pub const MAX_PRECEDENCE: i32 = PRECEDENCE.len() as i32;
 
 impl BinopKind {
-    pub(crate) fn name(&self) -> &'static str {
-        match self {
-            BinopKind::Addition => "Addition",
-            BinopKind::Subtraction => "Subtraction",
-            BinopKind::Multiplication => "Multiplication",
-            BinopKind::Division => "Division",
-        }
-    }
-    pub fn from_operator(token: TokenType) -> Option<Self> {
-        use crate::lexer::token::TokenType::*;
-        use BinopKind::*;
-        match token {
-            Plus => Some(Addition),
-            Minus => Some(Subtraction),
-            Star => Some(Multiplication),
-            Slash => Some(Division),
-            _ => None,
-        }
-    }
-
     pub fn precedence(&self) -> i32 {
         // level = precedence level
         // group = operations with the same precedence
@@ -51,5 +65,4 @@ impl BinopKind {
         }
         unreachable!()
     }
-
 }
