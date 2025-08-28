@@ -21,6 +21,7 @@ impl Interpreter {
                     BinopKind::Subtraction => left - right,
                     BinopKind::Multiplication => left * right,
                     BinopKind::Division => left / right,
+                    _ => todo!(),
                 };
                 res
             }

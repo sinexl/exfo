@@ -4,7 +4,7 @@ use std::rc::Rc;
 use bumpalo::Bump;
 use crate::lexer::token::Token;
 
-#[derive(Debug, Hash, Default, Clone)]
+#[derive(Debug, Hash, Default, Clone, Eq, PartialEq)]
 pub struct SourceLocation {
     pub line: usize,
     pub offset: usize,
@@ -56,10 +56,7 @@ impl<'a> Identifier<'a> {
     }
 
     pub fn from_token(token: Token, alloc: &'a Bump) -> Self {
-        Self {
-            name: alloc.alloc_str(&token.string),
-            location: token.loc
-        }
+        Self::new(alloc.alloc_str(&token.string), token.loc)
     }
 }
 impl<'a> From<Identifier<'a>> for &'a str {

@@ -29,7 +29,7 @@ pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> st
     }
 }
 
-struct Print<'a>(&'a Expression<'a>, usize);
+pub(crate) struct Print<'a>(pub &'a Expression<'a>, pub usize);
 impl Display for Print<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Print(expr, ind) = self;

@@ -1,3 +1,5 @@
+mod tests;
+
 use crate::ast::binop::BinopKind;
 use crate::ast::ExpressionKind::{Assignment, Binop, Grouping, Literal, VariableAccess};
 use crate::ast::{binop, Expression};
@@ -196,13 +198,13 @@ impl Parser<'_> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ParseError {
     location: SourceLocation,
     kind: ParserErrorKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialOrd, PartialEq)]
 pub enum ParserErrorKind {
     AtEof,
     UnbalancedParens,

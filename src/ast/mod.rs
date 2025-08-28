@@ -1,5 +1,6 @@
 pub mod binop;
 pub mod printer;
+pub mod prefix_printer;
 
 use crate::ast::binop::BinopKind;
 use crate::common::{Identifier, SourceLocation};
