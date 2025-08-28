@@ -1,7 +1,7 @@
 mod tests;
 
 use crate::ast::binop::BinopKind;
-use crate::ast::ExpressionKind::{Assignment, Binop, Grouping, Literal, VariableAccess};
+use crate::ast::ExpressionKind::{Assignment, Binop,  Literal, VariableAccess};
 use crate::ast::{binop, Expression};
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexer::token::TokenType::{Eof, Equal};
@@ -114,9 +114,7 @@ impl<'a> Parser<'a> {
                     kind: ParserErrorKind::UnbalancedParens,
                 });
             }
-            let kind = Grouping(expr);
-            let loc = parenthesis_loc;
-            return Ok(self.bump.alloc(Expression { loc, kind }));
+            return Ok(expr);
         }
 
         panic!("unknown token {}", token);

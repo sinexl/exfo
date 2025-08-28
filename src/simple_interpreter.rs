@@ -30,7 +30,6 @@ impl Interpreter {
                     UnaryKind::Negation => -self.evaluate(item),
                 }
             }
-            ExpressionKind::Grouping(inner) => self.evaluate(inner),
             ExpressionKind::Literal(x) => *x,
             _ => todo!()
         }

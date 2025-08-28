@@ -13,8 +13,8 @@ pub fn simple() {
 
 #[test]
 pub fn parens() {
-    assert_eq!(success("(1 +  2)"), "(group (+ 1 2))");
-    assert_eq!(success("(1)"), "(group 1)");
+    assert_eq!(success("(1 +  2)"), "(+ 1 2)");
+    assert_eq!(success("(1)"), "1");
     assert_eq!(fail("(1"), ParseError {
         kind: ParserErrorKind::UnbalancedParens,
         location: SourceLocation::new(Rc::from("<testcase>"), 1, 1),

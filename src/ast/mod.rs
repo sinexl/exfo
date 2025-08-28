@@ -32,7 +32,6 @@ pub enum ExpressionKind<'a> {
         item: &'a Expression<'a>,
         operator: UnaryKind,
     },
-    Grouping(&'a Expression<'a>),
     Assignment{ target: &'a Expression<'a>, value: &'a Expression<'a>},
     Literal(f32),
     VariableAccess(Identifier<'a>),
@@ -43,7 +42,6 @@ impl ExpressionKind<'_> {
         match self {
             ExpressionKind::Assignment { .. } => true,
             ExpressionKind::VariableAccess(_) => true,
-            ExpressionKind::Grouping(inner) => inner.kind.is_assignable(),
             ExpressionKind::Binop { .. } => false,
             ExpressionKind::Unary { .. } => false,
             ExpressionKind::Literal(_) => false,
@@ -53,7 +51,6 @@ impl ExpressionKind<'_> {
         match self {
             ExpressionKind::Binop { .. } => "binary operation".to_string(),
             ExpressionKind::Unary { .. } => "unary operation".to_string(),
-            ExpressionKind::Grouping(_) => "grouping".to_string(),
             ExpressionKind::Assignment { .. } => "assignment".to_string(),
             ExpressionKind::Literal(_) => "literal".to_string(),
             ExpressionKind::VariableAccess(_) => "variable access".to_string(),

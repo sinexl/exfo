@@ -22,10 +22,6 @@ pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> st
             writeln!(f, "{}", operator.name())?;
             write!(f, "{tab}item = {}", Print(item, indent + 1))
         }
-        ExpressionKind::Grouping(inner) => {
-            writeln!(f, "Grouping")?;
-            write!(f, "{tab}{}", Print(inner, indent + 1))
-        }
     }
 }
 

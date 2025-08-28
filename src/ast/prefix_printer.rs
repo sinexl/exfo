@@ -25,7 +25,6 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
             };
             parenthesize(f, op, &[item])
         }
-        ExpressionKind::Grouping(inner) => parenthesize(f, "group", &[inner]),
         ExpressionKind::Assignment { target, value } => {
             parenthesize(f, "assignment", &[target, value])
         }
