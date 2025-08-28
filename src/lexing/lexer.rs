@@ -1,12 +1,7 @@
-mod extensions;
-pub mod token;
-#[cfg(test)]
-mod test;
-
 use crate::common::{CompilerError, SourceLocation};
-use crate::lexer::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
-use crate::lexer::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
-use crate::lexer::LexerErrorKind::{UnterminatedComment, UnterminatedString};
+use crate::lexing::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
+use crate::lexing::lexer::LexerErrorKind::{UnterminatedComment, UnterminatedString};
+use crate::lexing::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::rc::Rc;

@@ -1,5 +1,5 @@
 use crate::ast::binop::BinopKind;
-use crate::ast::{Expression, ExpressionKind, UnaryKind};
+use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use std::fmt::{Display, Formatter, Write};
 
 pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Result {

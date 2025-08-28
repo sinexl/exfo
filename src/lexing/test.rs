@@ -1,4 +1,4 @@
-use crate::lexer::Lexer;
+use crate::lexing::lexer::Lexer;
 
 #[test]
 pub fn test_lexer() {

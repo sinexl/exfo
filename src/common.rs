@@ -1,8 +1,8 @@
+use crate::lexing::token::Token;
+use bumpalo::Bump;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
-use bumpalo::Bump;
-use crate::lexer::token::Token;
 
 #[derive(Debug, Hash, Default, Clone, Eq, PartialEq)]
 pub struct SourceLocation {

@@ -1,12 +1,12 @@
-use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::lexing::lexer::Lexer;
+use crate::parsing::parser::Parser;
 use bumpalo::Bump;
 use std::fs;
 
 mod ast;
 pub mod common;
-pub mod lexer;
-mod parser;
+pub mod lexing;
+mod parsing;
 mod simple_interpreter;
 
 fn main() -> Result<(), ()> {

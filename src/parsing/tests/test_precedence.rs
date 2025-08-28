@@ -1,8 +1,8 @@
+use crate::ast::expression::ExpressionKind;
 use crate::ast::prefix_printer::PrefixPrint;
-use crate::ast::ExpressionKind;
 use crate::common::SourceLocation;
-use crate::lexer::Lexer;
-use crate::parser::{ParseError, Parser, ParserErrorKind};
+use crate::lexing::lexer::Lexer;
+use crate::parsing::parser::{ParseError, Parser, ParserErrorKind};
 use bumpalo::Bump;
 use std::rc::Rc;
 

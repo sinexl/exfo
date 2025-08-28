@@ -1,5 +1,5 @@
 use crate::ast::binop::BinopKind;
-use crate::ast::{Expression, ExpressionKind, ExpressionVisitor, UnaryKind};
+use crate::ast::expression::{Expression, ExpressionKind, ExpressionVisitor, UnaryKind};
 
 pub struct Interpreter {}
 
@@ -13,7 +13,7 @@ impl Interpreter {
     #[allow(clippy::only_used_in_recursion)]
     fn evaluate(&mut self, expression: &Expression) -> f32 {
         match &expression.kind {
-            ExpressionKind::Binop{left, right, kind}  => {
+            ExpressionKind::Binop { left, right, kind } => {
                 let left = self.evaluate(left);
                 let right = self.evaluate(right);
                 let res = match kind {
@@ -39,7 +39,7 @@ impl Interpreter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::ExpressionKind::{Binop, Literal};
+    use crate::ast::expression::ExpressionKind::{Binop, Literal};
     use crate::common::SourceLocation;
     use bumpalo::Bump;
 
@@ -48,7 +48,7 @@ mod tests {
         let zero: SourceLocation = Default::default();
         let alloc = Bump::new();
         let expression = Expression {
-            kind: Binop{
+            kind: Binop {
                 left: alloc.alloc::<Expression>(Expression {
                     kind: Literal(10f32),
                     loc: zero.clone(),

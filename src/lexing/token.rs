@@ -1,5 +1,5 @@
 use crate::common::SourceLocation;
-use crate::lexer::token::TokenType::{Bang, Equal};
+use crate::lexing::token::TokenType::{Bang, Equal};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;

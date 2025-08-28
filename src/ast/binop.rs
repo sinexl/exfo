@@ -1,4 +1,4 @@
-use crate::lexer::token::TokenType;
+use crate::lexing::token::TokenType;
 
 macro_rules! binop_enum {
     ($name:ident

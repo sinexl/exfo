@@ -1,4 +1,4 @@
-use crate::ast::{Expression, ExpressionKind};
+use crate::ast::expression::{Expression, ExpressionKind};
 use std::fmt::{Display, Formatter, Write};
 
 pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> std::fmt::Result {

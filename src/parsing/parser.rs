@@ -1,15 +1,13 @@
-mod tests;
-
+use crate::ast::binop;
 use crate::ast::binop::BinopKind;
-use crate::ast::ExpressionKind::{Assignment, Binop,  Literal, VariableAccess};
-use crate::ast::{binop, Expression};
+use crate::ast::expression::Expression;
+use crate::ast::expression::ExpressionKind::{Assignment, Binop, Literal, VariableAccess};
 use crate::common::{CompilerError, Identifier, SourceLocation};
-use crate::lexer::token::TokenType::{Eof, Equal};
-use crate::lexer::token::{Token, TokenType};
-use crate::parser::ParserErrorKind::InvalidAssignment;
+use crate::lexing::token::TokenType::{Eof, Equal};
+use crate::lexing::token::{Token, TokenType};
+use crate::parsing::parser::ParserErrorKind::InvalidAssignment;
 use bumpalo::Bump;
 use std::rc::Rc;
-
 // For Operator Precedence, visit ./src/ast/binop.rs
 
 /// Parser
@@ -194,8 +192,8 @@ impl Parser<'_> {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ParseError {
-    location: SourceLocation,
-    kind: ParserErrorKind,
+    pub location: SourceLocation,
+    pub kind: ParserErrorKind,
 }
 
 #[derive(Debug, Clone, Eq, PartialOrd, PartialEq)]

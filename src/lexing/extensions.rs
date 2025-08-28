@@ -1,4 +1,4 @@
-use crate::lexer::token::TokenType;
+use crate::lexing::token::TokenType;
 
 pub trait OptionCharExtensions {
     fn is(&self, c: char) -> Option<char>;
@@ -35,7 +35,7 @@ pub trait StringExtensions {
 
 impl StringExtensions for str {
     fn to_token_type(&self) -> TokenType {
-        use crate::lexer::token::TokenType::*;
+        use crate::lexing::token::TokenType::*;
         match self {
             "func" => Func,
             _ => Id,
