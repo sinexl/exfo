@@ -9,12 +9,8 @@ use crate::lexer::token::{Token, TokenType};
 use crate::parser::ParserErrorKind::InvalidAssignment;
 use bumpalo::Bump;
 use std::rc::Rc;
-// Operator Precedence
-// Factor: Multiplication / Division
-// Term:   Addition / Subtraction
-//
-// Comparison (>=, >, <, <=)
-// Equality (==, !=)
+
+// For Operator Precedence, visit ./src/ast/binop.rs
 
 /// Parser
 #[derive(Debug)]

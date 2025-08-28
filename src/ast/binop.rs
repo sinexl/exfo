@@ -42,10 +42,15 @@ binop_enum! {
         LessEq         => LessEqual,
     }
 }
-/// higher index = higher precedence
+/// higher index = higher precedence/binding power
 pub const PRECEDENCE: &[&[BinopKind]] = &[
     &[BinopKind::Equality, BinopKind::Inequality],
-    &[BinopKind::LessThan, BinopKind::LessEq, BinopKind::GreaterThan, BinopKind::GreaterEq],
+    &[
+        BinopKind::LessThan,
+        BinopKind::LessEq,
+        BinopKind::GreaterThan,
+        BinopKind::GreaterEq,
+    ],
     &[BinopKind::Addition, BinopKind::Subtraction],
     &[BinopKind::Multiplication, BinopKind::Division],
 ];
@@ -63,6 +68,8 @@ impl BinopKind {
                 }
             }
         }
-        unreachable!()
+        unreachable!(
+            "if you reach this, it means that precedence table doesn't contain all of the possible operations"
+        )
     }
 }
