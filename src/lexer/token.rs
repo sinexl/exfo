@@ -1,7 +1,7 @@
 use crate::common::SourceLocation;
 use crate::lexer::token::TokenType::{Bang, Equal};
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
@@ -54,7 +54,7 @@ impl Display for Token {
             String => write!(f, " \"{}\"", self.string),
             Integer => write!(f, " ({})", self.integer),
             Double => write!(f, " ({})", self.double),
-            Identifier => write!(f, " `{}`", self.string),
+            Id => write!(f, " `{}`", self.string),
             _ => Ok(()),
         }
     }
@@ -92,7 +92,7 @@ pub(crate) enum TokenType {
     Slash,
 
     // Other terminals
-    Identifier,
+    Id,
     Integer,
     Double,
     String,

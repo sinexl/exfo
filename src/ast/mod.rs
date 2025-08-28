@@ -2,8 +2,9 @@ pub mod binop;
 pub mod printer;
 
 use crate::ast::binop::BinopKind;
-use crate::common::SourceLocation;
+use crate::common::{Identifier, SourceLocation};
 
+#[derive(Debug)]
 pub struct Expression<'a> {
     pub kind: ExpressionKind<'a>,
     pub loc: SourceLocation,
@@ -19,6 +20,7 @@ impl Expression<'_> {
     }
 }
 
+#[derive(Debug)]
 pub enum ExpressionKind<'a> {
     Binop {
         left: &'a Expression<'a>,
@@ -30,18 +32,43 @@ pub enum ExpressionKind<'a> {
         operator: UnaryKind,
     },
     Grouping(&'a Expression<'a>),
+    Assignment{ target: &'a Expression<'a>, value: &'a Expression<'a>},
     Literal(f32),
+    VariableAccess(Identifier<'a>),
+}
+
+impl ExpressionKind<'_> {
+    pub fn is_assignable(&self) -> bool {
+        match self {
+            ExpressionKind::Assignment { .. } => true,
+            ExpressionKind::VariableAccess(_) => true,
+            ExpressionKind::Grouping(inner) => inner.kind.is_assignable(),
+            ExpressionKind::Binop { .. } => false,
+            ExpressionKind::Unary { .. } => false,
+            ExpressionKind::Literal(_) => false,
+        }
+    }
+    pub fn humanize(&self) -> String {
+        match self {
+            ExpressionKind::Binop { .. } => "binary operation".to_string(),
+            ExpressionKind::Unary { .. } => "unary operation".to_string(),
+            ExpressionKind::Grouping(_) => "grouping".to_string(),
+            ExpressionKind::Assignment { .. } => "assignment".to_string(),
+            ExpressionKind::Literal(_) => "literal".to_string(),
+            ExpressionKind::VariableAccess(_) => "variable access".to_string(),
+        }
+    }
 }
 
 
-#[derive(Hash)]
+#[derive(Hash, Debug)]
 pub enum UnaryKind {
     Negation,
 }
 
 impl UnaryKind {
     pub(crate) fn name(&self) -> &'static str {
-        match self { 
+        match self {
             UnaryKind::Negation => "Negation",
         }
     }

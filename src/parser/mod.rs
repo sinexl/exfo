@@ -1,14 +1,12 @@
 use crate::ast::binop::BinopKind;
-use crate::ast::binop::BinopKind::{Addition, Division, Multiplication, Subtraction};
-use crate::ast::Expression;
-use crate::ast::ExpressionKind::{Binop, Literal};
-use crate::common::SourceLocation;
-use crate::lexer::token::TokenType::{Minus, Plus, Slash, Star};
+use crate::ast::ExpressionKind::{Assignment, Binop, Grouping, Literal, VariableAccess};
+use crate::ast::{binop, Expression};
+use crate::common::{CompilerError, Identifier, SourceLocation};
+use crate::lexer::token::TokenType::{Eof, Equal};
 use crate::lexer::token::{Token, TokenType};
-use crate::parser::ParserErrorKind::AtEof;
+use crate::parser::ParserErrorKind::InvalidAssignment;
 use bumpalo::Bump;
 use std::rc::Rc;
-
 // Operator Precedence
 // Factor: Multiplication / Division
 // Term:   Addition / Subtraction
@@ -17,6 +15,7 @@ use std::rc::Rc;
 // Equality (==, !=)
 
 /// Parser
+#[derive(Debug)]
 pub struct Parser<'a> {
     current: usize,
     tokens: Rc<[Token]>,
@@ -35,33 +34,54 @@ impl<'a> Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn parse_expression(&mut self) -> Result<&'a Expression<'a>, ParseError> {
-        self.parse_term()
+        self.parse_assignment()
     }
 
-    fn parse_term(&mut self) -> Result<&'a Expression<'a>, ParseError> {
-        let mut left = self.parse_factor()?;
-        while let Some(tk) = self.consume(&[Star, Slash]) {
-            let right = self.parse_factor()?;
-            let new_kind = match  tk.kind {
-                Star => Multiplication,
-                Slash => Division,
-                _ => unreachable!()
-            };
-            left = self.reconstruct_binop(left, right, new_kind, tk.loc.clone());
+    fn parse_assignment(&mut self) -> Result<&'a Expression<'a>, ParseError> {
+        let target = self.parse_binop(0)?;
+        if let Some(tk) = self.consume(&[Equal]) {
+            let value = self.parse_assignment()?;
+            if !target.kind.is_assignable() {
+                return Err(ParseError {
+                    location: target.loc.clone(),
+                    kind: InvalidAssignment(target.kind.humanize()),
+                });
+            }
+
+            return Ok(self.bump.alloc(Expression {
+                loc: tk.loc,
+                kind: Assignment { target, value },
+            }));
         }
-        Ok(left)
+        Ok(target)
     }
 
-    pub fn parse_factor(&mut self) -> Result<&'a Expression<'a>, ParseError> {
-        let mut left = self.parse_primary()?;
-        while let Some(tk) = self.consume(&[Plus, Minus]) {
-            let right = self.parse_primary()?;
-            let new_kind = match tk.kind {
-                Plus => Addition,
-                Minus => Subtraction,
-                _ => unreachable!(),
-            };
-            left = self.reconstruct_binop(left, right, new_kind, tk.loc.clone());
+    pub(crate) fn parse_binop(
+        &mut self,
+        precedence: i32,
+    ) -> Result<&'a Expression<'a>, ParseError> {
+        if precedence >= binop::MAX_PRECEDENCE {
+            return self.parse_primary();
+        }
+        let mut left = self.parse_binop(precedence + 1)?;
+        let mut operator = self.peek_token()?;
+        if BinopKind::from_operator(operator.kind)
+            .filter(|c| c.precedence() == precedence)
+            .is_some()
+        {
+            'same_precedence: loop {
+                let current = self.peek_token()?;
+                if let Some(kind) = BinopKind::from_operator(current.kind) {
+                    if kind.precedence() != precedence {
+                        break 'same_precedence;
+                    }
+                    operator = self.next_token()?;
+                    let right = self.parse_binop(precedence + 1)?;
+                    left = self.reconstruct_binop(left, right, kind, operator.loc.clone())
+                } else {
+                    break 'same_precedence;
+                }
+            }
         }
         Ok(left)
     }
@@ -69,14 +89,42 @@ impl<'a> Parser<'a> {
     pub fn parse_primary(&mut self) -> Result<&'a Expression<'a>, ParseError> {
         use TokenType::*;
         let token = self.peek_token()?;
-        let loc = token.loc;
-        let kind = match token.kind {
-            Integer => Literal(token.integer as f32),
-            Double => Literal(token.double),
-            _ => todo!(),
-        };
-        self.skip_token();
-        Ok(self.bump.alloc(Expression { loc, kind }))
+
+        if let Some(id) = self.consume(&[Id]) {
+            let loc = id.loc.clone();
+            return Ok(self.bump.alloc(Expression {
+                loc,
+                kind: VariableAccess(Identifier::from_token(id, self.bump)),
+            }));
+        }
+        if let Some(integer) = self.consume(&[Integer]) {
+            return Ok(self.construct_literal(integer.integer as f32, integer.loc.clone()));
+        }
+        if let Some(double) = self.consume(&[Double]) {
+            return Ok(self.construct_literal(double.double, double.loc.clone()));
+        }
+        if let Some(paren) = self.consume(&[OpenParen]) {
+            let parenthesis_loc = paren.loc;
+            let expr = self.parse_expression()?;
+            if self.consume(&[CloseParen]).is_none() {
+                return Err(ParseError {
+                    location: parenthesis_loc,
+                    kind: ParserErrorKind::UnbalancedParens,
+                });
+            }
+            let kind = Grouping(expr);
+            let loc = parenthesis_loc;
+            return Ok(self.bump.alloc(Expression { loc, kind }));
+        }
+
+        panic!("unknown token {}", token);
+    }
+
+    pub fn construct_literal(&self, value: f32, loc: SourceLocation) -> &'a Expression<'a> {
+        self.bump.alloc(Expression {
+            loc,
+            kind: Literal(value),
+        })
     }
 
     pub fn reconstruct_binop(
@@ -93,7 +141,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     fn next_token(&mut self) -> Result<Token, ParseError> {
         let tk = self
             .tokens
@@ -101,7 +149,7 @@ impl<'a> Parser<'a> {
             .cloned()
             .ok_or_else(|| ParseError {
                 location: self.tokens.last().unwrap().loc.clone(),
-                kind: AtEof,
+                kind: ParserErrorKind::AtEof,
             })?;
         self.current += 1;
         Ok(tk)
@@ -117,8 +165,12 @@ impl<'a> Parser<'a> {
 
         Err(ParseError {
             location: self.tokens.last().unwrap().loc.clone(),
-            kind: AtEof,
+            kind: ParserErrorKind::AtEof,
         })
+    }
+
+    pub fn peek_next(&self) -> Option<Token> {
+        self.tokens.get(self.current + 1).cloned()
     }
 
     // Peeks the token.
@@ -134,6 +186,14 @@ impl<'a> Parser<'a> {
         }
         None
     }
+
+    fn at_eof(&self) -> bool {
+        if let Some(token) = self.tokens.get(self.current) {
+            token.kind == Eof
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -142,7 +202,33 @@ pub struct ParseError {
     kind: ParserErrorKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ParserErrorKind {
     AtEof,
+    UnbalancedParens,
+    InvalidAssignment(String),
+}
+
+impl CompilerError for ParseError {
+    fn location(&self) -> SourceLocation {
+        self.location.clone()
+    }
+
+    fn message(&self) -> String {
+        use ParserErrorKind::*;
+        match &self.kind {
+            AtEof => "Nothing to parse".to_string(),
+            UnbalancedParens => "unbalanced parentheses".to_string(),
+            InvalidAssignment(name) => format!("could not assign to {}", name),
+        }
+    }
+
+    fn note(&self) -> Option<String> {
+        use ParserErrorKind::*;
+        match &self.kind {
+            AtEof => None,
+            UnbalancedParens => Some(format!("last parenthesis located here: {}", self.location)),
+            InvalidAssignment(_) => todo!(),
+        }
+    }
 }

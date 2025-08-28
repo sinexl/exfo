@@ -38,7 +38,7 @@ impl StringExtensions for str {
         use crate::lexer::token::TokenType::*;
         match self {
             "func" => Func,
-            _ => Identifier,
+            _ => Id,
         }
     }
 }

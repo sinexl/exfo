@@ -4,15 +4,19 @@ use std::fmt::{Display, Formatter, Write};
 pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> std::fmt::Result {
     let tab = " ".repeat((indent + 1) * 2);
     match &expr.kind {
-        ExpressionKind::Literal(ident) => writeln!(f, "Literal({})", ident),
+        ExpressionKind::Literal(value) => writeln!(f, "Literal({})", value),
+        ExpressionKind::VariableAccess(identifier) => {
+            writeln!(f, "Access({})", identifier.name)
+        }
         ExpressionKind::Binop { left, right, kind } => {
             writeln!(f, "{}", kind.name())?;
             write!(f, "{tab}left = {}", Print(left, indent + 1))?;
             write!(f, "{tab}right = {}", Print(right, indent + 1))
         }
-        ExpressionKind::Assignment { taget, value } => {
+        ExpressionKind::Assignment { target: taget, value } => {
             writeln!(f, "Assignment")?;
-            write!(f, "{tab}target = {}", Print(taget, indent + 1))
+            write!(f, "{tab}target = {}", Print(taget, indent + 1))?;
+            write!(f, "{tab}value  = {}", Print(value, indent + 1))
         }
         ExpressionKind::Unary { item, operator } => {
             writeln!(f, "{}", operator.name())?;

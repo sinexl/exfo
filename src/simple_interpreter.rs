@@ -30,7 +30,8 @@ impl Interpreter {
                 }
             }
             ExpressionKind::Grouping(inner) => self.evaluate(inner),
-            &ExpressionKind::Literal(x) => x,
+            ExpressionKind::Literal(x) => *x,
+            _ => todo!()
         }
     }
 }

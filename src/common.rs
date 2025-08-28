@@ -1,8 +1,10 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+use bumpalo::Bump;
+use crate::lexer::token::Token;
 
-#[derive(Debug, Hash, Default, Clone)] 
+#[derive(Debug, Hash, Default, Clone)]
 pub struct SourceLocation {
     pub line: usize,
     pub offset: usize,
@@ -24,7 +26,7 @@ impl Display for SourceLocation {
 pub trait CompilerError {
     fn location(&self) -> SourceLocation;
     fn message(&self) -> String;
-    fn note(&self) -> Option<String> ;
+    fn note(&self) -> Option<String>;
 }
 
 impl Display for dyn CompilerError {
@@ -41,3 +43,28 @@ impl Display for dyn CompilerError {
         Ok(())
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct Identifier<'a> {
+    pub name: &'a str,
+    pub location: SourceLocation,
+}
+
+impl<'a> Identifier<'a> {
+    pub fn new(name: &'a str, location: SourceLocation) -> Self {
+        Self { name, location }
+    }
+
+    pub fn from_token(token: Token, alloc: &'a Bump) -> Self {
+        Self {
+            name: alloc.alloc_str(&token.string),
+            location: token.loc
+        }
+    }
+}
+impl<'a> From<Identifier<'a>> for &'a str {
+    fn from(id: Identifier<'a>) -> &'a str {
+        id.name
+    }
+}
+
