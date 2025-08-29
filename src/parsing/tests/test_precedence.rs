@@ -12,6 +12,7 @@ pub const PATH: &str = "<testcase>";
 pub fn simple() {
     assert_eq!(success("1"), "1");
     assert_eq!(success("1 + 2 + 3"), "(+ (+ 1 2) 3)");
+    assert_eq!(success("-1 + 2"), "(+ (- 1) 2)");
 }
 
 #[test]
@@ -107,6 +108,19 @@ pub fn precedence_comparison() {
     assert_eq!(success("1 == 2 > 3"), "(== 1 (> 2 3))");
     assert_eq!(success("1 < 2 == 3 + 4"), "(== (< 1 2) (+ 3 4))");
     assert_eq!(success("1 + 2 != 3 / 4"), "(!= (+ 1 2) (/ 3 4))");
+}
+
+#[test]
+pub fn unary() {
+    assert_eq!(success("-1 * 2"), "(* (- 1) 2)");
+    assert_eq!(success("-1 * -2"), "(* (- 1) (- 2))");
+}
+
+#[test]
+pub fn call() {
+    assert_eq!(success("a()"), "(call a)");
+    assert_eq!(success("a(1)(2)"), "(call (call a 1) 2)");
+    assert_eq!(success("a(1 + 2, 3 / 4 * 5, c = d = 10)"), "(call a (+ 1 2) (* (/ 3 4) 5) (= c (= d 10)))")
 }
 
 pub fn success(expr: &str) -> String {

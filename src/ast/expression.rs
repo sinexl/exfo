@@ -31,6 +31,10 @@ pub enum ExpressionKind<'a> {
     Assignment { target: &'a Expression<'a>, value: &'a Expression<'a> },
     Literal(f32),
     VariableAccess(Identifier<'a>),
+    FunctionCall {
+        callee: &'a Expression<'a>,
+        arguments: &'a [&'a Expression<'a>],
+    }
 }
 
 impl ExpressionKind<'_> {
@@ -41,6 +45,7 @@ impl ExpressionKind<'_> {
             ExpressionKind::Binop { .. } => false,
             ExpressionKind::Unary { .. } => false,
             ExpressionKind::Literal(_) => false,
+            ExpressionKind::FunctionCall {..} => false,
         }
     }
     pub fn humanize(&self) -> String {
@@ -50,6 +55,7 @@ impl ExpressionKind<'_> {
             ExpressionKind::Assignment { .. } => "assignment".to_string(),
             ExpressionKind::Literal(_) => "literal".to_string(),
             ExpressionKind::VariableAccess(_) => "variable access".to_string(),
+            ExpressionKind::FunctionCall { .. } => "function call".to_string(),
         }
     }
 }

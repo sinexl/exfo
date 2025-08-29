@@ -14,6 +14,19 @@ pub(crate) struct Token {
 
     pub loc: SourceLocation,
 }
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        const EPSILON: f32 = 1e-6;
+
+        self.kind == other.kind
+            && self.integer == other.integer
+            && (self.double - other.double).abs() < EPSILON
+            && self.string == other.string
+            && self.loc == other.loc
+    }
+}
+
+impl Eq for Token {}
 
 impl Token {
     pub fn integer(value: i32, loc: SourceLocation) -> Self {
@@ -73,6 +86,7 @@ pub(crate) enum TokenType {
     OpenBrace,
     CloseBrace,
     Dot,
+    Comma,
     Semicolon,
 
     // Logical operators
@@ -129,6 +143,7 @@ thread_local! {
         ('{', OpenBrace),
         ('}', CloseBrace),
         ('.', Dot),
+        (',', Comma),
         (';', Semicolon),
         ('+', Plus),
         ('-', Minus),

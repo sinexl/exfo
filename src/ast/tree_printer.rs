@@ -13,7 +13,10 @@ pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> st
             write!(f, "{tab}left = {}", Print(left, indent + 1))?;
             write!(f, "{tab}right = {}", Print(right, indent + 1))
         }
-        ExpressionKind::Assignment { target: taget, value } => {
+        ExpressionKind::Assignment {
+            target: taget,
+            value,
+        } => {
             writeln!(f, "Assignment")?;
             write!(f, "{tab}target = {}", Print(taget, indent + 1))?;
             write!(f, "{tab}value  = {}", Print(value, indent + 1))
@@ -21,6 +24,16 @@ pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> st
         ExpressionKind::Unary { item, operator } => {
             writeln!(f, "{}", operator.name())?;
             write!(f, "{tab}item = {}", Print(item, indent + 1))
+        }
+        &ExpressionKind::FunctionCall { callee, arguments } => {
+            writeln!(f, "Call")?;
+            write!(f, "{tab}callee = {}", Print(callee, indent + 1))?;
+            writeln!(f, "{tab}arguments = ")?;
+            let tab = " ".repeat((indent + 2) * 2);
+            for arg in arguments {
+                write!(f, "{tab}{}", Print(arg, indent + 2))?;
+            }
+            Ok(())
         }
     }
 }

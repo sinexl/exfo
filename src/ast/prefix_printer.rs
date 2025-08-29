@@ -25,11 +25,18 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
             };
             parenthesize(f, op, &[item])
         }
-        ExpressionKind::Assignment { target, value } => {
-            parenthesize(f, "=", &[target, value])
-        }
+        ExpressionKind::Assignment { target, value } => parenthesize(f, "=", &[target, value]),
         ExpressionKind::Literal(lit) => write!(f, "{}", lit),
         ExpressionKind::VariableAccess(name) => write!(f, "{}", name.name),
+        ExpressionKind::FunctionCall { callee, arguments } => {
+            let mut temp = Vec::new();
+            temp.push(*callee);
+            temp.reserve(arguments.len());
+            for arg in *arguments {
+                temp.push(arg);
+            }
+            parenthesize(f, "call", temp.as_slice())
+        }
     }
 }
 
@@ -38,7 +45,11 @@ fn parenthesize(
     name: &str,
     expressions: &[&'_ Expression<'_>],
 ) -> std::fmt::Result {
-    write!(f, "({} ", name)?;
+    if name.is_empty() {
+        write!(f, "(")?;
+    } else {
+        write!(f, "({} ", name)?;
+    }
 
     for (i, expr) in expressions.iter().enumerate() {
         prefix_print(expr, f)?;

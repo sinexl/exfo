@@ -1,14 +1,29 @@
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
-use crate::ast::expression::Expression;
-use crate::ast::expression::ExpressionKind::{Assignment, Binop, Literal, VariableAccess};
+use crate::ast::expression::ExpressionKind::{Assignment, Binop, FunctionCall, Literal, VariableAccess};
+use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::common::{CompilerError, Identifier, SourceLocation};
-use crate::lexing::token::TokenType::{Eof, Equal};
+use crate::lexing::token::TokenType::CloseParen;
 use crate::lexing::token::{Token, TokenType};
-use crate::parsing::parser::ParserErrorKind::InvalidAssignment;
+use crate::parsing::parser::ParserErrorKind::{InvalidAssignment, UnexpectedToken};
 use bumpalo::Bump;
 use std::rc::Rc;
-// For Operator Precedence, visit ./src/ast/binop.rs
+/* Grammar:
+ program             => statement* EOF ;
+ statement           => printStatement | expressionStatement;
+ expressionStatement => expression ";" ;
+ expression          => assignment;
+ assignment          => IDENTIFIER "=" assignment | binop;
+ binop*              => ** | unary;
+ unary               => "-" unary | functionCall;
+ functionCall        => primary ( "( args ")" )*
+ primary             => NUMBER | STRING | IDENTIFIER | "(" expression ")" ;
+
+
+ * - For Binary Operator Precedence, visit ./src/ast/binop.rs
+ ** - All binary operations follow the same pattern:
+         left ( (<either of operators>) right )*
+*/
 
 /// Parser
 #[derive(Debug)]
@@ -29,13 +44,29 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    // pub fn parse_program(&mut self) -> (&'a [&'a Statement], Box<[ParseError]>) {
+    //     let mut statements: Vec<&'a Statement> = Vec::new();
+    //     let mut errors: Vec<ParseError> = Vec::new();
+    //     while !self.at_eof() {
+    //         match self.parse_statement() {
+    //             Err(error) => errors.push(error),
+    //             Ok(statement) => statements.push(statement),
+    //         }
+    //     }
+    //
+    //     (
+    //         self.bump.alloc_slice_copy(&statements),
+    //         errors.into_boxed_slice(),
+    //     )
+    // }
+
     pub fn parse_expression(&mut self) -> Result<&'a Expression<'a>, ParseError> {
         self.parse_assignment()
     }
 
     fn parse_assignment(&mut self) -> Result<&'a Expression<'a>, ParseError> {
         let target = self.parse_binop(0)?;
-        if let Some(tk) = self.consume(&[Equal]) {
+        if let Some(tk) = self.consume(&[TokenType::Equal]) {
             let value = self.parse_assignment()?;
             if !target.kind.is_assignable() {
                 return Err(ParseError {
@@ -57,7 +88,7 @@ impl<'a> Parser<'a> {
         precedence: i32,
     ) -> Result<&'a Expression<'a>, ParseError> {
         if precedence >= binop::MAX_PRECEDENCE {
-            return self.parse_primary();
+            return self.parse_unary();
         }
         let mut left = self.parse_binop(precedence + 1)?;
         let mut operator = self.peek_token()?;
@@ -82,7 +113,57 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    pub fn parse_primary(&mut self) -> Result<&'a Expression<'a>, ParseError> {
+    fn parse_unary(&mut self) -> Result<&'a Expression<'a>, ParseError> {
+        if let Some(tok) = self.consume(&[TokenType::Minus]) {
+            let item = self.parse_unary()?;
+
+            return Ok(self.bump.alloc(Expression {
+                kind: ExpressionKind::Unary {
+                    item,
+                    operator: UnaryKind::Negation,
+                },
+                loc: tok.loc,
+            }));
+        }
+        self.parse_call()
+    }
+
+    fn parse_call(&mut self) -> Result<&'a Expression<'a>, ParseError> {
+        let mut left = self.parse_primary()?;
+        while let Some(tk) = self.consume(&[TokenType::OpenParen]) {
+            left = self.bump.alloc(Expression {
+                kind: FunctionCall {
+                    callee: left,
+                    arguments: self.parse_args()?,
+                },
+                loc: tk.clone().loc,
+            });
+            if self.consume(&[CloseParen]).is_none() {
+                return Err(ParseError {
+                    location: tk.loc,
+                    kind: ParserErrorKind::UnbalancedParens,
+                });
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_args(&mut self) -> Result<&'a [&'a Expression<'a>], ParseError> {
+        let mut args: Vec<&'a Expression<'a>> = vec![];
+        if self.peek_token()?.kind != TokenType::CloseParen {
+            let expr = self.parse_expression()?;
+            args.push(expr);
+
+            while self.consume(&[TokenType::Comma]).is_some() {
+               args.push(self.parse_expression()?);
+            }
+        }
+
+        Ok(self.bump.alloc_slice_copy(args.as_slice()))
+    }
+
+    fn parse_primary(&mut self) -> Result<&'a Expression<'a>, ParseError> {
         use TokenType::*;
         let token = self.peek_token()?;
 
@@ -135,6 +216,7 @@ impl<'a> Parser<'a> {
     }
 }
 
+// Helper methods.
 impl Parser<'_> {
     fn next_token(&mut self) -> Result<Token, ParseError> {
         let tk = self
@@ -163,13 +245,17 @@ impl Parser<'_> {
         })
     }
 
-    pub fn peek_next(&self) -> Option<Token> {
-        self.tokens.get(self.current + 1).cloned()
+    pub fn save_state(&self) -> usize {
+        self.current
     }
 
-    // Peeks the token.
-    // If token type is either of `expected`, consumes and returns the token.
-    // Otherwise, returns None
+    pub fn restore_state(&mut self, state: usize) {
+        self.current = state;
+    }
+
+    /// Peeks the token.
+    /// If token type is either of `expected`, consumes and returns the token.
+    /// Otherwise, returns None
     pub fn consume(&mut self, expected: &[TokenType]) -> Option<Token> {
         let actual = self.peek_token().ok()?;
         for t in expected {
@@ -181,9 +267,24 @@ impl Parser<'_> {
         None
     }
 
+    pub fn expect(&mut self, expected: &[TokenType], message: &str) -> Result<Token, ParseError> {
+        if let Some(tk) = self.consume(expected) {
+            return Ok(tk);
+        }
+        let token = self.next_token()?;
+        Err(ParseError {
+            location: self.peek_token()?.loc,
+            kind: UnexpectedToken {
+                expected: Some(expected.to_vec().into_boxed_slice()),
+                got: token,
+                message: message.to_string(),
+            },
+        })
+    }
+
     fn at_eof(&self) -> bool {
         if let Some(token) = self.tokens.get(self.current) {
-            token.kind == Eof
+            token.kind == TokenType::Eof
         } else {
             false
         }
@@ -196,11 +297,16 @@ pub struct ParseError {
     pub kind: ParserErrorKind,
 }
 
-#[derive(Debug, Clone, Eq, PartialOrd, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParserErrorKind {
     AtEof,
     UnbalancedParens,
     InvalidAssignment(String),
+    UnexpectedToken {
+        expected: Option<Box<[TokenType]>>,
+        got: Token,
+        message: String,
+    },
 }
 
 impl CompilerError for ParseError {
@@ -214,6 +320,14 @@ impl CompilerError for ParseError {
             AtEof => "Nothing to parse".to_string(),
             UnbalancedParens => "unbalanced parentheses".to_string(),
             InvalidAssignment(name) => format!("could not assign to {}", name),
+            UnexpectedToken {
+                expected,
+                got,
+                message: msg,
+            } => {
+                msg.clone()
+                // TODO: Construct better message
+            }
         }
     }
 
@@ -223,6 +337,7 @@ impl CompilerError for ParseError {
             AtEof => None,
             UnbalancedParens => Some(format!("last parenthesis located here: {}", self.location)),
             InvalidAssignment(_) => None,
+            UnexpectedToken { .. } => None, // TODO: construct note
         }
     }
 }
