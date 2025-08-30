@@ -1,5 +1,6 @@
 use crate::ast::binop::BinopKind;
-use crate::ast::expression::{Expression, ExpressionKind, ExpressionVisitor, UnaryKind};
+use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
+use crate::ast::traits::ExpressionVisitor;
 
 pub struct Interpreter {}
 
@@ -25,13 +26,11 @@ impl Interpreter {
                 };
                 res
             }
-            ExpressionKind::Unary { item, operator } => {
-                match operator {
-                    UnaryKind::Negation => -self.evaluate(item),
-                }
-            }
+            ExpressionKind::Unary { item, operator } => match operator {
+                UnaryKind::Negation => -self.evaluate(item),
+            },
             ExpressionKind::Literal(x) => *x,
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }

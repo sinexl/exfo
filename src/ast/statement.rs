@@ -2,11 +2,10 @@ use crate::ast::expression::Expression;
 use crate::common::SourceLocation;
 
 pub struct Statement<'a> {
-    kind: StatementKind<'a>,
-    loc: SourceLocation,
+    pub kind: StatementKind<'a>,
+    pub loc: SourceLocation,
 }
 
 pub enum StatementKind<'a> {
-    ExpressionStatement(Expression<'a>),
-    Print(Expression<'a>),
+    ExpressionStatement(&'a Expression<'a>),
 }

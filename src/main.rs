@@ -1,4 +1,5 @@
-use crate::ast::prefix_printer::PrefixPrint;
+use crate::ast::prefix_printer::PrefixPrintStatement;
+use crate::common::CompilerError;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
@@ -27,27 +28,41 @@ fn get_line(msg: &str) -> String {
 fn repl() {
     let mut exit = false;
     while !exit {
+        let mut compilation_errors: Vec<&dyn CompilerError> = vec![];
         let input = get_line("> ");
+
         let (tokens, errors) = Lexer::new(&input, "<REPL>").accumulate();
-        if errors.len() > 0 {
-            errors.iter().for_each(|err| {
-                println!("{}", err);
-                exit = true
-            });
-        }
+        compilation_errors.reserve(errors.len());
+        errors.iter().for_each(|e|
+            compilation_errors.push(e as &dyn CompilerError)
+        );
+
         let bump = Bump::new();
         let mut parser = Parser::new(tokens.into(), &bump);
-        let expr = parser.parse_expression().unwrap();
-        println!("{}", expr);
-        println!("{}", PrefixPrint(expr));
+        let (statements, errors) = parser.parse_program();
+        errors.iter().for_each(|e|
+            compilation_errors.push(e as &dyn CompilerError)
+        );
 
-
+        if  compilation_errors.is_empty() {
+            for statement in statements {
+                println!("{}", statement);
+            }
+            for statement in statements {
+                println!("{}", PrefixPrintStatement(statement));
+            }
+        } else {
+            for e in compilation_errors {
+                println!("{e}");
+            }
+        }
     }
 }
 
 fn main() -> Result<(), ()> {
     if env::args().next_back() == Some("--repl".to_owned()) {
         repl();
+        return Ok(());
     }
 
     let path = "./src/QuickTests/main.exfo";

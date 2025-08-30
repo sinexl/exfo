@@ -1,4 +1,5 @@
 use crate::ast::expression::{Expression, ExpressionKind};
+use crate::ast::statement::{Statement, StatementKind};
 use std::fmt::{Display, Formatter, Write};
 
 pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> std::fmt::Result {
@@ -38,6 +39,21 @@ pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> st
     }
 }
 
+pub fn print_statement(
+    stmt: &Statement<'_>,
+    f: &mut impl Write,
+    indent: usize,
+) -> std::fmt::Result {
+    let tab = " ".repeat((indent + 1) * 2);
+    match &stmt.kind {
+        StatementKind::ExpressionStatement(expr) => {
+            writeln!(f, "Expression Statement")?;
+            write!(f, "{tab}{}", Print(expr, indent + 1))?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) struct Print<'a>(pub &'a Expression<'a>, pub usize);
 impl Display for Print<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -49,5 +65,18 @@ impl Display for Print<'_> {
 impl Display for Expression<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Print(self, 0).fmt(f)
+    }
+}
+pub(crate) struct PrintStatement<'a>(pub &'a Statement<'a>, pub usize);
+impl Display for PrintStatement<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let PrintStatement(statement, ind) = self;
+        print_statement(statement, f, *ind)
+    }
+}
+
+impl Display for Statement<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        PrintStatement(self, 0).fmt(f)
     }
 }

@@ -1,7 +1,10 @@
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
-use crate::ast::expression::ExpressionKind::{Assignment, Binop, FunctionCall, Literal, VariableAccess};
+use crate::ast::expression::ExpressionKind::{
+    Assignment, Binop, FunctionCall, Literal, VariableAccess,
+};
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
+use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::TokenType::CloseParen;
 use crate::lexing::token::{Token, TokenType};
@@ -10,7 +13,7 @@ use bumpalo::Bump;
 use std::rc::Rc;
 /* Grammar:
  program             => statement* EOF ;
- statement           => printStatement | expressionStatement;
+ statement           => expressionStatement;
  expressionStatement => expression ";" ;
  expression          => assignment;
  assignment          => IDENTIFIER "=" assignment | binop;
@@ -44,21 +47,35 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    // pub fn parse_program(&mut self) -> (&'a [&'a Statement], Box<[ParseError]>) {
-    //     let mut statements: Vec<&'a Statement> = Vec::new();
-    //     let mut errors: Vec<ParseError> = Vec::new();
-    //     while !self.at_eof() {
-    //         match self.parse_statement() {
-    //             Err(error) => errors.push(error),
-    //             Ok(statement) => statements.push(statement),
-    //         }
-    //     }
-    //
-    //     (
-    //         self.bump.alloc_slice_copy(&statements),
-    //         errors.into_boxed_slice(),
-    //     )
-    // }
+    pub fn parse_program(&mut self) -> (&'a [&'a Statement], Box<[ParseError]>) {
+        let mut statements = Vec::new();
+        let mut errors = Vec::new();
+        while !self.at_eof() {
+            match self.parse_statement() {
+                Err(error) => errors.push(error),
+                Ok(statement) => statements.push(statement),
+            }
+        }
+
+        (
+            self.bump.alloc_slice_copy(&statements),
+            errors.into_boxed_slice(),
+        )
+    }
+
+    pub fn parse_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        self.parse_expression_statement()
+    }
+
+    fn parse_expression_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let loc = self.peek_token()?.loc;
+        let expr = self.parse_expression()?;
+        self.expect(&[TokenType::Semicolon], "Expected ';' after expression")?;
+        Ok(self.bump.alloc(Statement {
+            kind: StatementKind::ExpressionStatement(expr),
+            loc,
+        }))
+    }
 
     pub fn parse_expression(&mut self) -> Result<&'a Expression<'a>, ParseError> {
         self.parse_assignment()
@@ -156,7 +173,7 @@ impl<'a> Parser<'a> {
             args.push(expr);
 
             while self.consume(&[TokenType::Comma]).is_some() {
-               args.push(self.parse_expression()?);
+                args.push(self.parse_expression()?);
             }
         }
 
@@ -271,9 +288,10 @@ impl Parser<'_> {
         if let Some(tk) = self.consume(expected) {
             return Ok(tk);
         }
-        let token = self.next_token()?;
+        let last_token_in_input = self.tokens.last().unwrap().clone(); // TODO: Ensure that input is not empty preemptively 
+        let token = self.next_token().unwrap_or(last_token_in_input.clone());
         Err(ParseError {
-            location: self.peek_token()?.loc,
+            location: self.peek_token().unwrap_or(last_token_in_input).loc,
             kind: UnexpectedToken {
                 expected: Some(expected.to_vec().into_boxed_slice()),
                 got: token,
@@ -286,7 +304,7 @@ impl Parser<'_> {
         if let Some(token) = self.tokens.get(self.current) {
             token.kind == TokenType::Eof
         } else {
-            false
+            true
         }
     }
 }

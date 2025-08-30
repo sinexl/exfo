@@ -1,5 +1,6 @@
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
+use crate::ast::statement::{Statement, StatementKind};
 use std::fmt::{Display, Formatter, Write};
 
 pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Result {
@@ -40,6 +41,17 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
     }
 }
 
+pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> std::fmt::Result {
+    match &statement.kind {
+        StatementKind::ExpressionStatement(expr) => {
+            prefix_print(expr, f)?;
+            write!(f, ";")?;
+        }
+    }
+
+    Ok(())
+}
+
 fn parenthesize(
     f: &mut impl Write,
     name: &str,
@@ -65,5 +77,13 @@ impl Display for PrefixPrint<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let PrefixPrint(expr) = self;
         prefix_print(expr, f)
+    }
+}
+
+pub(crate) struct PrefixPrintStatement<'a>(pub &'a Statement<'a>);
+impl Display for PrefixPrintStatement<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let PrefixPrintStatement(statement) = self;
+        prefix_print_statement(statement, f)
     }
 }

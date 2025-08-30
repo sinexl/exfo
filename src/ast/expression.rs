@@ -7,15 +7,6 @@ pub struct Expression<'a> {
     pub loc: SourceLocation,
 }
 
-pub trait ExpressionVisitor<R> {
-    fn visit(&mut self, expression: &Expression) -> R;
-}
-
-impl Expression<'_> {
-    pub fn accept<R>(&self, mut visitor: impl ExpressionVisitor<R>) -> R {
-        visitor.visit(self)
-    }
-}
 
 #[derive(Debug)]
 pub enum ExpressionKind<'a> {
