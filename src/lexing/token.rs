@@ -8,15 +8,15 @@ use std::rc::Rc;
 pub(crate) struct Token {
     pub kind: TokenType,
 
-    pub integer: i32,
-    pub double: f32,
+    pub integer: i64,
+    pub double: f64,
     pub string: Rc<str>,
 
     pub loc: SourceLocation,
 }
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {
-        const EPSILON: f32 = 1e-6;
+        const EPSILON: f64 = 1e-6;
 
         self.kind == other.kind
             && self.integer == other.integer
@@ -29,17 +29,17 @@ impl PartialEq for Token {
 impl Eq for Token {}
 
 impl Token {
-    pub fn integer(value: i32, loc: SourceLocation) -> Self {
+    pub fn integer(value: i64, loc: SourceLocation) -> Self {
         Self {
             kind: Integer,
             loc,
             integer: value,
-            double: 0f32,
+            double: 0f64,
             string: Default::default(),
         }
     }
 
-    pub fn double(value: f32, loc: SourceLocation) -> Self {
+    pub fn double(value: f64, loc: SourceLocation) -> Self {
         Token {
             kind: Double,
             loc,
@@ -53,7 +53,7 @@ impl Token {
         Token {
             kind: Eof,
             integer: 0,
-            double: 0f32,
+            double: 0f64,
             string: Default::default(),
             loc,
         }

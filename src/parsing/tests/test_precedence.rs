@@ -1,3 +1,4 @@
+use crate::ast::expression::AstLiteral::Integral;
 use crate::ast::expression::ExpressionKind;
 use crate::ast::prefix_printer::PrefixPrint;
 use crate::common::SourceLocation;
@@ -88,7 +89,7 @@ pub fn assignment_and_right_associativity() {
 
 #[test]
 pub fn invalid_assignment() {
-    let msg = ExpressionKind::Literal(0f32).humanize();
+    let msg = ExpressionKind::Literal(Integral(0)).humanize();
     assert_eq!(
         fail("1 = 2"),
         ParseError {

@@ -1,12 +1,12 @@
 use crate::ast::binop::BinopKind;
 use crate::common::{Identifier, SourceLocation};
+use std::fmt::Display;
 
 #[derive(Debug)]
 pub struct Expression<'a> {
     pub kind: ExpressionKind<'a>,
     pub loc: SourceLocation,
 }
-
 
 #[derive(Debug)]
 pub enum ExpressionKind<'a> {
@@ -19,13 +19,16 @@ pub enum ExpressionKind<'a> {
         item: &'a Expression<'a>,
         operator: UnaryKind,
     },
-    Assignment { target: &'a Expression<'a>, value: &'a Expression<'a> },
-    Literal(f32),
+    Assignment {
+        target: &'a Expression<'a>,
+        value: &'a Expression<'a>,
+    },
+    Literal(AstLiteral),
     VariableAccess(Identifier<'a>),
     FunctionCall {
         callee: &'a Expression<'a>,
         arguments: &'a [&'a Expression<'a>],
-    }
+    },
 }
 
 impl ExpressionKind<'_> {
@@ -36,7 +39,7 @@ impl ExpressionKind<'_> {
             ExpressionKind::Binop { .. } => false,
             ExpressionKind::Unary { .. } => false,
             ExpressionKind::Literal(_) => false,
-            ExpressionKind::FunctionCall {..} => false,
+            ExpressionKind::FunctionCall { .. } => false,
         }
     }
     pub fn humanize(&self) -> String {
@@ -51,7 +54,6 @@ impl ExpressionKind<'_> {
     }
 }
 
-
 #[derive(Hash, Debug)]
 pub enum UnaryKind {
     Negation,
@@ -61,6 +63,21 @@ impl UnaryKind {
     pub(crate) fn name(&self) -> &'static str {
         match self {
             UnaryKind::Negation => "Negation",
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum AstLiteral {
+    Integral(i64),
+    FloatingPoint(f64),
+}
+
+impl Display for AstLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            AstLiteral::Integral(i) => write!(f, "{}", i),
+            AstLiteral::FloatingPoint(fl) => write!(f, "{}", fl),
         }
     }
 }

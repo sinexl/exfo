@@ -168,7 +168,7 @@ impl Lexer {
             loc: self.source_loc(self.token_start),
             kind: TokenType::String,
             integer: 0,
-            double: 0f32,
+            double: 0f64,
             string: val,
         })
     }
@@ -193,10 +193,10 @@ impl Lexer {
 
         let location = self.source_loc(self.token_start);
         if is_floating {
-            let value = f32::from_str(&str).unwrap();
+            let value = f64::from_str(&str).unwrap();
             return Token::double(value, location);
         }
-        let value = i32::from_str(&str).unwrap();
+        let value = i64::from_str(&str).unwrap();
         Token::integer(value, location)
     }
 
@@ -211,7 +211,7 @@ impl Lexer {
         Token {
             kind,
             integer: 0,
-            double: 0f32,
+            double: 0f64,
             string: word,
             loc: self.source_loc(self.token_start),
         }
@@ -298,7 +298,7 @@ impl Lexer {
             kind,
             loc: self.source_loc(self.token_start),
             integer: 0,
-            double: 0f32,
+            double: 0f64,
             string: Default::default(), // TODO: the character itself
         }
     }

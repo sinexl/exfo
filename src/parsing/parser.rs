@@ -1,9 +1,8 @@
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
-use crate::ast::expression::ExpressionKind::{
-    Assignment, Binop, FunctionCall, Literal, VariableAccess,
-};
-use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
+use crate::ast::expression::AstLiteral::{FloatingPoint, Integral};
+use crate::ast::expression::ExpressionKind::{Assignment, Binop, FunctionCall, Literal, VariableAccess};
+use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::TokenType::CloseParen;
@@ -192,10 +191,12 @@ impl<'a> Parser<'a> {
             }));
         }
         if let Some(integer) = self.consume(&[Integer]) {
-            return Ok(self.construct_literal(integer.integer as f32, integer.loc.clone()));
+            let value = integer.integer;
+            return Ok(self.construct_literal(Integral(value), integer.loc.clone()));
         }
         if let Some(double) = self.consume(&[Double]) {
-            return Ok(self.construct_literal(double.double, double.loc.clone()));
+            let value = double.double;
+            return Ok(self.construct_literal(FloatingPoint(value), double.loc.clone()));
         }
         if let Some(paren) = self.consume(&[OpenParen]) {
             let parenthesis_loc = paren.loc;
@@ -212,7 +213,7 @@ impl<'a> Parser<'a> {
         panic!("unknown token {}", token);
     }
 
-    pub fn construct_literal(&self, value: f32, loc: SourceLocation) -> &'a Expression<'a> {
+    pub fn construct_literal(&self, value: AstLiteral, loc: SourceLocation) -> &'a Expression<'a> {
         self.bump.alloc(Expression {
             loc,
             kind: Literal(value),
