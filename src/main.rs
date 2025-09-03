@@ -119,6 +119,7 @@ fn main() -> io::Result<()> {
     let mut compiler = Compiler::new(&ir_allocator);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
+    println!("{ir}"); 
 
     let codegen = Codegen::new(ir);
     let generated_assembly = codegen.generate();
