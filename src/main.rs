@@ -1,13 +1,17 @@
 use crate::ast::prefix_printer::PrefixPrintStatement;
+use crate::code_generation::codegen::Codegen;
 use crate::common::CompilerError;
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
 use std::io::Write;
-use std::{env, fs};
+use std::path::Path;
+use std::process::{exit, Command, Stdio};
+use std::{env, fs, io};
 
 mod ast;
+mod code_generation;
 pub mod common;
 mod compiling;
 pub mod lexing;
@@ -65,7 +69,16 @@ fn repl() {
     }
 }
 
-fn main() -> Result<(), ()> {
+fn create_dir_if_not_exists<P: AsRef<Path>>(path: P) -> io::Result<()> {
+    match fs::create_dir(path) {
+        Ok(_) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
+    }
+    Ok(())
+}
+
+fn main() -> io::Result<()> {
     if env::args().next_back() == Some("--repl".to_owned()) {
         repl();
         return Ok(());
@@ -73,12 +86,14 @@ fn main() -> Result<(), ()> {
     let path = if let Some(filename) = env::args().nth(1) {
         filename
     } else {
-        return Err(());
+        return Ok(());
     };
 
-    let file = fs::read_to_string(&path).map_err(|e| eprintln!("{}", e))?;
+    let path = Path::new(&path);
 
-    let (tokens, errors) = Lexer::new(&file, &path).accumulate();
+    let file = fs::read_to_string(&path)?;
+
+    let (tokens, errors) = Lexer::new(&file, path.to_str().unwrap()).accumulate();
 
     for token in &tokens {
         println!("{}", token);
@@ -102,8 +117,50 @@ fn main() -> Result<(), ()> {
 
     compiler.compile_statements(ast);
     let ir = compiler.ir;
-
     println!("{ir:#?}");
+
+    let codegen = Codegen::new(ir);
+    let generated_assembly = codegen.generate();
+    println!("{}", generated_assembly);
+
+    const BUILD_DIR: &str = "./.build";
+
+    create_dir_if_not_exists(BUILD_DIR)?;
+    let file_name = path.file_stem().and_then(|s| s.to_str()).unwrap();
+    let asm_path = format!("{BUILD_DIR}/{file_name}.s");
+    let asm_path = asm_path.as_str();
+    fs::write(asm_path, generated_assembly.as_bytes())?;
+
+    let object_path = format!("{BUILD_DIR}/{file_name}.o");
+    let object_path = object_path.as_str();
+    let gas = Command::new("as")
+        .arg(asm_path)
+        .arg("-o")
+        .arg(object_path)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .expect(
+            "Failed to run `as` command. \
+                     Make sure that you have installed GNU Assembler and it's available in $PATH",
+        );
+
+    if !gas.success() {
+        eprintln!("Assembler error occurred. Exiting.");
+        exit(1);
+    }
+
+
+    let cc = Command::new("cc")
+        .arg(object_path)
+        .arg("-o")
+        .arg(file_name)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .expect("Failed to run `cc` command. \
+                      Make sure that `cc` is available in $PATH");
+
 
     Ok(())
 }
