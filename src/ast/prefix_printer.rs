@@ -1,7 +1,9 @@
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
-use crate::ast::statement::{Statement, StatementKind};
+use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind};
 use std::fmt::{Display, Formatter, Write};
+
+pub const PREFIX_TAB: &'static str = " ";
 
 pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Result {
     match &expr.kind {
@@ -42,10 +44,31 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
 }
 
 pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> std::fmt::Result {
+    let tab = PREFIX_TAB;
     match &statement.kind {
         StatementKind::ExpressionStatement(expr) => {
             prefix_print(expr, f)?;
             write!(f, ";")?;
+        }
+        StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
+            write!(f, "(func `{}`", name.name)?;
+            if !body.is_empty()  {
+                writeln!(f)?;
+                for statement in *body {
+                    writeln!(f, "{tab}{}", PrefixPrintStatement(statement))?;
+                }
+            }
+            writeln!(f, ")")?;
+        }
+        StatementKind::Block(body) => {
+            writeln!(f, "(block")?;
+            if !body.is_empty() {
+                writeln!(f)?;
+                for statement in *body {
+                    writeln!(f, "{tab}{}", PrefixPrintStatement(statement))?;
+                }
+            }
+            writeln!(f, ")")?;
         }
     }
 

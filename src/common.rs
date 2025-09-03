@@ -44,7 +44,8 @@ impl Display for dyn CompilerError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Hash)]
+#[derive(Eq, PartialEq)]
 pub(crate) struct Identifier<'a> {
     pub name: &'a str,
     pub location: SourceLocation,
@@ -53,6 +54,14 @@ pub(crate) struct Identifier<'a> {
 impl<'a> Identifier<'a> {
     pub fn new(name: &'a str, location: SourceLocation) -> Self {
         Self { name, location }
+    }
+
+    pub fn clone_into<'b>(&self, bump: &'b Bump) -> Identifier<'b> {
+        let name_in_b = bump.alloc_str(self.name);
+        Identifier {
+            name: name_in_b,
+            location: self.location.clone(),
+        }
     }
 
     pub fn from_token(token: Token, alloc: &'a Bump) -> Self {
@@ -64,4 +73,3 @@ impl<'a> From<Identifier<'a>> for &'a str {
         id.name
     }
 }
-

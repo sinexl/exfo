@@ -1,4 +1,5 @@
 use crate::ast::expression::{Expression, ExpressionKind};
+use crate::ast::statement::FunctionDeclaration;
 use crate::ast::statement::{Statement, StatementKind};
 use std::fmt::{Display, Formatter, Write};
 
@@ -49,6 +50,18 @@ pub fn print_statement(
         StatementKind::ExpressionStatement(expr) => {
             writeln!(f, "Expression Statement")?;
             write!(f, "{tab}{}", Print(expr, indent + 1))?;
+        },
+        StatementKind::FunctionDeclaration(FunctionDeclaration {name, body}) => {
+            writeln!(f, "Func `{}`", name.name)?;
+            for statement in *body {
+                write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
+            }
+        },
+        StatementKind::Block(statements) => {
+            writeln!(f, "Block")?;
+            for statement in *statements {
+                write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
+            }
         }
     }
     Ok(())

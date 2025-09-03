@@ -1,19 +1,25 @@
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::AstLiteral::{FloatingPoint, Integral};
-use crate::ast::expression::ExpressionKind::{Assignment, Binop, FunctionCall, Literal, VariableAccess};
+use crate::ast::expression::ExpressionKind::{
+    Assignment, Binop, FunctionCall, Literal, VariableAccess,
+};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
-use crate::ast::statement::{Statement, StatementKind};
+use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind};
 use crate::common::{CompilerError, Identifier, SourceLocation};
-use crate::lexing::token::TokenType::CloseParen;
+use crate::lexing::token::TokenType::Func;
 use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParserErrorKind::{InvalidAssignment, UnexpectedToken};
 use bumpalo::Bump;
 use std::rc::Rc;
 /* Grammar:
- program             => statement* EOF ;
- statement           => expressionStatement;
+ program             => decl* EOF ;
+ decl                => funcDecl | statement ;
+ statement           => expressionStatement | blockStatement ;
  expressionStatement => expression ";" ;
+ funcDecl            => "func" IDENTIFIER function ;
+ function            => "(" args ")" blockStatement ;
+ blockStatement      => "{" (declaration*)? "}" ;
  expression          => assignment;
  assignment          => IDENTIFIER "=" assignment | binop;
  binop*              => ** | unary;
@@ -50,7 +56,7 @@ impl<'a> Parser<'a> {
         let mut statements = Vec::new();
         let mut errors = Vec::new();
         while !self.at_eof() {
-            match self.parse_statement() {
+            match self.parse_declaration() {
                 Err(error) => errors.push(error),
                 Ok(statement) => statements.push(statement),
             }
@@ -62,7 +68,85 @@ impl<'a> Parser<'a> {
         )
     }
 
+    pub fn parse_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let state = self.save_state();
+        if self.consume(&[Func]).is_some() {
+            self.restore_state(state);
+            return self.parse_function_declaration(); // TODO: Sync state of parser on error
+        }
+
+        self.parse_statement()
+    }
+
+    /// func name (args) {} ...
+    pub fn parse_function_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let func_keyword = self.expect(&[Func], "Expected function declaration")?;
+        let name = self.expect(&[TokenType::Id], "Expected function name")?;
+        debug_assert!(name.kind == TokenType::Id);
+        let (_, body) = self.parse_function()?;
+
+        Ok(self.bump.alloc(Statement {
+            kind: StatementKind::FunctionDeclaration(FunctionDeclaration {
+                name: Identifier::from_token(name, self.bump),
+                body,
+            }),
+            loc: func_keyword.loc,
+        }))
+    }
+
+    /// (args) {}
+    pub fn parse_function(
+        &mut self,
+    ) -> Result<(&'a [Identifier<'a>], &'a [&'a Statement<'a>]), ParseError> {
+        self.expect(
+            &[TokenType::OpenParen],
+            "Expected opening parenthesis in function declaration",
+        )?;
+        let _arguments: Vec<Identifier> = Vec::new();
+        if self.peek_token()?.kind != TokenType::CloseParen {
+            todo!("Parsing function arguments is not implemented yet");
+        }
+        self.expect(
+            &[TokenType::CloseParen],
+            "Expected closing parenthesis after argument list",
+        )?;
+
+        let block = self.parse_block_statement()?;
+        let StatementKind::Block(statements) = block.kind else { unreachable!() };
+        Ok((&[], statements))
+    }
+
+    pub fn parse_block_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let mut statements: Vec<&'a Statement<'a>> = Vec::new();
+        let left_brace = self.expect(
+            &[TokenType::OpenBrace],
+            "Expected opening brace in block statement",
+        )?;
+
+        while !self.at_eof() && self.peek_token()?.kind != TokenType::CloseBrace {
+            let statement = self.parse_declaration()?;
+            statements.push(statement);
+        }
+
+        if self.consume(&[TokenType::CloseBrace]).is_none() {
+            return Err(ParseError {
+                location: left_brace.clone().loc,
+                kind: ParserErrorKind::UnbalancedBraces,
+            });
+        }
+
+        Ok(self.bump.alloc(Statement {
+            kind: StatementKind::Block(self.bump.alloc_slice_copy(statements.as_slice())),
+            loc: left_brace.loc,
+        }))
+    }
+
     pub fn parse_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let state = self.save_state();
+        if self.consume(&[TokenType::OpenBrace]).is_some() {
+            self.restore_state(state);
+            return self.parse_block_statement();
+        }
         self.parse_expression_statement()
     }
 
@@ -154,7 +238,7 @@ impl<'a> Parser<'a> {
                 },
                 loc: tk.clone().loc,
             });
-            if self.consume(&[CloseParen]).is_none() {
+            if self.consume(&[TokenType::CloseParen]).is_none() {
                 return Err(ParseError {
                     location: tk.loc,
                     kind: ParserErrorKind::UnbalancedParens,
@@ -320,6 +404,7 @@ pub struct ParseError {
 pub enum ParserErrorKind {
     AtEof,
     UnbalancedParens,
+    UnbalancedBraces,
     InvalidAssignment(String),
     UnexpectedToken {
         expected: Option<Box<[TokenType]>>,
@@ -347,6 +432,7 @@ impl CompilerError for ParseError {
                 msg.clone()
                 // TODO: Construct better message
             }
+            UnbalancedBraces => "unbalanced braces".to_string(),
         }
     }
 
@@ -356,7 +442,8 @@ impl CompilerError for ParseError {
             AtEof => None,
             UnbalancedParens => Some(format!("last parenthesis located here: {}", self.location)),
             InvalidAssignment(_) => None,
-            UnexpectedToken { .. } => None, // TODO: construct note
+            UnexpectedToken { .. } => None,
+            UnbalancedBraces => Some(format!("last braces located here: {}", self.location)), // TODO: construct note
         }
     }
 }

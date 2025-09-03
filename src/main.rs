@@ -1,5 +1,6 @@
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::common::CompilerError;
+use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
@@ -8,6 +9,7 @@ use std::{env, fs};
 
 mod ast;
 pub mod common;
+mod compiling;
 pub mod lexing;
 mod parsing;
 mod simple_interpreter;
@@ -31,20 +33,24 @@ fn repl() {
         let mut compilation_errors: Vec<&dyn CompilerError> = vec![];
         let input = get_line("> ");
 
+        if input == ":quit" {
+            exit = true;
+        }
+
         let (tokens, errors) = Lexer::new(&input, "<REPL>").accumulate();
         compilation_errors.reserve(errors.len());
-        errors.iter().for_each(|e|
-            compilation_errors.push(e as &dyn CompilerError)
-        );
+        errors
+            .iter()
+            .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
 
         let bump = Bump::new();
         let mut parser = Parser::new(tokens.into(), &bump);
         let (statements, errors) = parser.parse_program();
-        errors.iter().for_each(|e|
-            compilation_errors.push(e as &dyn CompilerError)
-        );
+        errors
+            .iter()
+            .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
 
-        if  compilation_errors.is_empty() {
+        if compilation_errors.is_empty() {
             for statement in statements {
                 println!("{}", statement);
             }
@@ -64,11 +70,15 @@ fn main() -> Result<(), ()> {
         repl();
         return Ok(());
     }
+    let path = if let Some(filename) = env::args().nth(1) {
+        filename
+    } else {
+        return Err(());
+    };
 
-    let path = "./src/QuickTests/main.exfo";
-    let file = fs::read_to_string(path).map_err(|e| eprintln!("{}", e))?;
+    let file = fs::read_to_string(&path).map_err(|e| eprintln!("{}", e))?;
 
-    let (tokens, errors) = Lexer::new(&file, path).accumulate();
+    let (tokens, errors) = Lexer::new(&file, &path).accumulate();
 
     for token in &tokens {
         println!("{}", token);
@@ -78,11 +88,22 @@ fn main() -> Result<(), ()> {
     }
     let ast_alloc = Bump::new();
     let mut parser = Parser::new(tokens.into(), &ast_alloc);
-    let ast = parser
-        .parse_expression()
-        .map_err(|e| eprintln!("{:?}", e))?;
+    let (ast, errors) = parser.parse_program();
+    for error in &errors {
+        println!("{}", error as &dyn CompilerError);
+    }
+    assert_eq!(errors.len(), 0);
 
-    println!("{}", ast);
+    for node in ast {
+        println!("{}", node);
+    }
+    let ir_bump = Bump::new();
+    let mut compiler = Compiler::new(&ir_bump);
+
+    compiler.compile_statements(ast);
+    let ir = compiler.ir;
+
+    println!("{ir:#?}");
 
     Ok(())
 }
