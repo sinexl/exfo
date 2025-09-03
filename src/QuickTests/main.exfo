@@ -1,3 +1,5 @@
 func main () {
-  putchar(10);
+  putchar(65);
+  putchar(65);
+  putchar(65);
 }
