@@ -31,7 +31,7 @@ fn get_line(msg: &str) -> String {
     };
     res
 }
-fn repl() {
+fn dev_repl() {
     let mut exit = false;
     while !exit {
         let mut compilation_errors: Vec<&dyn CompilerError> = vec![];
@@ -80,7 +80,7 @@ fn create_dir_if_not_exists<P: AsRef<Path>>(path: P) -> io::Result<()> {
 
 fn main() -> io::Result<()> {
     if env::args().next_back() == Some("--repl".to_owned()) {
-        repl();
+        dev_repl();
         return Ok(());
     }
     let path = if let Some(filename) = env::args().nth(1) {
@@ -88,42 +88,44 @@ fn main() -> io::Result<()> {
     } else {
         return Ok(());
     };
-
     let path = Path::new(&path);
 
     let file = fs::read_to_string(&path)?;
 
+    // Compilation process.
+    let mut compilation_errors: Vec<&dyn CompilerError> = vec![];
+    let ast_allocator = Bump::new();
+    let ir_allocator = Bump::new();
+    // Lexing.
     let (tokens, errors) = Lexer::new(&file, path.to_str().unwrap()).accumulate();
-
-    for token in &tokens {
-        println!("{}", token);
-    }
-    for error in &errors {
-        println!("{}", error)
-    }
-    let ast_alloc = Bump::new();
-    let mut parser = Parser::new(tokens.into(), &ast_alloc);
+    errors
+        .iter()
+        .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
+    // Parsing
+    let mut parser = Parser::new(tokens.into(), &ast_allocator);
     let (ast, errors) = parser.parse_program();
-    for error in &errors {
-        println!("{}", error as &dyn CompilerError);
+    errors
+        .iter()
+        .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
+    // Error reporting
+    if !compilation_errors.is_empty() {
+        for e in compilation_errors {
+            println!("{e}");
+        }
+        exit(1);
     }
-    assert_eq!(errors.len(), 0);
 
-    for node in ast {
-        println!("{}", node);
-    }
-    let ir_bump = Bump::new();
-    let mut compiler = Compiler::new(&ir_bump);
-
+    // Compilation to IR.
+    let mut compiler = Compiler::new(&ir_allocator);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
-    println!("{ir:#?}");
 
     let codegen = Codegen::new(ir);
     let generated_assembly = codegen.generate();
     println!("{}", generated_assembly);
 
-    const BUILD_DIR: &str = "./.build";
+    // Outputting the result of compilation to user.
+    const BUILD_DIR: &str = "./.exfo_build";
 
     create_dir_if_not_exists(BUILD_DIR)?;
     let file_name = path.file_stem().and_then(|s| s.to_str()).unwrap();
@@ -141,7 +143,7 @@ fn main() -> io::Result<()> {
         .stderr(Stdio::inherit())
         .status()
         .expect(
-            "Failed to run `as` command. \
+            "Failed to run `as` command. \n\t\
                      Make sure that you have installed GNU Assembler and it's available in $PATH",
         );
 
@@ -150,7 +152,6 @@ fn main() -> io::Result<()> {
         exit(1);
     }
 
-
     let cc = Command::new("cc")
         .arg(object_path)
         .arg("-o")
@@ -158,9 +159,15 @@ fn main() -> io::Result<()> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .expect("Failed to run `cc` command. \
-                      Make sure that `cc` is available in $PATH");
+        .expect(
+            "Failed to run `cc` command. \n\t\
+                      Make sure that `cc` is available in $PATH",
+        );
 
+    if !cc.success() {
+        eprintln!("Linker error occurred. Exiting.");
+        exit(1);
+    }
 
     Ok(())
 }
