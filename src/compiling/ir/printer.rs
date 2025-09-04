@@ -37,6 +37,17 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             }
             writeln!(f, ")")?;
         }
+        Opcode::Binop {
+            left,
+            right,
+            kind,
+            result,
+        } => writeln!(
+            f,
+            "{tab}stack[{}] = {left} {op} {right}",
+            result,
+            op = kind.operator()
+        )?,
     }
 
     Ok(())

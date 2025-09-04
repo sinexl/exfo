@@ -8,18 +8,7 @@ pub const PREFIX_TAB: &'static str = " ";
 pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Result {
     match &expr.kind {
         ExpressionKind::Binop { left, right, kind } => {
-            let op = match kind {
-                BinopKind::Addition => "+",
-                BinopKind::Subtraction => "-",
-                BinopKind::Multiplication => "*",
-                BinopKind::Division => "/",
-                BinopKind::Equality => "==",
-                BinopKind::Inequality => "!=",
-                BinopKind::GreaterThan => ">",
-                BinopKind::GreaterEq => ">=",
-                BinopKind::LessThan => "<",
-                BinopKind::LessEq => "<=",
-            };
+            let op = kind.operator();
             parenthesize(f, op, &[left, right])
         }
         ExpressionKind::Unary { item, operator } => {

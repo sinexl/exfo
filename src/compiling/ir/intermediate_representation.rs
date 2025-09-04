@@ -20,5 +20,6 @@ impl <'a> IntermediateRepresentation<'a> {
 #[derive(Debug)]
 pub struct Function<'a> {
     pub name: Identifier<'a>,
-    pub code: &'a [Opcode<'a>]
+    pub code: &'a [Opcode<'a>],
+    pub stack_size: usize,
 }

@@ -4,7 +4,7 @@ macro_rules! binop_enum {
     ($name:ident
         { $($variant:ident => $token:ident),* $(,)?}
     ) => {
-        #[derive(Hash, Eq, PartialEq, Debug, )]
+        #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
         pub(crate) enum $name {
             $($variant),*
         }
@@ -71,5 +71,19 @@ impl BinopKind {
         unreachable!(
             "if you reach this, it means that precedence table doesn't contain all of the possible operations"
         )
+    }
+    pub fn operator(self) -> &'static str {
+        match self {
+            BinopKind::Addition => "+",
+            BinopKind::Subtraction => "-",
+            BinopKind::Multiplication => "*",
+            BinopKind::Division => "/",
+            BinopKind::Equality => "==",
+            BinopKind::Inequality => "!=",
+            BinopKind::GreaterThan => ">",
+            BinopKind::GreaterEq => ">=",
+            BinopKind::LessThan => "<",
+            BinopKind::LessEq => "<=",
+        }
     }
 }

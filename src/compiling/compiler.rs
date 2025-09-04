@@ -8,6 +8,7 @@ pub struct Compiler<'a> {
     bump: &'a Bump,
     pub(crate) ir: &'a mut IntermediateRepresentation<'a>,
     current_function: Option<Vec<Opcode<'a>>>,
+    stack_size: usize,
 }
 
 impl<'a> Compiler<'a> {
@@ -16,21 +17,29 @@ impl<'a> Compiler<'a> {
             bump,
             ir: bump.alloc(IntermediateRepresentation::new(bump)),
             current_function: None,
+            stack_size: 0,
         }
     }
 }
 
-// impl<'a> StatementVisitor<&'a IntermediateRepresentation<'a>> for Compiler<'a> {
-//     fn visit(&mut self, statement: &Statement) -> &'a IntermediateRepresentation<'a> {
-//         self.compile_statement(statement);
-//         &self.ir
-//     }
-// }
-
 impl<'a, 'b> Compiler<'a> {
     pub fn compile_to_arg(&mut self, expression: &Expression<'b>) -> Arg<'a> {
         match &expression.kind {
-            ExpressionKind::Binop { .. } => todo!(),
+            ExpressionKind::Binop { left, right, kind } => {
+                let left = self.compile_to_arg(left);
+                let right = self.compile_to_arg(right);
+                self.stack_size += 8;
+                self.push_opcode(
+                    Opcode::Binop {
+                        left,
+                        right,
+                        result: self.stack_size,
+                        kind: *kind
+                    }
+                );
+                Arg::StackOffset(self.stack_size)
+
+            },
             ExpressionKind::Unary { .. } => todo!(),
             ExpressionKind::Assignment { .. } => todo!(),
             ExpressionKind::Literal(l) => Arg::Literal(*l),
@@ -70,13 +79,14 @@ impl<'a, 'b> Compiler<'a> {
                 }
 
                 let code = self.bump.alloc_slice_clone(self.current_function.clone().unwrap().as_slice());
-                self.current_function = None;
-
-
                 self.ir.functions.insert(name.clone_into(self.bump), self.bump.alloc(Function {
                     name: name.clone_into(self.bump),
                     code,
+                    stack_size: self.stack_size,
                 }));
+
+                self.current_function = None;
+                self.stack_size = 0;
             }
             StatementKind::Block(_) => todo!(),
         }

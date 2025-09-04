@@ -2,6 +2,7 @@ use crate::ast::expression::AstLiteral;
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use std::fmt::Write;
+use crate::ast::binop::BinopKind;
 
 pub const CALL_REGISTERS: &[&'static str] = &["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 pub struct Codegen<'a> {
@@ -25,6 +26,9 @@ impl<'a> Codegen<'a> {
         writeln!(self.output, "{}:", name).unwrap();
         writeln!(self.output, "  pushq %rbp").unwrap();
         writeln!(self.output, "  movq %rsp, %rbp").unwrap();
+        if function.stack_size > 0 {
+            writeln!(self.output, "  subq ${size}, %rsp", size = function.stack_size).unwrap();
+        }
         for opcode in function.code {
             match opcode {
                 Opcode::FunctionCall { callee, args } => {
@@ -38,10 +42,29 @@ impl<'a> Codegen<'a> {
 
                     self.call_arg(callee)
                 }
+                Opcode::Binop {
+                    left,
+                    right,
+                    result,
+                    kind,
+                } => {
+                    self.load_arg_to_reg(left, "rax");
+                    self.load_arg_to_reg(right, "rcx");
+                    match kind {
+                        BinopKind::Addition => writeln!(self.output, "  addq %rcx, %rax").unwrap(),
+                        BinopKind::Subtraction => writeln!(self.output, "  subq %rcx, %rax").unwrap(),
+
+                        BinopKind::Multiplication | BinopKind::Division | BinopKind::Equality
+                        | BinopKind::Inequality | BinopKind::GreaterThan | BinopKind::GreaterEq |
+                        BinopKind::LessThan | BinopKind::LessEq => todo!()
+                    }
+                    writeln!(self.output, "  movq %rax, -{result}(%rbp)").unwrap();
+                }
             }
         }
         writeln!(self.output, "  movq %rbp, %rsp").unwrap();
         writeln!(self.output, "  popq %rbp").unwrap();
+        writeln!(self.output, "  ret").unwrap();
     }
 
     pub fn load_arg_to_reg(&mut self, arg: &Arg<'a>, reg: &str) {
@@ -52,8 +75,10 @@ impl<'a> Codegen<'a> {
                 }
                 AstLiteral::FloatingPoint(_) => todo!(),
             },
-            Arg::ExternalFunction(_) => {}
-            Arg::StackOffset(_) => {}
+            Arg::ExternalFunction(_) => todo!(),
+            Arg::StackOffset(offset) => {
+                writeln!(self.output, "  movq -{offset}(%rbp), %{reg}").unwrap();
+            }
         }
     }
 
