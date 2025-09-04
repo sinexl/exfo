@@ -23,21 +23,26 @@ impl<'a> Compiler<'a> {
 }
 
 impl<'a, 'b> Compiler<'a> {
+    pub fn allocate_on_stack(&mut self, size: usize) -> usize {
+        self.stack_size += size;
+        self.stack_size
+
+    }
     pub fn compile_to_arg(&mut self, expression: &Expression<'b>) -> Arg<'a> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind } => {
                 let left = self.compile_to_arg(left);
                 let right = self.compile_to_arg(right);
-                self.stack_size += 8;
+                let result = self.allocate_on_stack(8);
                 self.push_opcode(
                     Opcode::Binop {
                         left,
                         right,
-                        result: self.stack_size,
+                        result,
                         kind: *kind
                     }
                 );
-                Arg::StackOffset(self.stack_size)
+                Arg::StackOffset(result)
 
             },
             ExpressionKind::Unary { .. } => todo!(),
@@ -50,11 +55,13 @@ impl<'a, 'b> Compiler<'a> {
                     .iter()
                     .map(|a| self.compile_to_arg(a))
                     .collect::<Vec<_>>();
+                let result = self.allocate_on_stack(8);
                 self.push_opcode(Opcode::FunctionCall {
                     callee,
                     args: self.bump.alloc_slice_clone(args.as_slice()),
+                    result
                 });
-                Arg::StackOffset(0)
+                Arg::StackOffset(result)
             }
         }
     }

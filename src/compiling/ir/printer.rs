@@ -22,14 +22,18 @@ pub fn print_function(function: &Function<'_>, f: &mut impl Write) -> std::fmt::
 pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::fmt::Result {
     let tab = "    ".repeat(indent);
     match opcode {
-        Opcode::FunctionCall { callee, args } => {
+        Opcode::FunctionCall {
+            callee,
+            args,
+            result,
+        } => {
             let args_str = args
                 .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
             match callee {
-                Arg::ExternalFunction(id) => write!(f, "{tab}call(\"{name}\"", name = id.name)?,
+                Arg::ExternalFunction(id) => write!(f, "{tab}stack[{result}] = call(\"{name}\"", name = id.name)?,
                 arg => write!(f, "{tab}call({arg}")?,
             }
             if !args.is_empty() {

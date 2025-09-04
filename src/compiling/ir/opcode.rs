@@ -5,6 +5,7 @@ use crate::common::Identifier;
 #[derive(Clone, Debug)]
 pub enum Opcode<'a> {
     FunctionCall {
+        result: usize,
         callee: Arg<'a>,
         args: &'a [Arg<'a>],
     },

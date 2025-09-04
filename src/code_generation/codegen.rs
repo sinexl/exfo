@@ -11,8 +11,12 @@ pub struct Codegen<'a> {
 }
 
 macro_rules! asm {
-    ($dst:expr, $($arg:tt)*) => {
-        $dst.output.write_fmt(format_args!($($arg)*)).unwrap()
+    ($dst:expr, $($fmt:tt)*; $cmt:expr) => {{
+        write!($dst.output, $($fmt)*).unwrap()
+        writeln!($dst.output, $cmt).unwrap()
+    }};
+    ($dst:expr, $($fmt:tt)*) => {
+        writeln!($dst.output, $($fmt)*).unwrap()
     };
 }
 
@@ -38,7 +42,7 @@ impl<'a> Codegen<'a> {
         }
         for opcode in function.code {
             match opcode {
-                Opcode::FunctionCall { callee, args } => {
+                Opcode::FunctionCall { callee, args, result } => {
                     if args.len() > CALL_REGISTERS.len() {
                         todo!()
                     }
@@ -47,7 +51,8 @@ impl<'a> Codegen<'a> {
                         self.load_arg_to_reg(arg, CALL_REGISTERS[i]);
                     }
 
-                    self.call_arg(callee)
+                    self.call_arg(callee);
+                    asm!(self, "  movq %rax, -{}(%rbp)", result);
                 }
                 Opcode::Binop {
                     left,
