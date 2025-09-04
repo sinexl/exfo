@@ -10,6 +10,12 @@ pub struct Codegen<'a> {
     output: String,
 }
 
+macro_rules! asm {
+    ($dst:expr, $($arg:tt)*) => {
+        $dst.output.write_fmt(format_args!($($arg)*)).unwrap()
+    };
+}
+
 //noinspection SpellCheckingInspection
 impl<'a> Codegen<'a> {
     pub fn new(ir: &'a IntermediateRepresentation<'a>) -> Self {
@@ -21,13 +27,14 @@ impl<'a> Codegen<'a> {
 
     pub fn generate_function(&mut self, function: &Function<'a>) {
         let name = function.name.name;
-        writeln!(self.output, ".global {name}").unwrap();
-        writeln!(self.output, ".p2align 4, 0x90").unwrap(); // 0x90 is nop
-        writeln!(self.output, "{}:", name).unwrap();
-        writeln!(self.output, "  pushq %rbp").unwrap();
-        writeln!(self.output, "  movq %rsp, %rbp").unwrap();
+        asm!(self, ".global {name}");
+        asm!(self, ".global {name}");
+        asm!(self, ".p2align 4, 0x90"); // 0x90 is nop
+        asm!(self, "{}:", name);
+        asm!(self, "  pushq %rbp");
+        asm!(self, "  movq %rsp, %rbp");
         if function.stack_size > 0 {
-            writeln!(self.output, "  subq ${size}, %rsp", size = function.stack_size).unwrap();
+            asm!(self, "  subq ${size}, %rsp", size = function.stack_size);
         }
         for opcode in function.code {
             match opcode {
@@ -51,39 +58,39 @@ impl<'a> Codegen<'a> {
                     self.load_arg_to_reg(left, "rax");
                     self.load_arg_to_reg(right, "rcx");
                     match kind {
-                        BinopKind::Addition => writeln!(self.output, "  addq %rcx, %rax").unwrap(),
-                        BinopKind::Subtraction => writeln!(self.output, "  subq %rcx, %rax").unwrap(),
+                        BinopKind::Addition => asm!(self, "  addq %rcx, %rax"),
+                        BinopKind::Subtraction => asm!(self, "  subq %rcx, %rax"),
 
                         BinopKind::Multiplication | BinopKind::Division | BinopKind::Equality
                         | BinopKind::Inequality | BinopKind::GreaterThan | BinopKind::GreaterEq |
                         BinopKind::LessThan | BinopKind::LessEq => todo!()
                     }
-                    writeln!(self.output, "  movq %rax, -{result}(%rbp)").unwrap();
+                    asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
             }
         }
-        writeln!(self.output, "  movq %rbp, %rsp").unwrap();
-        writeln!(self.output, "  popq %rbp").unwrap();
-        writeln!(self.output, "  ret").unwrap();
+        asm!(self, "  movq %rbp, %rsp");
+        asm!(self, "  popq %rbp");
+        asm!(self, "  ret");
     }
 
     pub fn load_arg_to_reg(&mut self, arg: &Arg<'a>, reg: &str) {
         match arg {
             Arg::Literal(literal) => match literal {
                 AstLiteral::Integral(value) => {
-                    writeln!(self.output, "  movq ${}, %{}", value, reg).unwrap();
+                    asm!(self, "  movq ${}, %{}", value, reg);
                 }
                 AstLiteral::FloatingPoint(_) => todo!(),
             },
             Arg::ExternalFunction(_) => todo!(),
             Arg::StackOffset(offset) => {
-                writeln!(self.output, "  movq -{offset}(%rbp), %{reg}").unwrap();
+                asm!(self, "  movq -{offset}(%rbp), %{reg}");
             }
         }
     }
 
     pub fn generate(mut self) -> String {
-        writeln!(self.output, ".section .text").unwrap();
+        asm!(self, ".section .text");
         for (k, v) in &self.ir.functions {
             self.generate_function(v);
         }
@@ -93,7 +100,7 @@ impl<'a> Codegen<'a> {
     fn call_arg(&mut self, arg: &Arg<'a>) {
         match arg {
             Arg::ExternalFunction(name) => {
-                writeln!(self.output, "  call {}", name.name).unwrap();
+                asm!(self, "  call {}", name.name);
             }
             _ => todo!(),
         }
