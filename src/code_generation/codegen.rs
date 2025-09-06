@@ -11,12 +11,19 @@ pub struct Codegen<'a> {
 }
 
 macro_rules! asm {
-    ($dst:expr, $($fmt:tt)*; $cmt:expr) => {{
-        write!($dst.output, $($fmt)*).unwrap()
-        writeln!($dst.output, $cmt).unwrap()
-    }};
     ($dst:expr, $($fmt:tt)*) => {
         writeln!($dst.output, $($fmt)*).unwrap()
+    };
+}
+
+macro_rules! comment {
+    ($dst:expr, $($fmt:tt)*) => {{
+        write!($dst.output, "  // ").unwrap();
+        writeln!($dst.output, $($fmt)*).unwrap();
+    }};
+
+    ($dst:expr) => {
+        writeln!($dst.output).unwrap()
     };
 }
 
@@ -35,11 +42,13 @@ impl<'a> Codegen<'a> {
         asm!(self, ".global {name}");
         asm!(self, ".p2align 4, 0x90"); // 0x90 is nop
         asm!(self, "{}:", name);
+        comment!(self, "Function Prologue");
         asm!(self, "  pushq %rbp");
         asm!(self, "  movq %rsp, %rbp");
         if function.stack_size > 0 {
             asm!(self, "  subq ${size}, %rsp", size = function.stack_size);
         }
+        comment!(self);
         for opcode in function.code {
             match opcode {
                 Opcode::FunctionCall {
@@ -73,7 +82,7 @@ impl<'a> Codegen<'a> {
                         BinopKind::Division => {
                             asm!(self, "  cqto");
                             asm!(self, "  idivq %rcx");
-                        },
+                        }
 
                         BinopKind::Equality
                         | BinopKind::Inequality
@@ -90,7 +99,9 @@ impl<'a> Codegen<'a> {
                     asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
             }
+            comment!(self);
         }
+        comment!(self, "Function Epilogue");
         asm!(self, "  movq %rbp, %rsp");
         asm!(self, "  popq %rbp");
         asm!(self, "  ret");
