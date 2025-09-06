@@ -1,4 +1,4 @@
-use crate::ast::expression::{Expression, ExpressionKind};
+use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
@@ -55,7 +55,19 @@ impl<'a, 'b> Compiler<'a> {
                 });
                 Arg::StackOffset(result)
             }
-            ExpressionKind::Unary { .. } => todo!(),
+            ExpressionKind::Unary { item, operator } => {
+                let item = self.compile_expression(item);
+                match operator {
+                    UnaryKind::Negation => {
+                        let result = self.allocate_on_stack(8);
+                        self.push_opcode(Opcode::Negate {
+                            item,
+                            result,
+                        });
+                        Arg::StackOffset(result)
+                    }
+                }
+            },
             ExpressionKind::Assignment { .. } => todo!(),
             ExpressionKind::Literal(l) => Arg::Literal(*l),
             ExpressionKind::VariableAccess(n) => Arg::ExternalFunction(n.clone_into(self.bump)),

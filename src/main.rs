@@ -34,6 +34,8 @@ fn get_line(msg: &str) -> String {
 fn dev_repl() {
     let mut exit = false;
     while !exit {
+        let ast_alloc = Bump::new();
+        let ir_alloc = Bump::new();
         let mut compilation_errors: Vec<&dyn CompilerError> = vec![];
         let input = get_line("> ");
 
@@ -47,12 +49,14 @@ fn dev_repl() {
             .iter()
             .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
 
-        let bump = Bump::new();
-        let mut parser = Parser::new(tokens.into(), &bump);
+        let mut parser = Parser::new(tokens.into(), &ast_alloc);
         let (statements, errors) = parser.parse_program();
         errors
             .iter()
             .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
+
+        let mut comp = Compiler::new(&ir_alloc);
+        comp.compile_statements(&statements);
 
         if compilation_errors.is_empty() {
             for statement in statements {
@@ -61,6 +65,8 @@ fn dev_repl() {
             for statement in statements {
                 println!("{}", PrefixPrintStatement(statement));
             }
+
+            println!("{ir}", ir = comp.ir);
         } else {
             for e in compilation_errors {
                 println!("{e}");

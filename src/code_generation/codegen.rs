@@ -71,7 +71,8 @@ impl<'a> Codegen<'a> {
                         BinopKind::LessThan | BinopKind::LessEq => todo!()
                     }
                     asm!(self, "  movq %rax, -{result}(%rbp)");
-                }
+                },
+                &Opcode::Negate { .. } => todo!()
             }
         }
         asm!(self, "  movq %rbp, %rsp");
