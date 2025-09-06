@@ -1,5 +1,6 @@
 func main () {
-  putchar(55 + 5 + 5);
-  putchar(55 + 10);
-  putchar(55 + 10);
+  putnum(75 - 10);
+  putnum(-(-65));
+  putnum(130 / 2);
+  putnum(65 * 2);
 }

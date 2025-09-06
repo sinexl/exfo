@@ -194,6 +194,7 @@ fn main() -> io::Result<()> {
 
     let mut cc = Command::new("cc");
     cc.arg(object_path)
+        .arg("putnum.c")
         .arg("-o")
         .arg(file_name)
         .stdout(Stdio::inherit())
