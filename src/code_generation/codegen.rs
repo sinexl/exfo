@@ -1,8 +1,8 @@
+use crate::ast::binop::BinopKind;
 use crate::ast::expression::AstLiteral;
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use std::fmt::Write;
-use crate::ast::binop::BinopKind;
 
 pub const CALL_REGISTERS: &[&'static str] = &["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 pub struct Codegen<'a> {
@@ -42,7 +42,11 @@ impl<'a> Codegen<'a> {
         }
         for opcode in function.code {
             match opcode {
-                Opcode::FunctionCall { callee, args, result } => {
+                Opcode::FunctionCall {
+                    callee,
+                    args,
+                    result,
+                } => {
                     if args.len() > CALL_REGISTERS.len() {
                         todo!()
                     }
@@ -65,14 +69,26 @@ impl<'a> Codegen<'a> {
                     match kind {
                         BinopKind::Addition => asm!(self, "  addq %rcx, %rax"),
                         BinopKind::Subtraction => asm!(self, "  subq %rcx, %rax"),
+                        BinopKind::Multiplication => asm!(self, "  imulq %rcx, %rax"),
+                        BinopKind::Division => {
+                            asm!(self, "  cqto");
+                            asm!(self, "  idivq %rcx");
+                        },
 
-                        BinopKind::Multiplication | BinopKind::Division | BinopKind::Equality
-                        | BinopKind::Inequality | BinopKind::GreaterThan | BinopKind::GreaterEq |
-                        BinopKind::LessThan | BinopKind::LessEq => todo!()
+                        BinopKind::Equality
+                        | BinopKind::Inequality
+                        | BinopKind::GreaterThan
+                        | BinopKind::GreaterEq
+                        | BinopKind::LessThan
+                        | BinopKind::LessEq => todo!(),
                     }
                     asm!(self, "  movq %rax, -{result}(%rbp)");
-                },
-                &Opcode::Negate { .. } => todo!()
+                }
+                Opcode::Negate { result, item } => {
+                    self.load_arg_to_reg(item, "rax");
+                    asm!(self, "  negq %rax");
+                    asm!(self, "  movq %rax, -{result}(%rbp)");
+                }
             }
         }
         asm!(self, "  movq %rbp, %rsp");
