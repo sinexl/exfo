@@ -5,6 +5,7 @@ use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
+use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::path::Path;
 use std::process::{exit, Command, Stdio};
@@ -21,8 +22,8 @@ mod simple_interpreter;
 fn get_line(msg: &str) -> String {
     let mut res = String::new();
     print!("{msg}");
-    let _ = std::io::stdout().flush();
-    std::io::stdin().read_line(&mut res).unwrap();
+    let _ = io::stdout().flush();
+    io::stdin().read_line(&mut res).unwrap();
     if let Some('\n') = res.chars().next_back() {
         res.pop();
     };
@@ -84,6 +85,39 @@ fn create_dir_if_not_exists<P: AsRef<Path>>(path: P) -> io::Result<()> {
     Ok(())
 }
 
+struct DisplayCommand<'a>(&'a Command);
+
+impl<'a> Display for DisplayCommand<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {}",
+            self.0.get_program().to_string_lossy(),
+            self.0
+                .get_args()
+                .map(|a| a.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+    }
+}
+
+pub fn run_command(cmd: &mut Command, if_non0_exit: &str, if_run_failed: &str) {
+    match cmd.status() {
+        Ok(status) => {
+            if !status.success() {
+                eprintln!("{}", if_non0_exit);
+                exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            eprintln!("{}", if_run_failed,);
+            exit(1);
+        }
+    }
+}
+
 fn main() -> io::Result<()> {
     if env::args().next_back() == Some("--repl".to_owned()) {
         dev_repl();
@@ -125,7 +159,7 @@ fn main() -> io::Result<()> {
     let mut compiler = Compiler::new(&ir_allocator);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
-    println!("{ir}"); 
+    println!("{ir}");
 
     let codegen = Codegen::new(ir);
     let generated_assembly = codegen.generate();
@@ -142,39 +176,35 @@ fn main() -> io::Result<()> {
 
     let object_path = format!("{BUILD_DIR}/{file_name}.o");
     let object_path = object_path.as_str();
-    let gas = Command::new("as")
-        .arg(asm_path)
+
+    let mut gas = Command::new("as");
+    gas.arg(asm_path)
         .arg("-o")
         .arg(object_path)
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .expect(
-            "Failed to run `as` command. \n\t\
+        .stderr(Stdio::inherit());
+
+    println!("- Running assembler:\n{gas}", gas = DisplayCommand(&gas));
+    run_command(
+        &mut gas,
+        "Assembler error occurred. Exiting.",
+        "Failed to run `as` command. \n\t\
                      Make sure that you have installed GNU Assembler and it's available in $PATH",
-        );
+    );
 
-    if !gas.success() {
-        eprintln!("Assembler error occurred. Exiting.");
-        exit(1);
-    }
-
-    let cc = Command::new("cc")
-        .arg(object_path)
+    let mut cc = Command::new("cc");
+    cc.arg(object_path)
         .arg("-o")
         .arg(file_name)
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .expect(
-            "Failed to run `cc` command. \n\t\
-                      Make sure that `cc` is available in $PATH",
-        );
+        .stderr(Stdio::inherit());
 
-    if !cc.success() {
-        eprintln!("Linker error occurred. Exiting.");
-        exit(1);
-    }
+    println!("- Running cc:\n{cc}", cc = DisplayCommand(&cc));
+    run_command(
+        &mut cc,
+        "Failed to run cc. Exiting.",
+        "Failed to run `cc` command. \n\tMake sure that `cc` is available in $PATH",
+    );
 
     Ok(())
 }
