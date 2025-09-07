@@ -1,4 +1,3 @@
-use crate::ast::binop::BinopKind;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind};
 use std::fmt::{Display, Formatter, Write};
@@ -41,7 +40,7 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
         }
         StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
             write!(f, "(func `{}`", name.name)?;
-            if !body.is_empty()  {
+            if !body.is_empty() {
                 writeln!(f)?;
                 for statement in *body {
                     writeln!(f, "{tab}{}", PrefixPrintStatement(statement))?;

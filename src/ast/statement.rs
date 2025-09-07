@@ -9,7 +9,7 @@ pub struct Statement<'a> {
 pub enum StatementKind<'a> {
     ExpressionStatement(&'a Expression<'a>),
     FunctionDeclaration(FunctionDeclaration<'a>),
-    Block(&'a [&'a Statement<'a>])
+    Block(&'a [&'a Statement<'a>]),
 }
 
 pub struct FunctionDeclaration<'a> {

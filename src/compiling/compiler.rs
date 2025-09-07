@@ -67,7 +67,7 @@ impl<'a, 'b> Compiler<'a> {
                         Arg::StackOffset(result)
                     }
                 }
-            },
+            }
             ExpressionKind::Assignment { .. } => todo!(),
             ExpressionKind::Literal(l) => Arg::Literal(*l),
             ExpressionKind::VariableAccess(n) => Arg::ExternalFunction(n.clone_into(self.bump)),

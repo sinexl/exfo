@@ -17,7 +17,7 @@ pub mod common;
 mod compiling;
 pub mod lexing;
 mod parsing;
-mod simple_interpreter;
+mod analysis;
 
 fn get_line(msg: &str) -> String {
     let mut res = String::new();
@@ -112,7 +112,7 @@ pub fn run_command(cmd: &mut Command, if_non0_exit: &str, if_run_failed: &str) {
         }
         Err(e) => {
             eprintln!("{e}");
-            eprintln!("{}", if_run_failed,);
+            eprintln!("{}", if_run_failed, );
             exit(1);
         }
     }
@@ -194,7 +194,7 @@ fn main() -> io::Result<()> {
 
     let mut cc = Command::new("cc");
     cc.arg(object_path)
-        .arg("putnum.c")
+        .arg("src/putnum.c")
         .arg("-o")
         .arg(file_name)
         .stdout(Stdio::inherit())

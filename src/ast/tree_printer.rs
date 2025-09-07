@@ -50,13 +50,13 @@ pub fn print_statement(
         StatementKind::ExpressionStatement(expr) => {
             writeln!(f, "Expression Statement")?;
             write!(f, "{tab}{}", Print(expr, indent + 1))?;
-        },
-        StatementKind::FunctionDeclaration(FunctionDeclaration {name, body}) => {
+        }
+        StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
             writeln!(f, "Func `{}`", name.name)?;
             for statement in *body {
                 write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
             }
-        },
+        }
         StatementKind::Block(statements) => {
             writeln!(f, "Block")?;
             for statement in *statements {

@@ -5,10 +5,6 @@ use crate::compiling::ir::opcode::{Arg, Opcode};
 use std::fmt::Write;
 
 pub const CALL_REGISTERS: &[&'static str] = &["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
-pub struct Codegen<'a> {
-    ir: &'a IntermediateRepresentation<'a>,
-    output: String,
-}
 
 macro_rules! asm {
     ($dst:expr, $($fmt:tt)*) => {
@@ -25,6 +21,11 @@ macro_rules! comment {
     ($dst:expr) => {
         writeln!($dst.output).unwrap()
     };
+}
+
+pub struct Codegen<'a> {
+    ir: &'a IntermediateRepresentation<'a>,
+    output: String,
 }
 
 //noinspection SpellCheckingInspection
@@ -124,7 +125,7 @@ impl<'a> Codegen<'a> {
 
     pub fn generate(mut self) -> String {
         asm!(self, ".section .text");
-        for (k, v) in &self.ir.functions {
+        for (_, v) in &self.ir.functions {
             self.generate_function(v);
         }
         self.output
