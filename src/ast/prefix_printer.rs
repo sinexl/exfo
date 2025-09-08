@@ -57,11 +57,11 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
                 }
             }
             writeln!(f, ")")?;
-        },
-        StatementKind::VariableDeclaration(VariableDeclaration { name, initializer } ) => {
+        }
+        StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
             write!(f, "(`{}` :", name.name)?;
             if let Some(initializer) = initializer {
-                write!(f, "= {}", PrefixPrint(initializer))? ;
+                write!(f, "= {}", PrefixPrint(initializer))?;
             }
             writeln!(f, ")")?;
         }

@@ -128,8 +128,9 @@ impl<'a, 'b> Compiler<'a> {
             }
             StatementKind::Block(_) => todo!(),
             StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
-                self.allocate_on_stack(8); 
-            },
+                self.allocate_on_stack(8);
+                todo!()
+            }
         }
     }
 

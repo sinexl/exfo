@@ -64,9 +64,9 @@ pub fn print_statement(
             }
         }
         StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
-            writeln!(f, "Variable `{}`", name.name)?; 
-            if let Some(init) = initializer  { 
-                write!(f, "{tab}Initializer = {init}")?; 
+            writeln!(f, "Variable `{}`", name.name)?;
+            if let Some(init) = initializer {
+                write!(f, "{tab}Initializer = {init}")?;
             }
         }
     }

@@ -119,7 +119,7 @@ pub fn run_command(cmd: &mut Command, if_non0_exit: &str, if_run_failed: &str) {
         }
         Err(e) => {
             eprintln!("{e}");
-            eprintln!("{}", if_run_failed,);
+            eprintln!("{}", if_run_failed, );
             exit(1);
         }
     }

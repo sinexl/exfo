@@ -9,7 +9,7 @@ pub struct Statement<'a> {
 pub enum StatementKind<'a> {
     ExpressionStatement(&'a Expression<'a>),
     FunctionDeclaration(FunctionDeclaration<'a>),
-    VariableDeclaration(VariableDeclaration<'a>) ,
+    VariableDeclaration(VariableDeclaration<'a>),
     Block(&'a [&'a Statement<'a>]),
 }
 
@@ -19,7 +19,7 @@ pub struct FunctionDeclaration<'a> {
     pub body: &'a [&'a Statement<'a>],
 }
 
-pub struct VariableDeclaration<'a> { 
+pub struct VariableDeclaration<'a> {
     pub name: Identifier<'a>,
-    pub initializer: Option<&'a Expression<'a>>, 
+    pub initializer: Option<&'a Expression<'a>>,
 }

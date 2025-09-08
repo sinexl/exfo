@@ -7,8 +7,7 @@ pub fn print_ir(ir: &IntermediateRepresentation, f: &mut impl Write) -> std::fmt
         for (_, func) in &ir.functions {
             print_function(func, f)?;
         }
-    }
-    else {
+    } else {
         writeln!(f, "    <empty>")?;
     }
 

@@ -1,4 +1,3 @@
-use std::mem::offset_of;
 use crate::analysis::analyzer::{AnalysisError, Analyzer, ResolverError, ResolverErrorKind};
 use crate::common::{IdentifierBox, SourceLocation};
 use crate::lexing::lexer::Lexer;
