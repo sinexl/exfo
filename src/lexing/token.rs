@@ -88,6 +88,7 @@ pub(crate) enum TokenType {
     Dot,
     Comma,
     Semicolon,
+    Colon,
 
     // Logical operators
     Equal,
@@ -127,6 +128,7 @@ thread_local! {
         ("}", CloseBrace),
         (".", Dot),
         (";", Semicolon),
+        (":", Colon),
         ("+", Plus),
         ("-", Minus),
         ("*", Star),
@@ -145,6 +147,7 @@ thread_local! {
         ('.', Dot),
         (',', Comma),
         (';', Semicolon),
+        (':', Colon),
         ('+', Plus),
         ('-', Minus),
         ('*', Star),

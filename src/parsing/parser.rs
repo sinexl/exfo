@@ -5,18 +5,18 @@ use crate::ast::expression::ExpressionKind::{
     Assignment, Binop, FunctionCall, Literal, VariableAccess,
 };
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
-use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind};
+use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
 use crate::common::{CompilerError, Identifier, SourceLocation};
-use crate::lexing::token::TokenType::Func;
 use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParserErrorKind::{InvalidAssignment, UnexpectedToken};
 use bumpalo::Bump;
 use std::rc::Rc;
 /* Grammar:
  program             => decl* EOF ;
- decl                => funcDecl | statement ;
+ decl                => funcDecl | varDecl | statement ;
  statement           => expressionStatement | blockStatement ;
  expressionStatement => expression ";" ;
+ varDecl             => IDENTIFIER ":" type? ("=" expression)? ";" ;
  funcDecl            => "func" IDENTIFIER function ;
  function            => "(" args ")" blockStatement ;
  blockStatement      => "{" (declaration*)? "}" ;
@@ -26,6 +26,7 @@ use std::rc::Rc;
  unary               => "-" unary | functionCall;
  functionCall        => primary ( "( args ")" )*
  primary             => NUMBER | STRING | IDENTIFIER | "(" expression ")" ;
+ type                => IDENTIFIER
 
 
  * - For Binary Operator Precedence, visit ./src/ast/binop.rs
@@ -70,17 +71,45 @@ impl<'a> Parser<'a> {
 
     pub fn parse_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
         let state = self.save_state();
-        if self.consume(&[Func]).is_some() {
+        if self.consume(&[TokenType::Func]).is_some() {
             self.restore_state(state);
             return self.parse_function_declaration(); // TODO: Sync state of parser on error
+        }
+        if self.consume(&[TokenType::Id]).is_some() {
+            if self.consume(&[TokenType::Colon]).is_some() {
+                self.restore_state(state);
+                return self.parse_variable_declaration(); // TODO: Sync state of parser on error
+            }
+            self.restore_state(state);
         }
 
         self.parse_statement()
     }
 
+    pub fn parse_variable_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let name = self.expect(&[TokenType::Id], "Expected variable name")?;
+        let colon = self.expect(&[TokenType::Colon], "Expected colon")?;
+        let mut initializer: Option<&'a Expression<'a>> = None;
+        if self.consume(&[TokenType::Equal]).is_some() {
+            initializer = Some(self.parse_expression()?);
+        }
+        self.expect(
+            &[TokenType::Semicolon],
+            "Expected semicolon after variable declaration",
+        )?;
+
+        Ok(self.bump.alloc(Statement {
+            kind: StatementKind::VariableDeclaration(VariableDeclaration {
+                name: Identifier::from_token(name, self.bump),
+                initializer,
+            }),
+            loc: colon.loc,
+        }))
+    }
+
     /// func name (args) {} ...
     pub fn parse_function_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
-        let func_keyword = self.expect(&[Func], "Expected function declaration")?;
+        let func_keyword = self.expect(&[TokenType::Func], "Expected function declaration")?;
         let name = self.expect(&[TokenType::Id], "Expected function name")?;
         debug_assert!(name.kind == TokenType::Id);
         let (_, body) = self.parse_function()?;
@@ -112,7 +141,9 @@ impl<'a> Parser<'a> {
         )?;
 
         let block = self.parse_block_statement()?;
-        let StatementKind::Block(statements) = block.kind else { unreachable!() };
+        let StatementKind::Block(statements) = block.kind else {
+            unreachable!()
+        };
         Ok((&[], statements))
     }
 

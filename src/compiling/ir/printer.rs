@@ -3,8 +3,13 @@ use crate::compiling::ir::opcode::{Arg, Opcode};
 use std::fmt::{Display, Formatter, Write};
 
 pub fn print_ir(ir: &IntermediateRepresentation, f: &mut impl Write) -> std::fmt::Result {
-    for (_, func) in &ir.functions {
-        print_function(func, f)?;
+    if !&ir.functions.is_empty() {
+        for (_, func) in &ir.functions {
+            print_function(func, f)?;
+        }
+    }
+    else {
+        writeln!(f, "    <empty>")?;
     }
 
     Ok(())
@@ -33,7 +38,9 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
                 .collect::<Vec<_>>()
                 .join(", ");
             match callee {
-                Arg::ExternalFunction(id) => write!(f, "{tab}stack[{result}] = call(\"{name}\"", name = id.name)?,
+                Arg::ExternalFunction(id) => {
+                    write!(f, "{tab}stack[{result}] = call(\"{name}\"", name = id.name)?
+                }
                 arg => write!(f, "{tab}call({arg}")?,
             }
             if !args.is_empty() {

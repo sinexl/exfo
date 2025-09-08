@@ -1,5 +1,5 @@
 use crate::ast::expression::{Expression, ExpressionKind};
-use crate::ast::statement::FunctionDeclaration;
+use crate::ast::statement::{FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use std::fmt::{Display, Formatter, Write};
 
@@ -61,6 +61,12 @@ pub fn print_statement(
             writeln!(f, "Block")?;
             for statement in *statements {
                 write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
+            }
+        }
+        StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
+            writeln!(f, "Variable `{}`", name.name)?; 
+            if let Some(init) = initializer  { 
+                write!(f, "{tab}Initializer = {init}")?; 
             }
         }
     }

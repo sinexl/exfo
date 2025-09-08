@@ -1,5 +1,5 @@
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
-use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind};
+use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
 use std::fmt::{Display, Formatter, Write};
 
 pub const PREFIX_TAB: &'static str = " ";
@@ -55,6 +55,13 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
                 for statement in *body {
                     writeln!(f, "{tab}{}", PrefixPrintStatement(statement))?;
                 }
+            }
+            writeln!(f, ")")?;
+        },
+        StatementKind::VariableDeclaration(VariableDeclaration { name, initializer } ) => {
+            write!(f, "(`{}` :", name.name)?;
+            if let Some(initializer) = initializer {
+                write!(f, "= {}", PrefixPrint(initializer))? ;
             }
             writeln!(f, ")")?;
         }
