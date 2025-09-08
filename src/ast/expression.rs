@@ -1,14 +1,15 @@
 use crate::ast::binop::BinopKind;
 use crate::common::{Identifier, SourceLocation};
 use std::fmt::Display;
+use std::hash::{Hash, Hasher};
 
-#[derive(Debug)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub struct Expression<'a> {
     pub kind: ExpressionKind<'a>,
     pub loc: SourceLocation,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum ExpressionKind<'a> {
     Binop {
         left: &'a Expression<'a>,
@@ -54,7 +55,7 @@ impl ExpressionKind<'_> {
     }
 }
 
-#[derive(Hash, Debug)]
+#[derive(Hash, Debug, Eq, PartialEq)]
 pub enum UnaryKind {
     Negation,
 }
@@ -67,10 +68,23 @@ impl UnaryKind {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum AstLiteral {
     Integral(i64),
     FloatingPoint(f64),
+}
+impl Eq for AstLiteral {}
+
+impl Hash for AstLiteral {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            AstLiteral::Integral(i) => i.hash(state),
+            //  NOTE. It's unclear how to approach this.
+            // I guess, we will only care for structural identity, not mathematical one.
+            // So -0.0 and 0.0 will be considered "distinct", and NaN will be equal to NaN
+            AstLiteral::FloatingPoint(f) => f.to_bits().hash(state),
+        }
+    }
 }
 
 impl Display for AstLiteral {

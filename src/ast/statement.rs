@@ -20,6 +20,6 @@ pub struct FunctionDeclaration<'a> {
 }
 
 pub struct VariableDeclaration<'a> { 
-    pub name: Identifier<'a>, 
+    pub name: Identifier<'a>,
     pub initializer: Option<&'a Expression<'a>>, 
 }

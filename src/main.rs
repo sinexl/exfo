@@ -1,3 +1,4 @@
+use crate::analysis::analyzer::Analyzer;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::code_generation::codegen::Codegen;
 use crate::common::CompilerError;
@@ -11,13 +12,13 @@ use std::path::Path;
 use std::process::{exit, Command, Stdio};
 use std::{env, fs, io};
 
+mod analysis;
 mod ast;
 mod code_generation;
 pub mod common;
 mod compiling;
 pub mod lexing;
 mod parsing;
-mod analysis;
 
 fn get_line(msg: &str) -> String {
     let mut res = String::new();
@@ -32,12 +33,20 @@ fn get_line(msg: &str) -> String {
     };
     res
 }
+macro_rules! push_errors {
+    ($compilation_errors:expr, $errors:expr) => {{
+        $compilation_errors.reserve($errors.len());
+        for e in $errors {
+            $compilation_errors.push(Box::new(e));
+        }
+    }};
+}
 fn dev_repl() {
     let mut exit = false;
     while !exit {
         let ast_alloc = Bump::new();
         let ir_alloc = Bump::new();
-        let mut compilation_errors: Vec<&dyn CompilerError> = vec![];
+        let mut compilation_errors: Vec<Box<dyn CompilerError>> = vec![];
         let input = get_line("> ");
 
         if input == ":quit" {
@@ -45,19 +54,15 @@ fn dev_repl() {
         }
 
         let (tokens, errors) = Lexer::new(&input, "<REPL>").accumulate();
-        compilation_errors.reserve(errors.len());
-        errors
-            .iter()
-            .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
+        push_errors!(compilation_errors, errors);
 
         let mut parser = Parser::new(tokens.into(), &ast_alloc);
         let (statements, errors) = parser.parse_program();
-        errors
-            .iter()
-            .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
+        push_errors!(compilation_errors, errors);
 
-        let mut comp = Compiler::new(&ir_alloc);
-        comp.compile_statements(&statements);
+        let mut analyzer = Analyzer::new();
+        let errors = analyzer.analyze_statements(statements);
+        push_errors!(compilation_errors, errors);
 
         if compilation_errors.is_empty() {
             for statement in statements {
@@ -67,6 +72,8 @@ fn dev_repl() {
                 println!("{}", PrefixPrintStatement(statement));
             }
 
+            let mut comp = Compiler::new(&ir_alloc);
+            comp.compile_statements(&statements);
             println!("{ir}", ir = comp.ir);
         } else {
             for e in compilation_errors {
@@ -112,7 +119,7 @@ pub fn run_command(cmd: &mut Command, if_non0_exit: &str, if_run_failed: &str) {
         }
         Err(e) => {
             eprintln!("{e}");
-            eprintln!("{}", if_run_failed, );
+            eprintln!("{}", if_run_failed,);
             exit(1);
         }
     }
@@ -133,20 +140,16 @@ fn main() -> io::Result<()> {
     let file = fs::read_to_string(&path)?;
 
     // Compilation process.
-    let mut compilation_errors: Vec<&dyn CompilerError> = vec![];
+    let mut compilation_errors: Vec<Box<dyn CompilerError>> = vec![];
     let ast_allocator = Bump::new();
     let ir_allocator = Bump::new();
     // Lexing.
     let (tokens, errors) = Lexer::new(&file, path.to_str().unwrap()).accumulate();
-    errors
-        .iter()
-        .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
+    push_errors!(compilation_errors, errors);
     // Parsing
     let mut parser = Parser::new(tokens.into(), &ast_allocator);
     let (ast, errors) = parser.parse_program();
-    errors
-        .iter()
-        .for_each(|e| compilation_errors.push(e as &dyn CompilerError));
+    push_errors!(compilation_errors, errors);
     // Error reporting
     if !compilation_errors.is_empty() {
         for e in compilation_errors {

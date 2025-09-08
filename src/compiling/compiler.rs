@@ -1,12 +1,12 @@
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
-use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind};
+use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use bumpalo::Bump;
 
 pub struct Compiler<'a> {
     bump: &'a Bump,
-    pub(crate) ir: &'a mut IntermediateRepresentation<'a>,
+    pub ir: &'a mut IntermediateRepresentation<'a>,
     current_function: Option<Vec<Opcode<'a>>>,
     stack_size: StackSize,
 }
@@ -127,6 +127,9 @@ impl<'a, 'b> Compiler<'a> {
                 self.stack_size = StackSize::zero();
             }
             StatementKind::Block(_) => todo!(),
+            StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
+                self.allocate_on_stack(8); 
+            },
         }
     }
 
