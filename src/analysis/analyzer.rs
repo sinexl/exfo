@@ -211,6 +211,7 @@ fn debug_scope(scope: &Scope<'_>) {
     }
 }
 
+#[derive(Clone)]
 pub enum AnalysisError {
     ResolverError(ResolverError),
 }
@@ -235,10 +236,12 @@ impl CompilerError for AnalysisError {
     }
 }
 
+#[derive(Clone)]
 pub struct ResolverError {
     pub loc: SourceLocation,
     pub kind: ResolverErrorKind,
 }
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ResolverErrorKind {
     UndeclaredVariable { usage: IdentifierBox },
     ReadingFromInitializer { read: IdentifierBox },
