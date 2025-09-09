@@ -57,6 +57,7 @@ impl<T> IdentifierInner<T> {
 }
 
 pub(crate) type IdentifierBox = IdentifierInner<Box<str>>;
+pub type Stack<T> = Vec<T>;
 
 impl IdentifierBox {
     pub fn from_borrowed(id: &Identifier<'_>) -> Self {

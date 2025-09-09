@@ -98,6 +98,10 @@ impl<'a> Codegen<'a> {
                     self.load_arg_to_reg(item, "rax");
                     asm!(self, "  negq %rax");
                     asm!(self, "  movq %rax, -{result}(%rbp)");
+                },
+                Opcode::Assign { result, arg: item } => {
+                    self.load_arg_to_reg(item, "rax");
+                    asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
             }
             comment!(self);

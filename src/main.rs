@@ -46,7 +46,7 @@ fn dev_repl() {
     while !exit {
         let ast_alloc = Bump::new();
         let ir_alloc = Bump::new();
-        let mut compilation_errors: Vec<Box<dyn CompilerError>> = vec![];
+        let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
         let input = get_line("> ");
 
         if input == ":quit" {
@@ -54,29 +54,30 @@ fn dev_repl() {
         }
 
         let (tokens, errors) = Lexer::new(&input, "<REPL>").accumulate();
-        push_errors!(compilation_errors, errors);
+        push_errors!(static_errors, errors);
 
         let mut parser = Parser::new(tokens.into(), &ast_alloc);
         let (statements, errors) = parser.parse_program();
-        push_errors!(compilation_errors, errors);
+        push_errors!(static_errors, errors);
 
         let mut analyzer = Analyzer::new();
         let errors = analyzer.analyze_statements(statements);
-        push_errors!(compilation_errors, errors);
+        push_errors!(static_errors, errors);
 
-        if compilation_errors.is_empty() {
-            for statement in statements {
-                println!("{}", statement);
-            }
-            for statement in statements {
-                println!("{}", PrefixPrintStatement(statement));
-            }
+        for statement in statements {
+            println!("{}", statement);
+        }
+        for statement in statements {
+            println!("{}", PrefixPrintStatement(statement));
+        }
 
-            let mut comp = Compiler::new(&ir_alloc);
+
+        if static_errors.is_empty() {
+            let mut comp = Compiler::new(&ir_alloc, analyzer.resolutions);
             comp.compile_statements(&statements);
             println!("{ir}", ir = comp.ir);
         } else {
-            for e in compilation_errors {
+            for e in static_errors {
                 println!("{e}");
             }
         }
@@ -140,26 +141,31 @@ fn main() -> io::Result<()> {
     let file = fs::read_to_string(&path)?;
 
     // Compilation process.
-    let mut compilation_errors: Vec<Box<dyn CompilerError>> = vec![];
+    let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
     let ast_allocator = Bump::new();
     let ir_allocator = Bump::new();
     // Lexing.
     let (tokens, errors) = Lexer::new(&file, path.to_str().unwrap()).accumulate();
-    push_errors!(compilation_errors, errors);
+    push_errors!(static_errors, errors);
     // Parsing
     let mut parser = Parser::new(tokens.into(), &ast_allocator);
     let (ast, errors) = parser.parse_program();
-    push_errors!(compilation_errors, errors);
+    push_errors!(static_errors, errors);
+
+    // Static analysis
+    let mut analyzer = Analyzer::new();
+    let errors = analyzer.analyze_statements(&ast);
+    push_errors!(static_errors, errors);
     // Error reporting
-    if !compilation_errors.is_empty() {
-        for e in compilation_errors {
+    if !static_errors.is_empty() {
+        for e in static_errors {
             println!("{e}");
         }
         exit(1);
     }
 
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator);
+    let mut compiler = Compiler::new(&ir_allocator, analyzer.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
     println!("{ir}");

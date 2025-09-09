@@ -16,6 +16,7 @@ pub enum Opcode<'a> {
         kind: BinopKind,
     },
     Negate { result: usize, item: Arg<'a> },
+    Assign { result: usize, arg: Arg<'a> },
 }
 
 #[derive(Clone, Debug)]

@@ -1,24 +1,31 @@
 use crate::ast::expression::{Expression, ExpressionKind};
 use crate::ast::statement::{FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
-use crate::common::{CompilerError, Identifier, IdentifierBox, SourceLocation};
+use crate::common::{CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
 use std::collections::HashMap;
 
-type Stack<T> = Vec<T>;
 type Scope<'a> = HashMap<
     &'a str,
     // Exfo allows shadowing, so, each name might relate to several variables in the same scope
-    Vec<Variable<'a>>,
+    Variable<'a>,
 >;
+
+pub type Resolutions<'a> = HashMap<&'a Expression<'a>, usize>;
+
 pub struct Analyzer<'a> {
-    pub resolutions: HashMap<&'a Expression<'a>, usize>,
+    pub resolutions: Resolutions<'a>,
     locals: Stack<Scope<'a>>,
 }
 
 #[derive(Debug)]
-pub struct Variable<'a> {
-    pub defined: bool,
+struct Variable<'a> {
+    pub state: VariableState,
     pub name: Identifier<'a>,
+}
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum VariableState {
+    Declared,
+    Defined,
 }
 
 macro_rules! current_scope {
@@ -59,8 +66,8 @@ impl<'a> Analyzer<'a> {
                 self.resolve_expression(value)?;
             }
             ExpressionKind::VariableAccess(read) => {
-                if let Some(values) = current_scope!(self).get(read.name) {
-                    if !values.last().unwrap().defined {
+                if let Some(value) = current_scope!(self).get(read.name) {
+                    if value.state < VariableState::Defined {
                         return Err(ResolverError {
                             loc: read.location.clone(),
                             kind: ResolverErrorKind::ReadingFromInitializer {
@@ -164,31 +171,34 @@ impl<'a> Analyzer<'a> {
     fn declare(&mut self, name: &Identifier<'a>) {
         let current_scope = current_scope!(self);
         // Case 1: there are already variables with that name defined in the scope.
-        if let Some(declarations) = current_scope.get_mut(name.name) {
-            declarations.push(Variable {
-                defined: false,
+        if let Some(declaration) = current_scope.get_mut(name.name) {
+            // TODO: Catch accidental variable shadows to improve UX of the language
+            //   By example, we could warn user if variable was shadowed but not read from.
+            *declaration = Variable {
+                state: VariableState::Declared,
                 name: name.clone(),
-            });
+            };
             return;
         }
         // Case 2. There are no variables with that name defined is the scope
         current_scope.insert(
             name.name,
-            vec![Variable {
-                defined: false,
+            Variable {
+                state: VariableState::Declared,
                 name: name.clone(),
-            }],
+            },
         );
     }
     fn define(&mut self, name: &Identifier<'a>) -> () {
-        if let Some(definitions) = current_scope!(self).get_mut(&name.name) {
-            if let Some(var) = definitions.last_mut() {
-                if var.defined {
-                    panic!("COMPILER BUG: Variable `{}` is already defined.", name.name);
-                }
-                var.defined = true;
-                return;
+        if let Some(var) = current_scope!(self).get_mut(&name.name) {
+            if var.state == VariableState::Defined {
+                panic!(
+                    "COMPILER BUG: Variable `{}` ({:?}) is already defined\n",
+                    name.name, var.state
+                );
             }
+            var.state = VariableState::Defined;
+            return;
         }
         panic!(
             "COMPILER BUG: Variable `{}` is not declared to be defined.",

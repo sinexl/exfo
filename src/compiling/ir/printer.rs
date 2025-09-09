@@ -58,9 +58,9 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             result,
             op = kind.operator()
         )?,
-        Opcode::Negate { result, item } => {
-            writeln!(f, "{tab}stack[{result}] = -{item}")?;
-        }
+        Opcode::Negate { result, item } => writeln!(f, "{tab}stack[{result}] = -{item}")?,
+
+        Opcode::Assign { result, arg: item } => writeln!(f, "{tab}stack[{result}] = {item}")?,
     }
 
     Ok(())

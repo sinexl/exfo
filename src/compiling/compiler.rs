@@ -1,14 +1,25 @@
+use crate::analysis::analyzer::Resolutions;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
+use crate::common::Stack;
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use bumpalo::Bump;
+use std::collections::HashMap;
 
-pub struct Compiler<'a> {
-    bump: &'a Bump,
-    pub ir: &'a mut IntermediateRepresentation<'a>,
-    current_function: Option<Vec<Opcode<'a>>>,
+pub struct Compiler<'ir, 'ast> {
+    bump: &'ir Bump,
+    current_function: Option<Vec<Opcode<'ir>>>,
+    variables: Stack<HashMap<&'ast str, Variable>>,
+
+    resolutions: Resolutions<'ast>,
+    pub ir: &'ir mut IntermediateRepresentation<'ir>,
+
     stack_size: StackSize,
+}
+
+pub struct Variable {
+    stack_offset: usize,
 }
 
 struct StackSize {
@@ -22,18 +33,20 @@ impl StackSize {
     }
 }
 
-impl<'a> Compiler<'a> {
-    pub fn new(bump: &'a Bump) -> Compiler<'a> {
+impl<'ir, 'ast> Compiler<'ir, 'ast> {
+    pub fn new(bump: &'ir Bump, resolutions: Resolutions<'ast>) -> Compiler<'ir, 'ast> {
         Self {
             bump,
             ir: bump.alloc(IntermediateRepresentation::new(bump)),
             current_function: None,
             stack_size: StackSize::zero(),
+            resolutions,
+            variables: Stack::new(),
         }
     }
 }
 
-impl<'a, 'b> Compiler<'a> {
+impl<'ir, 'ast> Compiler<'ir, 'ast> {
     pub fn allocate_on_stack(&mut self, size: usize) -> usize {
         self.stack_size.count += size;
         if self.stack_size.count >= self.stack_size.max {
@@ -41,7 +54,7 @@ impl<'a, 'b> Compiler<'a> {
         }
         self.stack_size.count
     }
-    pub fn compile_expression(&mut self, expression: &Expression<'b>) -> Arg<'a> {
+    pub fn compile_expression(&mut self, expression: &Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind } => {
                 let left = self.compile_expression(left);
@@ -60,15 +73,25 @@ impl<'a, 'b> Compiler<'a> {
                 match operator {
                     UnaryKind::Negation => {
                         let result = self.allocate_on_stack(8);
-                        self.push_opcode(Opcode::Negate {
-                            item,
-                            result,
-                        });
+                        self.push_opcode(Opcode::Negate { item, result });
                         Arg::StackOffset(result)
                     }
                 }
             }
-            ExpressionKind::Assignment { .. } => todo!(),
+            ExpressionKind::Assignment { target, value } => {
+                let target = self.compile_expression(target);
+                let arg = self.compile_expression(value);
+                match target {
+                    Arg::StackOffset(offset) => {
+                        self.push_opcode(Opcode::Assign {
+                            result: offset,
+                            arg,
+                        });
+                        Arg::StackOffset(offset)
+                    }
+                    _ => todo!(),
+                }
+            }
             ExpressionKind::Literal(l) => Arg::Literal(*l),
             ExpressionKind::VariableAccess(n) => Arg::ExternalFunction(n.clone_into(self.bump)),
             ExpressionKind::FunctionCall { callee, arguments } => {
@@ -88,7 +111,7 @@ impl<'a, 'b> Compiler<'a> {
         }
     }
 
-    pub fn push_opcode(&mut self, opcode: Opcode<'a>) {
+    pub fn push_opcode(&mut self, opcode: Opcode<'ir>) {
         if let Some(current_function) = self.current_function.as_mut() {
             current_function.push(opcode);
             return;
@@ -96,7 +119,7 @@ impl<'a, 'b> Compiler<'a> {
         todo!()
     }
 
-    pub fn compile_statement(&mut self, statement: &Statement<'b>) {
+    pub fn compile_statement(&mut self, statement: &Statement<'ast>) {
         match &statement.kind {
             StatementKind::ExpressionStatement(expr) => {
                 // The result of compile_expression is always temporary unless we actually assign it.
@@ -128,13 +151,25 @@ impl<'a, 'b> Compiler<'a> {
             }
             StatementKind::Block(_) => todo!(),
             StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
-                self.allocate_on_stack(8);
-                todo!()
+                let stack_offset = self.allocate_on_stack(8);
+                let var = Variable { stack_offset };
+                self.variables
+                    .last_mut()
+                    .expect("variable stack is empty")
+                    .insert(name.name, var);
+
+                if let Some(initializer) = initializer {
+                    let arg = self.compile_expression(initializer);
+                    self.push_opcode(Opcode::Assign {
+                        result: stack_offset,
+                        arg: arg,
+                    })
+                }
             }
         }
     }
 
-    pub fn compile_statements(&mut self, statements: &[&'a Statement<'a>]) {
+    pub fn compile_statements(&mut self, statements: &[&'ast Statement<'ast>]) {
         for statement in statements {
             self.compile_statement(statement);
         }
