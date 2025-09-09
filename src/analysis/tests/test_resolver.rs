@@ -12,7 +12,7 @@ pub fn undeclared_variable() {
     let file = Rc::from(PATH);
     assert_eq!(
         error("func main () { a;}").kind,
-        ResolverErrorKind::UndeclaredVariable {
+        ResolverErrorKind::UndeclaredIdentifier {
             usage: IdentifierBox::new(
                 "a".to_owned().into_boxed_str(),
                 SourceLocation {

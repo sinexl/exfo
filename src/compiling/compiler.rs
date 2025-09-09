@@ -93,7 +93,10 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 }
             }
             ExpressionKind::Literal(l) => Arg::Literal(*l),
-            ExpressionKind::VariableAccess(n) => Arg::ExternalFunction(n.clone_into(self.bump)),
+            ExpressionKind::VariableAccess(n) => {
+                Arg::ExternalFunction(n.clone_into(self.bump))
+                // TODO
+            },
             ExpressionKind::FunctionCall { callee, arguments } => {
                 let callee = self.compile_expression(callee);
                 let args = arguments
@@ -130,6 +133,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             }
             StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
                 self.current_function = Some(Vec::new());
+                self.variables.push(HashMap::new());
                 for statement in *body {
                     self.compile_statement(statement);
                 }
@@ -147,6 +151,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 );
 
                 self.current_function = None;
+                self.variables.pop();
                 self.stack_size = StackSize::zero();
             }
             StatementKind::Block(_) => todo!(),
@@ -162,7 +167,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     let arg = self.compile_expression(initializer);
                     self.push_opcode(Opcode::Assign {
                         result: stack_offset,
-                        arg: arg,
+                        arg,
                     })
                 }
             }

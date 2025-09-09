@@ -40,7 +40,21 @@ impl<'a> Analyzer<'a> {
     pub fn new() -> Analyzer<'a> {
         Analyzer {
             resolutions: HashMap::new(),
-            locals: vec![HashMap::new()],
+            locals: vec![{
+                // TODO: Obviously, this is a hack.
+                let mut globals = HashMap::new();
+                globals.insert(
+                    "putnum",
+                    Variable {
+                        state: VariableState::Defined,
+                        name: Identifier {
+                            name: "putnum",
+                            location: Default::default(),
+                        },
+                    },
+                );
+                globals
+            }],
         }
     }
 
@@ -162,7 +176,7 @@ impl<'a> Analyzer<'a> {
 
         Err(ResolverError {
             loc: var.location.clone(),
-            kind: ResolverErrorKind::UndeclaredVariable {
+            kind: ResolverErrorKind::UndeclaredIdentifier {
                 usage: IdentifierBox::from_borrowed(var),
             },
         })
@@ -253,7 +267,7 @@ pub struct ResolverError {
 }
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ResolverErrorKind {
-    UndeclaredVariable { usage: IdentifierBox },
+    UndeclaredIdentifier { usage: IdentifierBox },
     ReadingFromInitializer { read: IdentifierBox },
 }
 
@@ -264,8 +278,8 @@ impl CompilerError for ResolverError {
 
     fn message(&self) -> String {
         match &self.kind {
-            ResolverErrorKind::UndeclaredVariable { usage } => {
-                format!("Undeclared variable: `{}`", usage.name)
+            ResolverErrorKind::UndeclaredIdentifier { usage } => {
+                format!("Undeclared identifier `{}`", usage.name)
             }
             ResolverErrorKind::ReadingFromInitializer { read } => format!(
                 "Could not read `{n}` from it's own initializer",
@@ -276,7 +290,7 @@ impl CompilerError for ResolverError {
 
     fn note(&self) -> Option<String> {
         match &self.kind {
-            ResolverErrorKind::UndeclaredVariable { .. } => None,
+            ResolverErrorKind::UndeclaredIdentifier { .. } => None,
             ResolverErrorKind::ReadingFromInitializer { .. } => None,
         }
     }
