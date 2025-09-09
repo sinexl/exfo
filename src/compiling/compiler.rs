@@ -18,7 +18,9 @@ pub struct Compiler<'ir, 'ast> {
     stack_size: StackSize,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct Variable {
+    is_function: bool, // TODO:  this is not how this should be done.
     stack_offset: usize,
 }
 
@@ -94,9 +96,15 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             }
             ExpressionKind::Literal(l) => Arg::Literal(*l),
             ExpressionKind::VariableAccess(n) => {
-                Arg::ExternalFunction(n.clone_into(self.bump))
-                // TODO
-            },
+                // TODO: this is kinda dumb hack to get things working.
+                let depth = *self.resolutions.get(expression).unwrap();
+                let var = self.get_variable(n.name, depth);
+                if var.is_function {
+                    Arg::ExternalFunction(n.clone_into(self.bump))
+                } else {
+                    Arg::StackOffset(var.stack_offset)
+                }
+            }
             ExpressionKind::FunctionCall { callee, arguments } => {
                 let callee = self.compile_expression(callee);
                 let args = arguments
@@ -120,6 +128,13 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             return;
         }
         todo!()
+    }
+
+    pub fn get_variable(&self, name: &str, depth: usize) -> Variable {
+        let scope_index = self.variables.len() - 1 - depth;
+        let scope = &self.variables[scope_index];
+        let var = scope.get(name).unwrap();
+        *var
     }
 
     pub fn compile_statement(&mut self, statement: &Statement<'ast>) {
@@ -157,7 +172,10 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             StatementKind::Block(_) => todo!(),
             StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
                 let stack_offset = self.allocate_on_stack(8);
-                let var = Variable { stack_offset };
+                let var = Variable {
+                    stack_offset,
+                    is_function: false,
+                };
                 self.variables
                     .last_mut()
                     .expect("variable stack is empty")
@@ -175,6 +193,16 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
     }
 
     pub fn compile_statements(&mut self, statements: &[&'ast Statement<'ast>]) {
+        // TODO: Obviously, this is a hack.
+        let mut globals = HashMap::new();
+        globals.insert(
+            "putnum",
+            Variable {
+                is_function: true,
+                stack_offset: 0,
+            },
+        );
+        self.variables.push(globals);
         for statement in statements {
             self.compile_statement(statement);
         }

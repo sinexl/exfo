@@ -1,7 +1,9 @@
 func main () {
-  a := 65;
-  putnum(75 - 10);
-  putnum(-(-65));
-  putnum(130 / 2);
+  a := 0; // Declaration
+  putnum(a);
+  a := 10; // Shadowing
+  putnum(a);
+  a = a + 10; // Mutation
+  putnum(a);
   putnum(65 * 2);
 }
