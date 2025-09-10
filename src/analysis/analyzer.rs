@@ -4,23 +4,25 @@ use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
 use std::collections::HashMap;
 
-type Scope<'a> = HashMap<
-    &'a str,
+type Scope<'ast> = HashMap<
+    &'ast str,
     // Exfo allows shadowing, so, each name might relate to several variables in the same scope
-    Variable<'a>,
+    Variable<'ast>,
 >;
 
-pub type Resolutions<'a> = HashMap<&'a Expression<'a>, usize>;
+pub type Resolutions<'ast> = HashMap<&'ast Expression<'ast>, usize>;
 
-pub struct Analyzer<'a> {
-    pub resolutions: Resolutions<'a>,
-    locals: Stack<Scope<'a>>,
+pub struct Analyzer<'ast> {
+    pub resolutions: Resolutions<'ast>,
+    locals: Stack<Scope<'ast>>,
+
+    current_initializer: Option<Identifier<'ast>>,
 }
 
 #[derive(Debug)]
-struct Variable<'a> {
+struct Variable<'ast> {
     pub state: VariableState,
-    pub name: Identifier<'a>,
+    pub name: Identifier<'ast>,
 }
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum VariableState {
@@ -36,10 +38,11 @@ macro_rules! current_scope {
     };
 }
 
-impl<'a> Analyzer<'a> {
-    pub fn new() -> Analyzer<'a> {
+impl<'ast> Analyzer<'ast> {
+    pub fn new() -> Analyzer<'ast> {
         Analyzer {
             resolutions: HashMap::new(),
+            current_initializer: None,
             locals: vec![{
                 // TODO: Obviously, this is a hack.
                 let mut globals = HashMap::new();
@@ -66,7 +69,7 @@ impl<'a> Analyzer<'a> {
         self.locals.pop();
     }
 
-    fn resolve_expression(&mut self, expression: &'a Expression<'a>) -> Result<(), ResolverError> {
+    fn resolve_expression(&mut self, expression: &'ast Expression<'ast>) -> Result<(), ResolverError> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, .. } => {
                 self.resolve_expression(left)?;
@@ -82,6 +85,7 @@ impl<'a> Analyzer<'a> {
             ExpressionKind::VariableAccess(read) => {
                 if let Some(value) = current_scope!(self).get(read.name) {
                     if value.state < VariableState::Defined {
+                        // TODO: This is kinda unreachable
                         return Err(ResolverError {
                             loc: read.location.clone(),
                             kind: ResolverErrorKind::ReadingFromInitializer {
@@ -105,7 +109,7 @@ impl<'a> Analyzer<'a> {
 
     pub fn resolve_statement(
         &mut self,
-        statement: &'a Statement<'a>,
+        statement: &'ast Statement<'ast>,
     ) -> Result<(), Vec<ResolverError>> {
         match &statement.kind {
             StatementKind::ExpressionStatement(expression) => {
@@ -129,17 +133,23 @@ impl<'a> Analyzer<'a> {
                 self.exit_scope();
             }
             StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
-                self.declare(name);
+                self.current_initializer = Some(name.clone());
+                // In variable shadowing, user might want to read from variable with the same name.
+                // a := 10;
+                // a := a + 15;
+                // That's why initializer is resolved prior to declaring variable
                 if let Some(init) = initializer {
                     self.resolve_expression(init).map_err(|e| vec![e])?;
                 }
+                self.current_initializer = None;
+                self.declare(name);
                 self.define(name);
             }
         }
         Ok(())
     }
 
-    pub fn resolve_statements(&mut self, statements: &[&'a Statement<'a>]) -> Vec<ResolverError> {
+    pub fn resolve_statements(&mut self, statements: &[&'ast Statement<'ast>]) -> Vec<ResolverError> {
         let mut resolution_errors = Vec::new();
         for statement in statements {
             if let Err(mut err) = self.resolve_statement(statement) {
@@ -149,7 +159,7 @@ impl<'a> Analyzer<'a> {
         resolution_errors
     }
 
-    pub fn analyze_statements(&mut self, statements: &[&'a Statement<'a>]) -> Vec<AnalysisError> {
+    pub fn analyze_statements(&mut self, statements: &[&'ast Statement<'ast>]) -> Vec<AnalysisError> {
         let mut analysis_errors: Vec<AnalysisError> = Vec::new();
 
         let resolution_errors = self.resolve_statements(statements);
@@ -163,8 +173,8 @@ impl<'a> Analyzer<'a> {
 
     fn resolve_local_variable(
         &mut self,
-        expression: &'a Expression<'a>,
-        var: &Identifier<'a>,
+        expression: &'ast Expression<'ast>,
+        var: &Identifier<'ast>,
     ) -> Result<(), ResolverError> {
         for (i, scope) in self.locals.iter().rev().enumerate() {
             if scope.contains_key(var.name) {
@@ -172,6 +182,20 @@ impl<'a> Analyzer<'a> {
                 self.resolutions.insert(expression, i);
                 return Ok(());
             }
+        }
+
+        if self
+            .current_initializer
+            .clone()
+            .filter(|e| e.name == var.name)
+            .is_some()
+        {
+            return Err(ResolverError {
+                loc: var.location.clone(),
+                kind: ResolverErrorKind::ReadingFromInitializer {
+                    read: IdentifierBox::from_borrowed(var),
+                },
+            });
         }
 
         Err(ResolverError {
@@ -182,7 +206,7 @@ impl<'a> Analyzer<'a> {
         })
     }
 
-    fn declare(&mut self, name: &Identifier<'a>) {
+    fn declare(&mut self, name: &Identifier<'ast>) {
         let current_scope = current_scope!(self);
         // Case 1: there are already variables with that name defined in the scope.
         if let Some(declaration) = current_scope.get_mut(name.name) {
@@ -203,7 +227,7 @@ impl<'a> Analyzer<'a> {
             },
         );
     }
-    fn define(&mut self, name: &Identifier<'a>) -> () {
+    fn define(&mut self, name: &Identifier<'ast>) -> () {
         if let Some(var) = current_scope!(self).get_mut(&name.name) {
             if var.state == VariableState::Defined {
                 panic!(

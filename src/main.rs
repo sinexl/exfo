@@ -168,11 +168,11 @@ fn main() -> io::Result<()> {
     let mut compiler = Compiler::new(&ir_allocator, analyzer.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
-    // println!("{ir}"); // TODO: Compiler flag
+    println!("{ir}"); // TODO: Compiler flag
 
     let codegen = Codegen::new(ir);
     let generated_assembly = codegen.generate();
-    // println!("{}", generated_assembly);
+    println!("{}", generated_assembly);
 
     // Outputting the result of compilation to user.
     const BUILD_DIR: &str = "./.exfo_build";

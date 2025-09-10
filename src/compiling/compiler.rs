@@ -97,7 +97,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             ExpressionKind::Literal(l) => Arg::Literal(*l),
             ExpressionKind::VariableAccess(n) => {
                 // TODO: this is kinda dumb hack to get things working.
-                let depth = *self.resolutions.get(expression).unwrap();
+                let depth = *self.resolutions.get(expression).expect("Analysis failed");
                 let var = self.get_variable(n.name, depth);
                 if var.is_function {
                     Arg::ExternalFunction(n.clone_into(self.bump))
@@ -172,6 +172,17 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             StatementKind::Block(_) => todo!(),
             StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
                 let stack_offset = self.allocate_on_stack(8);
+                // Since shadowing is allowed, initializers are compiled before variable is inserted in the compiler tables.
+                // i. e
+                // a := 10;
+                // a := a + 15;
+                if let Some(initializer) = initializer {
+                    let arg = self.compile_expression(initializer);
+                    self.push_opcode(Opcode::Assign {
+                        result: stack_offset,
+                        arg,
+                    })
+                }
                 let var = Variable {
                     stack_offset,
                     is_function: false,
@@ -180,14 +191,6 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     .last_mut()
                     .expect("variable stack is empty")
                     .insert(name.name, var);
-
-                if let Some(initializer) = initializer {
-                    let arg = self.compile_expression(initializer);
-                    self.push_opcode(Opcode::Assign {
-                        result: stack_offset,
-                        arg,
-                    })
-                }
             }
         }
     }
