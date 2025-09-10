@@ -57,6 +57,7 @@ impl<'a> Codegen<'a> {
                     args,
                     result,
                 } => {
+                    comment!(self, "Function call");
                     if args.len() > CALL_REGISTERS.len() {
                         todo!()
                     }
@@ -74,6 +75,7 @@ impl<'a> Codegen<'a> {
                     result,
                     kind,
                 } => {
+                    comment!(self, "Binop ({})", kind.operator());
                     self.load_arg_to_reg(left, "rax");
                     self.load_arg_to_reg(right, "rcx");
                     match kind {
@@ -95,11 +97,13 @@ impl<'a> Codegen<'a> {
                     asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
                 Opcode::Negate { result, item } => {
+                    comment!(self, "Negate");
                     self.load_arg_to_reg(item, "rax");
                     asm!(self, "  negq %rax");
                     asm!(self, "  movq %rax, -{result}(%rbp)");
                 },
                 Opcode::Assign { result, arg: item } => {
+                    comment!(self, "Assign"); 
                     self.load_arg_to_reg(item, "rax");
                     asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
