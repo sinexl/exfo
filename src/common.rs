@@ -81,3 +81,11 @@ impl<'a> Identifier<'a> {
         Self::new(alloc.alloc_str(&token.string), token.loc)
     }
 }
+#[macro_export]
+macro_rules! hashmap {
+    ($($key:expr => $val:expr),* $(,)?) => {{
+        let mut map = ::std::collections::HashMap::new();
+        $( map.insert($key, $val); )*
+        map
+    }};
+}
