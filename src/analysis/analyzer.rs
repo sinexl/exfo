@@ -61,52 +61,24 @@ impl<'ast> Analyzer<'ast> {
         }
     }
 
-    pub fn enter_scope(&mut self) {
-        self.locals.push(HashMap::new());
-    }
 
-    pub fn exit_scope(&mut self) {
-        self.locals.pop();
-    }
+    pub fn analyze_statements(
+        &mut self,
+        statements: &[&'ast Statement<'ast>],
+    ) -> Vec<AnalysisError> {
+        let mut analysis_errors: Vec<AnalysisError> = Vec::new();
 
-    fn resolve_expression(&mut self, expression: &'ast Expression<'ast>) -> Result<(), ResolverError> {
-        match &expression.kind {
-            ExpressionKind::Binop { left, right, .. } => {
-                self.resolve_expression(left)?;
-                self.resolve_expression(right)?;
-            }
-            ExpressionKind::Unary { item, .. } => {
-                self.resolve_expression(item)?;
-            }
-            ExpressionKind::Assignment { target, value } => {
-                self.resolve_expression(target)?;
-                self.resolve_expression(value)?;
-            }
-            ExpressionKind::VariableAccess(read) => {
-                if let Some(value) = current_scope!(self).get(read.name) {
-                    if value.state < VariableState::Defined {
-                        // TODO: This is kinda unreachable
-                        return Err(ResolverError {
-                            loc: read.location.clone(),
-                            kind: ResolverErrorKind::ReadingFromInitializer {
-                                read: IdentifierBox::from_borrowed(read),
-                            },
-                        });
-                    }
-                }
-                self.resolve_local_variable(expression, read)?;
-            }
-            ExpressionKind::FunctionCall { callee, arguments } => {
-                self.resolve_expression(callee)?;
-                for arg in *arguments {
-                    self.resolve_expression(arg)?;
-                }
-            }
-            ExpressionKind::Literal(_) => { /* nothing */ }
+        let resolution_errors = self.resolve_statements(statements);
+        analysis_errors.reserve(resolution_errors.len());
+        for e in resolution_errors {
+            analysis_errors.push(AnalysisError::ResolverError(e))
         }
-        Ok(())
-    }
 
+        analysis_errors
+    }
+}
+
+impl<'ast> Analyzer<'ast> { // Resolving
     pub fn resolve_statement(
         &mut self,
         statement: &'ast Statement<'ast>,
@@ -149,7 +121,10 @@ impl<'ast> Analyzer<'ast> {
         Ok(())
     }
 
-    pub fn resolve_statements(&mut self, statements: &[&'ast Statement<'ast>]) -> Vec<ResolverError> {
+    pub fn resolve_statements(
+        &mut self,
+        statements: &[&'ast Statement<'ast>],
+    ) -> Vec<ResolverError> {
         let mut resolution_errors = Vec::new();
         for statement in statements {
             if let Err(mut err) = self.resolve_statement(statement) {
@@ -159,53 +134,46 @@ impl<'ast> Analyzer<'ast> {
         resolution_errors
     }
 
-    pub fn analyze_statements(&mut self, statements: &[&'ast Statement<'ast>]) -> Vec<AnalysisError> {
-        let mut analysis_errors: Vec<AnalysisError> = Vec::new();
-
-        let resolution_errors = self.resolve_statements(statements);
-        analysis_errors.reserve(resolution_errors.len());
-        for e in resolution_errors {
-            analysis_errors.push(AnalysisError::ResolverError(e))
-        }
-
-        analysis_errors
-    }
-
-    fn resolve_local_variable(
+    fn resolve_expression(
         &mut self,
         expression: &'ast Expression<'ast>,
-        var: &Identifier<'ast>,
     ) -> Result<(), ResolverError> {
-        for (i, scope) in self.locals.iter().rev().enumerate() {
-            if scope.contains_key(var.name) {
-                // TODO
-                self.resolutions.insert(expression, i);
-                return Ok(());
+        match &expression.kind {
+            ExpressionKind::Binop { left, right, .. } => {
+                self.resolve_expression(left)?;
+                self.resolve_expression(right)?;
             }
+            ExpressionKind::Unary { item, .. } => {
+                self.resolve_expression(item)?;
+            }
+            ExpressionKind::Assignment { target, value } => {
+                self.resolve_expression(target)?;
+                self.resolve_expression(value)?;
+            }
+            ExpressionKind::VariableAccess(read) => {
+                if let Some(value) = current_scope!(self).get(read.name) {
+                    if value.state < VariableState::Defined {
+                        // TODO: This is kinda unreachable
+                        return Err(ResolverError {
+                            loc: read.location.clone(),
+                            kind: ResolverErrorKind::ReadingFromInitializer {
+                                read: IdentifierBox::from_borrowed(read),
+                            },
+                        });
+                    }
+                }
+                self.resolve_local_variable(expression, read)?;
+            }
+            ExpressionKind::FunctionCall { callee, arguments } => {
+                self.resolve_expression(callee)?;
+                for arg in *arguments {
+                    self.resolve_expression(arg)?;
+                }
+            }
+            ExpressionKind::Literal(_) => { /* nothing */ }
         }
-
-        if self
-            .current_initializer
-            .clone()
-            .filter(|e| e.name == var.name)
-            .is_some()
-        {
-            return Err(ResolverError {
-                loc: var.location.clone(),
-                kind: ResolverErrorKind::ReadingFromInitializer {
-                    read: IdentifierBox::from_borrowed(var),
-                },
-            });
-        }
-
-        Err(ResolverError {
-            loc: var.location.clone(),
-            kind: ResolverErrorKind::UndeclaredIdentifier {
-                usage: IdentifierBox::from_borrowed(var),
-            },
-        })
+        Ok(())
     }
-
     fn declare(&mut self, name: &Identifier<'ast>) {
         let current_scope = current_scope!(self);
         // Case 1: there are already variables with that name defined in the scope.
@@ -242,6 +210,48 @@ impl<'ast> Analyzer<'ast> {
             "COMPILER BUG: Variable `{}` is not declared to be defined.",
             name.name
         );
+    }
+
+    pub fn enter_scope(&mut self) {
+        self.locals.push(HashMap::new());
+    }
+
+    pub fn exit_scope(&mut self) {
+        self.locals.pop();
+    }
+    fn resolve_local_variable(
+        &mut self,
+        expression: &'ast Expression<'ast>,
+        var: &Identifier<'ast>,
+    ) -> Result<(), ResolverError> {
+        for (i, scope) in self.locals.iter().rev().enumerate() {
+            if scope.contains_key(var.name) {
+                // TODO
+                self.resolutions.insert(expression, i);
+                return Ok(());
+            }
+        }
+
+        if self
+            .current_initializer
+            .clone()
+            .filter(|e| e.name == var.name)
+            .is_some()
+        {
+            return Err(ResolverError {
+                loc: var.location.clone(),
+                kind: ResolverErrorKind::ReadingFromInitializer {
+                    read: IdentifierBox::from_borrowed(var),
+                },
+            });
+        }
+
+        Err(ResolverError {
+            loc: var.location.clone(),
+            kind: ResolverErrorKind::UndeclaredIdentifier {
+                usage: IdentifierBox::from_borrowed(var),
+            },
+        })
     }
 }
 

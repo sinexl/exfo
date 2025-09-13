@@ -68,6 +68,19 @@ pub fn with_blocks() {
     )
 }
 
+#[test]
+pub fn shadowing() {
+    let resolutions = success("func main() { a := 10; a; a := a + 10; a; }");
+    assert_eq!(
+        resolutions,
+        hashmap! {
+            (1, 24) => 0,
+            (1, 32) => 0,
+            (1, 40) => 0,
+        }
+    );
+}
+
 fn success(src: &str) -> HashMap<(usize, usize), usize> {
     let (tokens, errors) = Lexer::new(src, PATH).accumulate();
     assert!(errors.is_empty());
@@ -78,7 +91,7 @@ fn success(src: &str) -> HashMap<(usize, usize), usize> {
     assert!(errors.is_empty());
 
     let mut analyzer = Analyzer::new();
-    let errors = analyzer.analyze_statements(ast);
+    let errors = analyzer.resolve_statements(ast);
     assert_eq!(errors.len(), 0);
     analyzer
         .resolutions
@@ -93,7 +106,6 @@ fn error(src: &str) -> ResolverError {
     errors[0].clone()
 }
 
-#[allow(irrefutable_let_patterns)]
 fn errors(src: &str) -> Vec<ResolverError> {
     let (tokens, errors) = Lexer::new(src, PATH).accumulate();
     assert!(errors.is_empty());
@@ -104,14 +116,5 @@ fn errors(src: &str) -> Vec<ResolverError> {
     assert!(errors.is_empty());
 
     let mut analyzer = Analyzer::new();
-    let errors = analyzer.analyze_statements(ast);
-    errors
-        .iter()
-        .filter_map(|e| {
-            if let AnalysisError::ResolverError(e) = e {
-                return Some(e.clone());
-            }
-            return None;
-        })
-        .collect()
+    analyzer.resolve_statements(ast)
 }
