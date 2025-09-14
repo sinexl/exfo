@@ -1,3 +1,4 @@
+use crate::analysis::r#type::Type;
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::AstLiteral::{FloatingPoint, Integral};
@@ -10,7 +11,9 @@ use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParserErrorKind::{InvalidAssignment, UnexpectedToken};
 use bumpalo::Bump;
+use bumpalo::collections::Vec as BumpVec;
 use std::rc::Rc;
+
 /* Grammar:
  program             => decl* EOF ;
  decl                => funcDecl | varDecl | statement ;
@@ -53,8 +56,8 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse_program(&mut self) -> (&'a [&'a Statement], Box<[ParseError]>) {
-        let mut statements = Vec::new();
+    pub fn parse_program(&mut self) -> (&'a [&'a Statement<'a>], Box<[ParseError]>) {
+        let mut statements = BumpVec::new_in(self.bump);
         let mut errors = Vec::new();
         while !self.at_eof() {
             match self.parse_declaration() {
@@ -63,10 +66,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        (
-            self.bump.alloc_slice_copy(&statements),
-            errors.into_boxed_slice(),
-        )
+        (statements.into_bump_slice(), errors.into_boxed_slice())
     }
 
     pub fn parse_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
@@ -131,7 +131,7 @@ impl<'a> Parser<'a> {
             &[TokenType::OpenParen],
             "Expected opening parenthesis in function declaration",
         )?;
-        let _arguments: Vec<Identifier> = Vec::new();
+        // let _arguments = BumpVec::new_in(&self.bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
             todo!("Parsing function arguments is not implemented yet");
         }
@@ -148,7 +148,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_block_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
-        let mut statements: Vec<&'a Statement<'a>> = Vec::new();
+        let mut statements = BumpVec::new_in(self.bump);
         let left_brace = self.expect(
             &[TokenType::OpenBrace],
             "Expected opening brace in block statement",
@@ -167,7 +167,7 @@ impl<'a> Parser<'a> {
         }
 
         Ok(self.bump.alloc(Statement {
-            kind: StatementKind::Block(self.bump.alloc_slice_copy(statements.as_slice())),
+            kind: StatementKind::Block(statements.into_bump_slice()),
             loc: left_brace.loc,
         }))
     }
@@ -281,7 +281,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_args(&mut self) -> Result<&'a [&'a Expression<'a>], ParseError> {
-        let mut args: Vec<&'a Expression<'a>> = vec![];
+        let mut args = BumpVec::new_in(self.bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
             let expr = self.parse_expression()?;
             args.push(expr);
@@ -290,8 +290,7 @@ impl<'a> Parser<'a> {
                 args.push(self.parse_expression()?);
             }
         }
-
-        Ok(self.bump.alloc_slice_copy(args.as_slice()))
+        Ok(args.into_bump_slice())
     }
 
     fn parse_primary(&mut self) -> Result<&'a Expression<'a>, ParseError> {

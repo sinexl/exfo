@@ -5,11 +5,13 @@ use crate::common::Stack;
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use bumpalo::Bump;
+use bumpalo::collections::CollectIn;
+use bumpalo::collections::Vec as BumpVec;
 use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'ast> {
     bump: &'ir Bump,
-    current_function: Option<Vec<Opcode<'ir>>>,
+    current_function: Option<BumpVec<'ir, Opcode<'ir>>>,
     variables: Stack<HashMap<&'ast str, Variable>>,
 
     resolutions: Resolutions<'ast>,
@@ -107,14 +109,16 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
                 let callee = self.compile_expression(callee);
+                let b = self.bump;
                 let args = arguments
                     .iter()
                     .map(|a| self.compile_expression(a))
-                    .collect::<Vec<_>>();
+                    .collect_in::<BumpVec<_>>(b)
+                    .into_bump_slice();
                 let result = self.allocate_on_stack(8);
                 self.push_opcode(Opcode::FunctionCall {
                     callee,
-                    args: self.bump.alloc_slice_clone(args.as_slice()),
+                    args,
                     result,
                 });
                 Arg::StackOffset(result)
@@ -147,15 +151,13 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 self.stack_size.count = stack_size;
             }
             StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
-                self.current_function = Some(Vec::new());
+                self.current_function = Some(BumpVec::new_in(self.bump));
                 self.variables.push(HashMap::new());
                 for statement in *body {
                     self.compile_statement(statement);
                 }
 
-                let code = self
-                    .bump
-                    .alloc_slice_clone(self.current_function.clone().unwrap().as_slice());
+                let code = self.current_function.take().unwrap().into_bump_slice(); 
                 self.ir.functions.insert(
                     name.clone_into(self.bump),
                     self.bump.alloc(Function {
