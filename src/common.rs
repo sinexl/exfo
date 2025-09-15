@@ -57,6 +57,7 @@ impl<T> IdentifierInner<T> {
 }
 
 pub(crate) type IdentifierBox = IdentifierInner<Box<str>>;
+pub type BumpVec<'a, T> = bumpalo::collections::Vec<'a, T>;
 pub type Stack<T> = Vec<T>;
 
 impl IdentifierBox {

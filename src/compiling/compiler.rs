@@ -1,12 +1,11 @@
 use crate::analysis::analyzer::Resolutions;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
-use crate::common::Stack;
+use crate::common::{BumpVec, Stack};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
-use bumpalo::collections::Vec as BumpVec;
 use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'ast> {

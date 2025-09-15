@@ -1,19 +1,17 @@
-use crate::analysis::r#type::Type;
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
-use crate::ast::expression::AstLiteral::{FloatingPoint, Integral};
+use crate::ast::expression::AstLiteral::Integral;
 use crate::ast::expression::ExpressionKind::{
     Assignment, Binop, FunctionCall, Literal, VariableAccess,
 };
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
+use crate::common::BumpVec;
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParserErrorKind::{InvalidAssignment, UnexpectedToken};
 use bumpalo::Bump;
-use bumpalo::collections::Vec as BumpVec;
 use std::rc::Rc;
-
 /* Grammar:
  program             => decl* EOF ;
  decl                => funcDecl | varDecl | statement ;
@@ -43,6 +41,7 @@ pub struct Parser<'a> {
     current: usize,
     tokens: Rc<[Token]>,
     bump: &'a Bump,
+    nodes_amount: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -51,7 +50,14 @@ impl<'a> Parser<'a> {
             current: 0,
             bump,
             tokens,
+            nodes_amount: 0,
         }
+    }
+
+    pub fn id(&mut self) -> usize {
+        let current = self.nodes_amount;
+        self.nodes_amount += 1;
+        current
     }
 }
 
@@ -208,6 +214,7 @@ impl<'a> Parser<'a> {
 
             return Ok(self.bump.alloc(Expression {
                 loc: tk.loc,
+                id: self.id(),
                 kind: Assignment { target, value },
             }));
         }
@@ -235,7 +242,8 @@ impl<'a> Parser<'a> {
                     }
                     operator = self.next_token()?;
                     let right = self.parse_binop(precedence + 1)?;
-                    left = self.reconstruct_binop(left, right, kind, operator.loc.clone())
+                    let id = self.id();
+                    left = self.reconstruct_binop(left, right, kind, operator.loc.clone(), id)
                 } else {
                     break 'same_precedence;
                 }
@@ -254,6 +262,7 @@ impl<'a> Parser<'a> {
                     operator: UnaryKind::Negation,
                 },
                 loc: tok.loc,
+                id: self.id(),
             }));
         }
         self.parse_call()
@@ -268,6 +277,7 @@ impl<'a> Parser<'a> {
                     arguments: self.parse_args()?,
                 },
                 loc: tk.clone().loc,
+                id: self.id(),
             });
             if self.consume(&[TokenType::CloseParen]).is_none() {
                 return Err(ParseError {
@@ -302,15 +312,18 @@ impl<'a> Parser<'a> {
             return Ok(self.bump.alloc(Expression {
                 loc,
                 kind: VariableAccess(Identifier::from_token(id, self.bump)),
+                id: self.id(),
             }));
         }
         if let Some(integer) = self.consume(&[Integer]) {
             let value = integer.integer;
-            return Ok(self.construct_literal(Integral(value), integer.loc.clone()));
+            let id = self.id();
+            return Ok(self.construct_literal(Integral(value), integer.loc.clone(), id));
         }
         if let Some(double) = self.consume(&[Double]) {
             let value = double.double;
-            return Ok(self.construct_literal(FloatingPoint(value), double.loc.clone()));
+            todo!()
+            // return Ok(self.construct_literal(FloatingPoint(value), double.loc.clone()));
         }
         if let Some(paren) = self.consume(&[OpenParen]) {
             let parenthesis_loc = paren.loc;
@@ -327,10 +340,16 @@ impl<'a> Parser<'a> {
         panic!("unknown token {}", token);
     }
 
-    pub fn construct_literal(&self, value: AstLiteral, loc: SourceLocation) -> &'a Expression<'a> {
+    pub fn construct_literal(
+        &self,
+        value: AstLiteral,
+        loc: SourceLocation,
+        id: usize,
+    ) -> &'a Expression<'a> {
         self.bump.alloc(Expression {
             loc,
             kind: Literal(value),
+            id,
         })
     }
 
@@ -340,10 +359,12 @@ impl<'a> Parser<'a> {
         right: &'a Expression<'a>,
         kind: BinopKind,
         loc: SourceLocation,
+        id: usize,
     ) -> &'a Expression<'a> {
         self.bump.alloc(Expression {
             kind: Binop { left, right, kind },
             loc,
+            id,
         })
     }
 }

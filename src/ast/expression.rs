@@ -3,10 +3,11 @@ use crate::common::{Identifier, SourceLocation};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq,Hash, PartialEq)]
 pub struct Expression<'a> {
     pub kind: ExpressionKind<'a>,
     pub loc: SourceLocation,
+    pub  id: usize, 
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
