@@ -1,4 +1,5 @@
 use crate::analysis::analyzer::Resolutions;
+use crate::analysis::get_at::GetAt;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
 use crate::common::{BumpVec, Stack};
@@ -99,7 +100,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             ExpressionKind::VariableAccess(n) => {
                 // TODO: this is kinda dumb hack to get things working.
                 let depth = *self.resolutions.get(expression).expect("Analysis failed");
-                let var = self.get_variable(n.name, depth);
+                let var = self.variables.get_at(&n.name, depth);
                 if var.is_function {
                     Arg::ExternalFunction(n.clone_into(self.bump))
                 } else {
@@ -133,13 +134,6 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
         todo!()
     }
 
-    pub fn get_variable(&self, name: &str, depth: usize) -> Variable {
-        let scope_index = self.variables.len() - 1 - depth;
-        let scope = &self.variables[scope_index];
-        let var = scope.get(name).unwrap();
-        *var
-    }
-
     pub fn compile_statement(&mut self, statement: &Statement<'ast>) {
         match &statement.kind {
             StatementKind::ExpressionStatement(expr) => {
@@ -156,7 +150,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     self.compile_statement(statement);
                 }
 
-                let code = self.current_function.take().unwrap().into_bump_slice(); 
+                let code = self.current_function.take().unwrap().into_bump_slice();
                 self.ir.functions.insert(
                     name.clone_into(self.bump),
                     self.bump.alloc(Function {
