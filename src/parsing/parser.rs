@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::AstLiteral::Integral;
@@ -12,6 +13,7 @@ use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParserErrorKind::{InvalidAssignment, UnexpectedToken};
 use bumpalo::Bump;
 use std::rc::Rc;
+use crate::analysis::r#type::Type;
 /* Grammar:
  program             => decl* EOF ;
  decl                => funcDecl | varDecl | statement ;
@@ -216,6 +218,7 @@ impl<'a> Parser<'a> {
                 loc: tk.loc,
                 id: self.id(),
                 kind: Assignment { target, value },
+                r#type: Cell::new(Type::Unknown), 
             }));
         }
         Ok(target)
@@ -263,6 +266,7 @@ impl<'a> Parser<'a> {
                 },
                 loc: tok.loc,
                 id: self.id(),
+                r#type: Cell::new(Type::Unknown),
             }));
         }
         self.parse_call()
@@ -278,6 +282,7 @@ impl<'a> Parser<'a> {
                 },
                 loc: tk.clone().loc,
                 id: self.id(),
+                r#type: Cell::new(Type::Unknown),
             });
             if self.consume(&[TokenType::CloseParen]).is_none() {
                 return Err(ParseError {
@@ -313,12 +318,13 @@ impl<'a> Parser<'a> {
                 loc,
                 kind: VariableAccess(Identifier::from_token(id, self.bump)),
                 id: self.id(),
+                r#type: Cell::new(Type::Unknown),
             }));
         }
         if let Some(integer) = self.consume(&[Integer]) {
             let value = integer.integer;
             let id = self.id();
-            return Ok(self.construct_literal(Integral(value), integer.loc.clone(), id));
+            return Ok(self.construct_literal(Integral(value), integer.loc.clone(), id, Type::Int64));
         }
         if let Some(double) = self.consume(&[Double]) {
             let value = double.double;
@@ -345,11 +351,13 @@ impl<'a> Parser<'a> {
         value: AstLiteral,
         loc: SourceLocation,
         id: usize,
+        r#type: Type 
     ) -> &'a Expression<'a> {
         self.bump.alloc(Expression {
             loc,
             kind: Literal(value),
             id,
+            r#type: Cell::new(r#type), 
         })
     }
 
@@ -365,6 +373,7 @@ impl<'a> Parser<'a> {
             kind: Binop { left, right, kind },
             loc,
             id,
+            r#type: Cell::new(Type::Unknown), // TODO: maybe use type of left or right 
         })
     }
 }

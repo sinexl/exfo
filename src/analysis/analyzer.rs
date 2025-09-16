@@ -1,8 +1,10 @@
+use crate::analysis::r#type::Type;
 use crate::ast::expression::{Expression, ExpressionKind};
 use crate::ast::statement::{FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
 use std::collections::HashMap;
+use crate::analysis::get_at::GetAt;
 
 type Scope<'ast> = HashMap<
     &'ast str,
@@ -12,17 +14,19 @@ type Scope<'ast> = HashMap<
 
 pub type Resolutions<'ast> = HashMap<&'ast Expression<'ast>, usize>;
 
-pub struct Analyzer<'ast> {
-    pub resolutions: Resolutions<'ast>,
-    locals: Stack<Scope<'ast>>,
 
+pub struct Analyzer<'ast> {
+    locals: Stack<Scope<'ast>>,
     current_initializer: Option<Identifier<'ast>>,
+
+    pub resolutions: Resolutions<'ast>,
 }
 
 #[derive(Debug)]
 struct Variable<'ast> {
     pub state: VariableState,
     pub name: Identifier<'ast>,
+    pub r#type: Type,
 }
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum VariableState {
@@ -50,6 +54,7 @@ impl<'ast> Analyzer<'ast> {
                     "putnum",
                     Variable {
                         state: VariableState::Defined,
+                        r#type: Type::Unknown, // todo
                         name: Identifier {
                             name: "putnum",
                             location: Default::default(),
@@ -61,7 +66,6 @@ impl<'ast> Analyzer<'ast> {
         }
     }
 
-
     pub fn analyze_statements(
         &mut self,
         statements: &[&'ast Statement<'ast>],
@@ -71,24 +75,75 @@ impl<'ast> Analyzer<'ast> {
         let resolution_errors = self.resolve_statements(statements);
         analysis_errors.reserve(resolution_errors.len());
         for e in resolution_errors {
-            analysis_errors.push(AnalysisError::ResolverError(e))
+            analysis_errors.push(e)
         }
 
         analysis_errors
     }
 }
 
-impl<'ast> Analyzer<'ast> { // Resolving
+impl<'ast> Analyzer<'ast> {
+    // Type Checking
+    pub fn typecheck_expression(
+        &mut self,
+        expression: &'ast Expression<'ast>,
+    ) -> Result<(), TypeError> {
+        match &expression.kind {
+            ExpressionKind::Binop { left, right, .. } => {
+                self.typecheck_expression(left)?;
+                self.typecheck_expression(right)?;
+                if left.r#type != right.r#type {
+                    return Err(TypeError {
+                        kind: TypeErrorKind::Todo,
+                        loc: expression.loc.clone(),
+                    });
+                }
+                expression.r#type.set(left.r#type.get()); 
+            }
+            ExpressionKind::Unary { item, .. } => {
+                self.typecheck_expression(item)?;
+                expression.r#type.set(item.r#type.get())
+            }
+            ExpressionKind::Assignment { target, value } => {
+                self.typecheck_expression(target)?;
+                self.typecheck_expression(value)?;
+                if target.r#type != value.r#type {
+                    return Err(TypeError {
+                        kind: TypeErrorKind::Todo,
+                        loc: expression.loc.clone(),
+                    });
+                }
+                expression.r#type.set(target.r#type.get()); 
+            }
+            ExpressionKind::Literal(_) => {
+                assert_ne!(expression.r#type.get(), Type::Unknown); 
+            }
+            ExpressionKind::VariableAccess(n) => {
+                let depth = self.resolutions.get(expression).expect("Analysis failed"); 
+                let var = self.locals.get_at(&n.name, *depth); 
+                expression.r#type.set(var.r#type); 
+            }
+            ExpressionKind::FunctionCall { .. } => {}
+        }
+        Ok(())
+    }
+}
+
+impl<'ast> Analyzer<'ast> {
+    // Resolving
     pub fn resolve_statement(
         &mut self,
         statement: &'ast Statement<'ast>,
-    ) -> Result<(), Vec<ResolverError>> {
+    ) -> Result<(), Vec<AnalysisError>> {
         match &statement.kind {
             StatementKind::ExpressionStatement(expression) => {
-                self.resolve_expression(expression).map_err(|e| vec![e])?;
+                self.resolve_expression(expression)
+                    .map_err(|e| vec![e.into()])?;
+                self.typecheck_expression(expression)
+                    .map_err(|e| vec![e.into()])?;
             }
             StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
-                self.declare(name);
+                self.declare(name, Type::Unknown);
                 self.define(name);
                 self.enter_scope();
                 let errors = self.resolve_statements(body);
@@ -110,11 +165,14 @@ impl<'ast> Analyzer<'ast> { // Resolving
                 // a := 10;
                 // a := a + 15;
                 // That's why initializer is resolved prior to declaring variable
+                let mut t =  Type::Unknown;
                 if let Some(init) = initializer {
-                    self.resolve_expression(init).map_err(|e| vec![e])?;
+                    self.resolve_expression(init).map_err(|e| vec![e.into()])?;
+                    self.typecheck_expression(init).map_err(|e| vec![e.into()])?; 
+                    t = init.r#type.get();
                 }
                 self.current_initializer = None;
-                self.declare(name);
+                self.declare(name, t);
                 self.define(name);
             }
         }
@@ -124,7 +182,7 @@ impl<'ast> Analyzer<'ast> { // Resolving
     pub fn resolve_statements(
         &mut self,
         statements: &[&'ast Statement<'ast>],
-    ) -> Vec<ResolverError> {
+    ) -> Vec<AnalysisError> {
         let mut resolution_errors = Vec::new();
         for statement in statements {
             if let Err(mut err) = self.resolve_statement(statement) {
@@ -174,7 +232,7 @@ impl<'ast> Analyzer<'ast> { // Resolving
         }
         Ok(())
     }
-    fn declare(&mut self, name: &Identifier<'ast>) {
+    fn declare(&mut self, name: &Identifier<'ast>, r#type: Type) {
         let current_scope = current_scope!(self);
         // Case 1: there are already variables with that name defined in the scope.
         if let Some(declaration) = current_scope.get_mut(name.name) {
@@ -183,6 +241,7 @@ impl<'ast> Analyzer<'ast> { // Resolving
             *declaration = Variable {
                 state: VariableState::Declared,
                 name: name.clone(),
+                r#type
             };
             return;
         }
@@ -190,6 +249,7 @@ impl<'ast> Analyzer<'ast> { // Resolving
         current_scope.insert(
             name.name,
             Variable {
+                r#type,
                 state: VariableState::Declared,
                 name: name.clone(),
             },
@@ -272,26 +332,41 @@ fn debug_scope(scope: &Scope<'_>) {
 #[derive(Clone)]
 pub enum AnalysisError {
     ResolverError(ResolverError),
+    TypeError(TypeError),
 }
 
 impl CompilerError for AnalysisError {
     fn location(&self) -> SourceLocation {
         match self {
             AnalysisError::ResolverError(e) => e.loc.clone(),
+            AnalysisError::TypeError(e) => e.loc.clone(),
         }
     }
 
     fn message(&self) -> String {
         match self {
             AnalysisError::ResolverError(e) => e.message(),
+            AnalysisError::TypeError(e) => e.message(),
         }
     }
 
     fn note(&self) -> Option<String> {
         match self {
             AnalysisError::ResolverError(e) => e.note(),
+            AnalysisError::TypeError(e) => e.note(),
         }
     }
+}
+
+#[derive(Clone)]
+pub struct TypeError {
+    pub loc: SourceLocation,
+    pub kind: TypeErrorKind,
+}
+
+#[derive(Clone)]
+pub enum TypeErrorKind {
+    Todo,
 }
 
 #[derive(Clone)]
@@ -327,5 +402,34 @@ impl CompilerError for ResolverError {
             ResolverErrorKind::UndeclaredIdentifier { .. } => None,
             ResolverErrorKind::ReadingFromInitializer { .. } => None,
         }
+    }
+}
+
+impl CompilerError for TypeError {
+    fn location(&self) -> SourceLocation {
+        self.loc.clone()
+    }
+
+    fn message(&self) -> String {
+        match self.kind {
+            TypeErrorKind::Todo => todo!(),
+        }
+    }
+
+    fn note(&self) -> Option<String> {
+        match self.kind {
+            TypeErrorKind::Todo => None,
+        }
+    }
+}
+
+impl From<TypeError> for AnalysisError {
+    fn from(value: TypeError) -> Self {
+        Self::TypeError(value)
+    }
+}
+impl From<ResolverError> for AnalysisError {
+    fn from(value: ResolverError) -> Self {
+        Self::ResolverError(value)
     }
 }

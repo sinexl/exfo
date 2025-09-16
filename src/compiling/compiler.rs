@@ -98,8 +98,8 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             }
             ExpressionKind::Literal(l) => Arg::Literal(*l),
             ExpressionKind::VariableAccess(n) => {
-                // TODO: this is kinda dumb hack to get things working.
                 let depth = *self.resolutions.get(expression).expect("Analysis failed");
+                // TODO: this is kinda dumb hack to get things working.
                 let var = self.variables.get_at(&n.name, depth);
                 if var.is_function {
                     Arg::ExternalFunction(n.clone_into(self.bump))

@@ -1,5 +1,7 @@
 use crate::common::Stack;
 use std::collections::HashMap;
+use std::ops::Index;
+
 pub trait GetAt<K, V> {
     fn get_at(&self, key: &K, depth: usize) -> &V;
     fn get_at_mut(&mut self, key: &K, depth: usize) -> &mut V;

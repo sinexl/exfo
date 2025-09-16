@@ -1,13 +1,22 @@
+use std::cell::Cell;
 use crate::ast::binop::BinopKind;
 use crate::common::{Identifier, SourceLocation};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
+use crate::analysis::r#type::Type;
 
-#[derive(Debug, Eq,Hash, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Expression<'a> {
     pub kind: ExpressionKind<'a>,
     pub loc: SourceLocation,
-    pub  id: usize, 
+    pub id: usize,
+    pub r#type: Cell<Type>
+}
+
+impl<'a> Hash for Expression<'a> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]

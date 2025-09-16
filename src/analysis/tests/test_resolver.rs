@@ -116,5 +116,15 @@ fn errors(src: &str) -> Vec<ResolverError> {
     assert!(errors.is_empty());
 
     let mut analyzer = Analyzer::new();
-    analyzer.resolve_statements(ast)
+    analyzer
+        .resolve_statements(ast)
+        .iter()
+        .filter_map(|e| {
+            if let AnalysisError::ResolverError(e) = e {
+                return Some(e);
+            }
+            None
+        })
+        .cloned()
+        .collect()
 }
