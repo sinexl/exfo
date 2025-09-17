@@ -7,9 +7,4 @@ func main () {
   putnum(a);
   putnum(65 * 2);
   
-  b := 0; 
-  { 
-      b = 10; 
-      putnum(b);
-  } 
 }

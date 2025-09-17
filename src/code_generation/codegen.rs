@@ -1,5 +1,4 @@
 use crate::ast::binop::BinopKind;
-use crate::ast::expression::AstLiteral;
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use std::fmt::Write;
@@ -101,9 +100,9 @@ impl<'a> Codegen<'a> {
                     self.load_arg_to_reg(item, "rax");
                     asm!(self, "  negq %rax");
                     asm!(self, "  movq %rax, -{result}(%rbp)");
-                },
+                }
                 Opcode::Assign { result, arg: item } => {
-                    comment!(self, "Assign"); 
+                    comment!(self, "Assign");
                     self.load_arg_to_reg(item, "rax");
                     asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
@@ -118,14 +117,13 @@ impl<'a> Codegen<'a> {
 
     pub fn load_arg_to_reg(&mut self, arg: &Arg<'a>, reg: &str) {
         match arg {
-            Arg::Literal(literal) => match literal {
-                AstLiteral::Integral(value) => {
-                    asm!(self, "  movq ${}, %{}", value, reg);
-                }
-                AstLiteral::FloatingPoint(_) => todo!(),
-            },
+            Arg::Int64{bits, signed} => {
+                assert!(signed); // TODO 
+                let value = i64::from_le_bytes(*bits); 
+                asm!(self, "  movq ${}, %{}", value, reg);
+            }
             Arg::ExternalFunction(_) => todo!(),
-            Arg::StackOffset(offset) => {
+            Arg::StackOffset { offset, size: _ } => {
                 asm!(self, "  movq -{offset}(%rbp), %{reg}");
             }
         }

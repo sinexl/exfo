@@ -1,5 +1,4 @@
 use crate::ast::binop::BinopKind;
-use crate::ast::expression::AstLiteral;
 use crate::common::Identifier;
 
 #[derive(Clone, Debug)]
@@ -15,13 +14,19 @@ pub enum Opcode<'a> {
         result: usize,
         kind: BinopKind,
     },
-    Negate { result: usize, item: Arg<'a> },
-    Assign { result: usize, arg: Arg<'a> },
+    Negate {
+        result: usize,
+        item: Arg<'a>,
+    },
+    Assign {
+        result: usize,
+        arg: Arg<'a>,
+    },
 }
 
 #[derive(Clone, Debug)]
 pub enum Arg<'a> {
-    Literal(AstLiteral),
+    Int64 { bits: [u8; 8], signed: bool },
     ExternalFunction(Identifier<'a>),
-    StackOffset(usize),
+    StackOffset { offset: usize, size: usize },
 }

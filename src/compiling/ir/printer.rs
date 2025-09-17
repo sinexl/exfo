@@ -68,11 +68,17 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
 
 pub fn print_arg(arg: &Arg, f: &mut impl Write) -> std::fmt::Result {
     match arg {
-        Arg::Literal(literal) => write!(f, "{literal}")?,
+        Arg::Int64 { bits, signed } => {
+            let literal = match *signed {
+                true => i64::from_le_bytes(*bits).to_string(),
+                false => u64::from_le_bytes(*bits).to_string(),
+            };
+            write!(f, "{literal}")?;
+        }
         Arg::ExternalFunction(id) => {
             write!(f, "external fn(\"{name}\")", name = id.name)?;
         }
-        Arg::StackOffset(offset) => {
+        Arg::StackOffset { offset, size: _ } => {
             write!(f, "stack[{offset}]")?;
         }
     }

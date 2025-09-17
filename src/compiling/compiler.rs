@@ -1,6 +1,6 @@
 use crate::analysis::analyzer::Resolutions;
 use crate::analysis::get_at::GetAt;
-use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
+use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
 use crate::common::{BumpVec, Stack};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
@@ -61,24 +61,29 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
     pub fn compile_expression(&mut self, expression: &Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind } => {
+                let size = left.r#type.get().size();
                 let left = self.compile_expression(left);
                 let right = self.compile_expression(right);
-                let result = self.allocate_on_stack(8);
+                let offset = self.allocate_on_stack(size);
                 self.push_opcode(Opcode::Binop {
                     left,
                     right,
-                    result,
+                    result: offset,
                     kind: *kind,
                 });
-                Arg::StackOffset(result)
+                Arg::StackOffset { offset, size }
             }
             ExpressionKind::Unary { item, operator } => {
+                let size = item.r#type.get().size();
                 let item = self.compile_expression(item);
                 match operator {
                     UnaryKind::Negation => {
-                        let result = self.allocate_on_stack(8);
+                        let result = self.allocate_on_stack(size);
                         self.push_opcode(Opcode::Negate { item, result });
-                        Arg::StackOffset(result)
+                        Arg::StackOffset {
+                            offset: result,
+                            size,
+                        }
                     }
                 }
             }
@@ -86,17 +91,29 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 let target = self.compile_expression(target);
                 let arg = self.compile_expression(value);
                 match target {
-                    Arg::StackOffset(offset) => {
+                    Arg::StackOffset { offset, size } => {
                         self.push_opcode(Opcode::Assign {
                             result: offset,
                             arg,
                         });
-                        Arg::StackOffset(offset)
+                        Arg::StackOffset { offset, size }
                     }
                     _ => todo!(),
                 }
             }
-            ExpressionKind::Literal(l) => Arg::Literal(*l),
+            ExpressionKind::Literal(l) => {
+                match l {
+                    AstLiteral::Integral(i) => {
+                        Arg::Int64 {
+                            signed: true, // TODO
+                            bits: i.to_le_bytes(),
+                        }
+                    }
+                    AstLiteral::FloatingPoint(_) => {
+                        todo!()
+                    }
+                }
+            }
             ExpressionKind::VariableAccess(n) => {
                 let depth = *self.resolutions.get(expression).expect("Analysis failed");
                 // TODO: this is kinda dumb hack to get things working.
@@ -104,7 +121,10 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 if var.is_function {
                     Arg::ExternalFunction(n.clone_into(self.bump))
                 } else {
-                    Arg::StackOffset(var.stack_offset)
+                    Arg::StackOffset {
+                        offset: var.stack_offset,
+                        size: 8, // TODO
+                    }
                 }
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
@@ -121,7 +141,10 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     args,
                     result,
                 });
-                Arg::StackOffset(result)
+                Arg::StackOffset {
+                    offset: result,
+                    size: 8, // TODO
+                }
             }
         }
     }
