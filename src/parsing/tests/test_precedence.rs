@@ -121,7 +121,10 @@ pub fn unary() {
 pub fn call() {
     assert_eq!(success("a()"), "(call a)");
     assert_eq!(success("a(1)(2)"), "(call (call a 1) 2)");
-    assert_eq!(success("a(1 + 2, 3 / 4 * 5, c = d = 10)"), "(call a (+ 1 2) (* (/ 3 4) 5) (= c (= d 10)))")
+    assert_eq!(
+        success("a(1 + 2, 3 / 4 * 5, c = d = 10)"),
+        "(call a (+ 1 2) (* (/ 3 4) 5) (= c (= d 10)))"
+    )
 }
 
 pub fn success(expr: &str) -> String {

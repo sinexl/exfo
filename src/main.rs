@@ -71,7 +71,6 @@ fn dev_repl() {
             println!("{}", PrefixPrintStatement(statement));
         }
 
-
         if static_errors.is_empty() {
             let mut comp = Compiler::new(&ir_alloc, analyzer.resolutions);
             comp.compile_statements(&statements);
@@ -120,7 +119,7 @@ pub fn run_command(cmd: &mut Command, if_non0_exit: &str, if_run_failed: &str) {
         }
         Err(e) => {
             eprintln!("{e}");
-            eprintln!("{}", if_run_failed, );
+            eprintln!("{}", if_run_failed,);
             exit(1);
         }
     }

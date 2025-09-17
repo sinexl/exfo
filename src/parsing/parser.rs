@@ -218,7 +218,7 @@ impl<'a> Parser<'a> {
                 loc: tk.loc,
                 id: self.id(),
                 kind: Assignment { target, value },
-                r#type: Cell::new(Type::Unknown), 
+                r#type: Cell::new(Type::Unknown),
             }));
         }
         Ok(target)
@@ -324,12 +324,22 @@ impl<'a> Parser<'a> {
         if let Some(integer) = self.consume(&[Integer]) {
             let value = integer.integer;
             let id = self.id();
-            return Ok(self.construct_literal(Integral(value), integer.loc.clone(), id, Type::Int64));
+            return Ok(self.construct_literal(
+                AstLiteral::Integral(value),
+                integer.loc.clone(),
+                id,
+                Type::Int64,
+            ));
         }
         if let Some(double) = self.consume(&[Double]) {
             let value = double.double;
-            todo!()
-            // return Ok(self.construct_literal(FloatingPoint(value), double.loc.clone()));
+            let id = self.id();
+            return Ok(self.construct_literal(
+                AstLiteral::FloatingPoint(value),
+                double.loc.clone(),
+                id,
+                Type::Float64,
+            ));
         }
         if let Some(paren) = self.consume(&[OpenParen]) {
             let parenthesis_loc = paren.loc;
@@ -357,7 +367,7 @@ impl<'a> Parser<'a> {
             loc,
             kind: Literal(value),
             id,
-            r#type: Cell::new(r#type), 
+            r#type: Cell::new(r#type),
         })
     }
 
@@ -373,7 +383,7 @@ impl<'a> Parser<'a> {
             kind: Binop { left, right, kind },
             loc,
             id,
-            r#type: Cell::new(Type::Unknown), // TODO: maybe use type of left or right 
+            r#type: Cell::new(Type::Unknown), // TODO: maybe use type of left or right
         })
     }
 }

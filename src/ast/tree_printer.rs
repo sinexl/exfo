@@ -74,21 +74,21 @@ pub fn print_statement(
     Ok(())
 }
 
-pub(crate) struct Print<'a>(pub &'a Expression<'a>, pub usize);
-impl Display for Print<'_> {
+pub(crate) struct Print<'expr, 'ast>(pub &'expr Expression<'ast>, pub usize);
+impl<'ast, 'expr> Display for Print<'ast, 'expr> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Print(expr, ind) = self;
         print_ast(expr, f, *ind)
     }
 }
 
-impl Display for Expression<'_> {
+impl<'ast> Display for Expression<'ast> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Print(self, 0).fmt(f)
     }
 }
-pub(crate) struct PrintStatement<'a>(pub &'a Statement<'a>, pub usize);
-impl Display for PrintStatement<'_> {
+pub(crate) struct PrintStatement<'ast, 'expr>(pub &'expr Statement<'ast>, pub usize);
+impl<'ast, 'expr> Display for PrintStatement<'ast, 'expr> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let PrintStatement(statement, ind) = self;
         print_statement(statement, f, *ind)

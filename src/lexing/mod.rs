@@ -1,5 +1,5 @@
 mod extensions;
-pub mod token;
+pub mod lexer;
 #[cfg(test)]
 mod test;
-pub mod lexer;
+pub mod token;

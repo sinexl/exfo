@@ -1,13 +1,14 @@
-use std::cell::Cell;
+use crate::analysis::r#type::Type;
 use crate::ast::binop::BinopKind;
 use crate::common::{Identifier, SourceLocation};
+use std::cell::Cell;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use crate::analysis::r#type::Type;
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Expression<'a> {
-    pub kind: ExpressionKind<'a>,
+pub struct Expression<'ast> {
+    pub kind: ExpressionKind<'ast>,
     pub loc: SourceLocation,
     pub id: usize,
     pub r#type: Cell<Type>
@@ -20,25 +21,25 @@ impl<'a> Hash for Expression<'a> {
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
-pub enum ExpressionKind<'a> {
+pub enum ExpressionKind<'ast> {
     Binop {
-        left: &'a Expression<'a>,
-        right: &'a Expression<'a>,
+        left: &'ast Expression<'ast>,
+        right: &'ast Expression<'ast>,
         kind: BinopKind,
     },
     Unary {
-        item: &'a Expression<'a>,
+        item: &'ast Expression<'ast>,
         operator: UnaryKind,
     },
     Assignment {
-        target: &'a Expression<'a>,
-        value: &'a Expression<'a>,
+        target: &'ast Expression<'ast>,
+        value: &'ast Expression<'ast>,
     },
     Literal(AstLiteral),
-    VariableAccess(Identifier<'a>),
+    VariableAccess(Identifier<'ast>),
     FunctionCall {
-        callee: &'a Expression<'a>,
-        arguments: &'a [&'a Expression<'a>],
+        callee: &'ast Expression<'ast>,
+        arguments: &'ast [&'ast Expression<'ast>],
     },
 }
 

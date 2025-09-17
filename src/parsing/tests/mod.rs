@@ -1,2 +1,2 @@
-mod test_precedence;
 mod statements;
+mod test_precedence;

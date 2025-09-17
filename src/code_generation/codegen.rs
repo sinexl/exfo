@@ -117,9 +117,9 @@ impl<'a> Codegen<'a> {
 
     pub fn load_arg_to_reg(&mut self, arg: &Arg<'a>, reg: &str) {
         match arg {
-            Arg::Int64{bits, signed} => {
+            Arg::Int64 { bits, signed } => {
                 assert!(signed); // TODO 
-                let value = i64::from_le_bytes(*bits); 
+                let value = i64::from_le_bytes(*bits);
                 asm!(self, "  movq ${}, %{}", value, reg);
             }
             Arg::ExternalFunction(_) => todo!(),

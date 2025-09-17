@@ -1,10 +1,10 @@
+use crate::analysis::get_at::GetAt;
 use crate::analysis::r#type::Type;
 use crate::ast::expression::{Expression, ExpressionKind};
 use crate::ast::statement::{FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
 use std::collections::HashMap;
-use crate::analysis::get_at::GetAt;
 
 type Scope<'ast> = HashMap<
     &'ast str,
@@ -98,7 +98,7 @@ impl<'ast> Analyzer<'ast> {
                         loc: expression.loc.clone(),
                     });
                 }
-                expression.r#type.set(left.r#type.get()); 
+                expression.r#type.set(left.r#type.get());
             }
             ExpressionKind::Unary { item, .. } => {
                 self.typecheck_expression(item)?;
@@ -113,15 +113,15 @@ impl<'ast> Analyzer<'ast> {
                         loc: expression.loc.clone(),
                     });
                 }
-                expression.r#type.set(target.r#type.get()); 
+                expression.r#type.set(target.r#type.get());
             }
             ExpressionKind::Literal(_) => {
-                assert_ne!(expression.r#type.get(), Type::Unknown); 
+                assert_ne!(expression.r#type.get(), Type::Unknown);
             }
             ExpressionKind::VariableAccess(n) => {
-                let depth = self.resolutions.get(expression).expect("Analysis failed"); 
-                let var = self.locals.get_at(&n.name, *depth); 
-                expression.r#type.set(var.r#type); 
+                let depth = self.resolutions.get(expression).expect("Analysis failed");
+                let var = self.locals.get_at(&n.name, *depth);
+                expression.r#type.set(var.r#type);
             }
             ExpressionKind::FunctionCall { .. } => {}
         }
@@ -165,10 +165,11 @@ impl<'ast> Analyzer<'ast> {
                 // a := 10;
                 // a := a + 15;
                 // That's why initializer is resolved prior to declaring variable
-                let mut t =  Type::Unknown;
+                let mut t = Type::Unknown;
                 if let Some(init) = initializer {
                     self.resolve_expression(init).map_err(|e| vec![e.into()])?;
-                    self.typecheck_expression(init).map_err(|e| vec![e.into()])?; 
+                    self.typecheck_expression(init)
+                        .map_err(|e| vec![e.into()])?;
                     t = init.r#type.get();
                 }
                 self.current_initializer = None;
@@ -232,7 +233,7 @@ impl<'ast> Analyzer<'ast> {
         }
         Ok(())
     }
-    fn declare(&mut self, name: &Identifier<'ast>, r#type: Type) {
+    fn declare(&mut self, name: &Identifier<'ast>, r#type: Type<'ast>) {
         let current_scope = current_scope!(self);
         // Case 1: there are already variables with that name defined in the scope.
         if let Some(declaration) = current_scope.get_mut(name.name) {
@@ -241,7 +242,7 @@ impl<'ast> Analyzer<'ast> {
             *declaration = Variable {
                 state: VariableState::Declared,
                 name: name.clone(),
-                r#type
+                r#type,
             };
             return;
         }
