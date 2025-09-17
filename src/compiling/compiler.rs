@@ -217,7 +217,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
         // TODO: Obviously, this is a hack.
         let mut globals = HashMap::new();
         globals.insert(
-            "putnum",
+            "print_i64",
             Variable {
                 is_function: true,
                 stack_offset: 0,

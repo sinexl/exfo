@@ -51,12 +51,12 @@ impl<'ast> Analyzer<'ast> {
                 // TODO: Obviously, this is a hack.
                 let mut globals = HashMap::new();
                 globals.insert(
-                    "putnum",
+                    "print_i64",
                     Variable {
                         state: VariableState::Defined,
                         r#type: Type::Unknown, // todo
                         name: Identifier {
-                            name: "putnum",
+                            name: "print_i64",
                             location: Default::default(),
                         },
                     },
