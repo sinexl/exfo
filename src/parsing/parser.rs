@@ -11,7 +11,6 @@ use crate::ast::statement::{
 use crate::common::BumpVec;
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
-use crate::parsing::parser::ParserErrorKind::{InvalidAssignment, UnexpectedToken};
 use crate::parsing::parser::ParserErrorKind::{
     InvalidAssignment, UnbalancedParens, UnexpectedToken, UnknownType,
 };
@@ -138,14 +137,36 @@ impl<'a> Parser<'a> {
     /// (args) {}
     pub fn parse_function(
         &mut self,
-    ) -> Result<(&'a [Identifier<'a>], &'a [&'a Statement<'a>]), ParseError> {
-        self.expect(
+    ) -> Result<(&'a [FunctionParameter<'a>], &'a [&'a Statement<'a>]), ParseError> {
+        let o_paren = self.expect(
             &[TokenType::OpenParen],
             "Expected opening parenthesis in function declaration",
         )?;
-        // let _arguments = BumpVec::new_in(&self.bump);
-        if self.peek_token()?.kind != TokenType::CloseParen {
-            todo!("Parsing function arguments is not implemented yet");
+        let peek = |this: &mut Self, tk: Token| {
+            this.peek_token().map_err(|mut e| {
+                e.kind = UnbalancedParens;
+                e.location = tk.loc;
+                e
+            })
+        };
+        let mut arguments = BumpVec::new_in(&self.bump);
+        if peek(self, o_paren.clone())?.kind != TokenType::CloseParen {
+            let mut id = self.expect(&[TokenType::Id], "Expected parameter name")?;
+            self.expect(&[TokenType::Colon], "Expected colon")?;
+            let mut ty = self.parse_type()?;
+            arguments.push(FunctionParameter {
+                name: Identifier::from_token(id, self.bump),
+                ty,
+            });
+            while self.consume(&[TokenType::Comma]).is_some() {
+                id = self.expect(&[TokenType::Id], "Expected parameter name")?;
+                self.expect(&[TokenType::Colon], "Expected colon")?;
+                ty = self.parse_type()?;
+                arguments.push(FunctionParameter {
+                    name: Identifier::from_token(id, self.bump),
+                    ty,
+                });
+            }
         }
         self.expect(
             &[TokenType::CloseParen],
@@ -156,7 +177,7 @@ impl<'a> Parser<'a> {
         let StatementKind::Block(statements) = block.kind else {
             unreachable!()
         };
-        Ok((&[], statements))
+        Ok((arguments.into_bump_slice(), statements))
     }
 
     pub fn parse_block_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
@@ -205,6 +226,17 @@ impl<'a> Parser<'a> {
 
     pub fn parse_expression(&mut self) -> Result<&'a Expression<'a>, ParseError> {
         self.parse_assignment()
+    }
+
+    pub fn parse_type(&mut self) -> Result<Type<'a>, ParseError> {
+        let name = self.expect(&[TokenType::Id], "Expected type name")?;
+        if name.string.as_ref() == "int" {
+            return Ok(Type::Int64);
+        }
+        Err(ParseError {
+            kind: UnknownType(String::from(name.string.as_ref())),
+            location: name.loc.clone(),
+        })
     }
 
     fn parse_assignment(&mut self) -> Result<&'a Expression<'a>, ParseError> {
@@ -476,6 +508,7 @@ pub struct ParseError {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParserErrorKind {
+    UnknownType(String),
     AtEof,
     UnbalancedParens,
     UnbalancedBraces,
@@ -507,6 +540,7 @@ impl CompilerError for ParseError {
                 // TODO: Construct better message
             }
             UnbalancedBraces => "unbalanced braces".to_string(),
+            UnknownType(b) => format!("unknown type {}", b),
         }
     }
 
@@ -517,7 +551,8 @@ impl CompilerError for ParseError {
             UnbalancedParens => Some(format!("last parenthesis located here: {}", self.location)),
             InvalidAssignment(_) => None,
             UnexpectedToken { .. } => None,
-            UnbalancedBraces => Some(format!("last braces located here: {}", self.location)), // TODO: construct note
+            UnbalancedBraces => Some(format!("last braces located here: {}", self.location)),
+            UnknownType(_) => None,
         }
     }
 }
