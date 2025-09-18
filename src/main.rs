@@ -60,7 +60,7 @@ fn dev_repl() {
         let (statements, errors) = parser.parse_program();
         push_errors!(static_errors, errors);
 
-        let mut analyzer = Analyzer::new();
+        let mut analyzer = Analyzer::new(&ast_alloc);
         let errors = analyzer.analyze_statements(statements);
         push_errors!(static_errors, errors);
 
@@ -152,7 +152,7 @@ fn main() -> io::Result<()> {
     push_errors!(static_errors, errors);
 
     // Static analysis
-    let mut analyzer = Analyzer::new();
+    let mut analyzer = Analyzer::new(&ast_allocator);
     let errors = analyzer.analyze_statements(&ast);
     push_errors!(static_errors, errors);
     // Error reporting

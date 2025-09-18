@@ -56,6 +56,34 @@ impl<T> IdentifierInner<T> {
     }
 }
 
+impl<T> Display for IdentifierInner<T>
+where
+    T: Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+pub struct Join<'a, It>(pub It, pub &'a str);
+
+impl<'a, It, T> Display for Join<'a, It>
+where
+    It: IntoIterator<Item = T> + Clone,
+    T: Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut iter = self.0.clone().into_iter().peekable();
+        while let Some(item) = iter.next() {
+            write!(f, "{}", item)?;
+            if iter.peek().is_some() {
+                write!(f, "{}", self.1)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 pub(crate) type IdentifierBox = IdentifierInner<Box<str>>;
 pub type BumpVec<'a, T> = bumpalo::collections::Vec<'a, T>;
 pub type Stack<T> = Vec<T>;

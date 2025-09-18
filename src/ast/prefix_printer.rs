@@ -1,5 +1,6 @@
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
+use crate::common::Join;
 use std::fmt::{Display, Formatter, Write};
 
 pub const PREFIX_TAB: &'static str = " ";
@@ -38,8 +39,12 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             prefix_print(expr, f)?;
             write!(f, ";")?;
         }
-        StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
-            write!(f, "(func `{}`", name.name)?;
+        StatementKind::FunctionDeclaration(FunctionDeclaration {
+            name,
+            body,
+            parameters,
+        }) => {
+            write!(f, "(func `{}` ({})", name.name, Join(*parameters, ", "))?;
             if !body.is_empty() {
                 writeln!(f)?;
                 for statement in *body {

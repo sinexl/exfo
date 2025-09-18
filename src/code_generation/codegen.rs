@@ -39,7 +39,6 @@ impl<'a> Codegen<'a> {
     pub fn generate_function(&mut self, function: &Function<'a>) {
         let name = function.name.name;
         asm!(self, ".global {name}");
-        asm!(self, ".global {name}");
         asm!(self, ".p2align 4, 0x90"); // 0x90 is nop
         asm!(self, "{}:", name);
         comment!(self, "Function Prologue");

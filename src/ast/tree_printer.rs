@@ -2,6 +2,7 @@ use crate::ast::expression::{Expression, ExpressionKind};
 use crate::ast::statement::{FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use std::fmt::{Display, Formatter, Write};
+use crate::common::Join;
 
 pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> std::fmt::Result {
     let tab = " ".repeat((indent + 1) * 2);
@@ -52,8 +53,8 @@ pub fn print_statement(
             writeln!(f, "Expression Statement")?;
             write!(f, "{tab}{}", Print(expr, indent + 1))?;
         }
-        StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
-            writeln!(f, "Func `{}`", name.name)?;
+        StatementKind::FunctionDeclaration(FunctionDeclaration { name, body, parameters }) => {
+            writeln!(f, "Func `{}` ({})", name.name, Join(*parameters, ", "))?;
             for statement in *body {
                 write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
             }

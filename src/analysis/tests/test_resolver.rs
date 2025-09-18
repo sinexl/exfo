@@ -90,7 +90,7 @@ fn success(src: &str) -> HashMap<(usize, usize), usize> {
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
-    let mut analyzer = Analyzer::new();
+    let mut analyzer = Analyzer::new(&ast_alloc);
     let errors = analyzer.resolve_statements(ast);
     assert_eq!(errors.len(), 0);
     analyzer
@@ -115,7 +115,7 @@ fn errors(src: &str) -> Vec<ResolverError> {
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
-    let mut analyzer = Analyzer::new();
+    let mut analyzer = Analyzer::new(&ast_alloc);
     analyzer
         .resolve_statements(ast)
         .iter()

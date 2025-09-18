@@ -1,9 +1,11 @@
 use crate::analysis::get_at::GetAt;
-use crate::analysis::r#type::Type;
+use crate::analysis::r#type::{FunctionType, Type};
 use crate::ast::expression::{Expression, ExpressionKind};
 use crate::ast::statement::{FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
-use crate::common::{CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
+use crate::common::{BumpVec, CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
+use bumpalo::Bump;
+use bumpalo::collections::CollectIn;
 use std::collections::HashMap;
 
 type Scope<'ast> = HashMap<
@@ -15,6 +17,7 @@ type Scope<'ast> = HashMap<
 pub type Resolutions<'ast> = HashMap<&'ast Expression<'ast>, usize>;
 
 pub struct Analyzer<'ast> {
+    bump: &'ast Bump,
     locals: Stack<Scope<'ast>>,
     current_initializer: Option<Identifier<'ast>>,
 
@@ -42,7 +45,7 @@ macro_rules! current_scope {
 }
 
 impl<'ast> Analyzer<'ast> {
-    pub fn new() -> Analyzer<'ast> {
+    pub fn new(bump: &'ast Bump) -> Analyzer<'ast> {
         Analyzer {
             resolutions: HashMap::new(),
             current_initializer: None,
@@ -62,6 +65,7 @@ impl<'ast> Analyzer<'ast> {
                 );
                 globals
             }],
+            bump,
         }
     }
 
@@ -141,15 +145,34 @@ impl<'ast> Analyzer<'ast> {
                 self.typecheck_expression(expression)
                     .map_err(|e| vec![e.into()])?;
             }
-            StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
-                self.declare(name, Type::Unknown);
+            StatementKind::FunctionDeclaration(FunctionDeclaration {
+                name,
+                body,
+                parameters,
+            }) => {
+                let b = self.bump;
+                self.declare(
+                    name,
+                    Type::Function(FunctionType {
+                        ret_type: &Type::Unknown,
+                        parameters: parameters
+                            .iter()
+                            .map(|p| p.ty)
+                            .collect_in::<BumpVec<_>>(b)
+                            .into_bump_slice(),
+                    }),
+                );
                 self.define(name);
                 self.enter_scope();
+                for param in *parameters  {
+                    self.declare(&param.name, param.ty);
+                    self.define(&param.name);
+                }
                 let errors = self.resolve_statements(body);
+                self.exit_scope();
                 if !errors.is_empty() {
                     return Err(errors);
                 }
-                self.exit_scope();
             }
             StatementKind::Block(statements) => {
                 self.enter_scope();

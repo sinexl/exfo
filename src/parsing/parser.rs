@@ -123,12 +123,13 @@ impl<'a> Parser<'a> {
         let func_keyword = self.expect(&[TokenType::Func], "Expected function declaration")?;
         let name = self.expect(&[TokenType::Id], "Expected function name")?;
         debug_assert!(name.kind == TokenType::Id);
-        let (_, body) = self.parse_function()?;
+        let (parameters, body) = self.parse_function()?;
 
         Ok(self.bump.alloc(Statement {
             kind: StatementKind::FunctionDeclaration(FunctionDeclaration {
                 name: Identifier::from_token(name, self.bump),
                 body,
+                parameters
             }),
             loc: func_keyword.loc,
         }))
