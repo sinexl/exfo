@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter, Write};
 
 pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> std::fmt::Result {
     let tab = " ".repeat((indent + 1) * 2);
-    write!(f, "<{:?}> ", expr.r#type.get())?;
+    write!(f, "<{:?}> ", expr.ty.get())?;
     match &expr.kind {
         ExpressionKind::Literal(value) => writeln!(f, "Literal({})", value),
         ExpressionKind::VariableAccess(identifier) => {

@@ -1,19 +1,23 @@
-use std::cell::Cell;
+use crate::analysis::r#type::Type;
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
-use crate::ast::expression::AstLiteral::Integral;
 use crate::ast::expression::ExpressionKind::{
     Assignment, Binop, FunctionCall, Literal, VariableAccess,
 };
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
-use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
+use crate::ast::statement::{
+    FunctionDeclaration, FunctionParameter, Statement, StatementKind, VariableDeclaration,
+};
 use crate::common::BumpVec;
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParserErrorKind::{InvalidAssignment, UnexpectedToken};
+use crate::parsing::parser::ParserErrorKind::{
+    InvalidAssignment, UnbalancedParens, UnexpectedToken, UnknownType,
+};
 use bumpalo::Bump;
+use std::cell::Cell;
 use std::rc::Rc;
-use crate::analysis::r#type::Type;
 /* Grammar:
  program             => decl* EOF ;
  decl                => funcDecl | varDecl | statement ;
@@ -218,7 +222,7 @@ impl<'a> Parser<'a> {
                 loc: tk.loc,
                 id: self.id(),
                 kind: Assignment { target, value },
-                r#type: Cell::new(Type::Unknown),
+                ty: Cell::new(Type::Unknown),
             }));
         }
         Ok(target)
@@ -266,7 +270,7 @@ impl<'a> Parser<'a> {
                 },
                 loc: tok.loc,
                 id: self.id(),
-                r#type: Cell::new(Type::Unknown),
+                ty: Cell::new(Type::Unknown),
             }));
         }
         self.parse_call()
@@ -282,12 +286,12 @@ impl<'a> Parser<'a> {
                 },
                 loc: tk.clone().loc,
                 id: self.id(),
-                r#type: Cell::new(Type::Unknown),
+                ty: Cell::new(Type::Unknown),
             });
             if self.consume(&[TokenType::CloseParen]).is_none() {
                 return Err(ParseError {
                     location: tk.loc,
-                    kind: ParserErrorKind::UnbalancedParens,
+                    kind: UnbalancedParens,
                 });
             }
         }
@@ -318,7 +322,7 @@ impl<'a> Parser<'a> {
                 loc,
                 kind: VariableAccess(Identifier::from_token(id, self.bump)),
                 id: self.id(),
-                r#type: Cell::new(Type::Unknown),
+                ty: Cell::new(Type::Unknown),
             }));
         }
         if let Some(integer) = self.consume(&[Integer]) {
@@ -347,7 +351,7 @@ impl<'a> Parser<'a> {
             if self.consume(&[CloseParen]).is_none() {
                 return Err(ParseError {
                     location: parenthesis_loc,
-                    kind: ParserErrorKind::UnbalancedParens,
+                    kind: UnbalancedParens,
                 });
             }
             return Ok(expr);
@@ -361,13 +365,13 @@ impl<'a> Parser<'a> {
         value: AstLiteral,
         loc: SourceLocation,
         id: usize,
-        r#type: Type 
+        ty: Type<'a>,
     ) -> &'a Expression<'a> {
         self.bump.alloc(Expression {
             loc,
             kind: Literal(value),
             id,
-            r#type: Cell::new(r#type),
+            ty: Cell::new(ty),
         })
     }
 
@@ -383,7 +387,7 @@ impl<'a> Parser<'a> {
             kind: Binop { left, right, kind },
             loc,
             id,
-            r#type: Cell::new(Type::Unknown), // TODO: maybe use type of left or right
+            ty: Cell::new(Type::Unknown), // TODO: maybe use type of left or right
         })
     }
 }

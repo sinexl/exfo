@@ -4,14 +4,13 @@ use crate::common::{Identifier, SourceLocation};
 use std::cell::Cell;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
-use crate::analysis::r#type::Type;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Expression<'ast> {
     pub kind: ExpressionKind<'ast>,
     pub loc: SourceLocation,
     pub id: usize,
-    pub r#type: Cell<Type>
+    pub ty: Cell<Type<'ast>>,
 }
 
 impl<'a> Hash for Expression<'a> {

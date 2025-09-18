@@ -14,7 +14,6 @@ type Scope<'ast> = HashMap<
 
 pub type Resolutions<'ast> = HashMap<&'ast Expression<'ast>, usize>;
 
-
 pub struct Analyzer<'ast> {
     locals: Stack<Scope<'ast>>,
     current_initializer: Option<Identifier<'ast>>,
@@ -26,7 +25,7 @@ pub struct Analyzer<'ast> {
 struct Variable<'ast> {
     pub state: VariableState,
     pub name: Identifier<'ast>,
-    pub r#type: Type,
+    pub ty: Type<'ast>,
 }
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum VariableState {
@@ -54,7 +53,7 @@ impl<'ast> Analyzer<'ast> {
                     "print_i64",
                     Variable {
                         state: VariableState::Defined,
-                        r#type: Type::Unknown, // todo
+                        ty: Type::Unknown, // todo
                         name: Identifier {
                             name: "print_i64",
                             location: Default::default(),
@@ -92,36 +91,36 @@ impl<'ast> Analyzer<'ast> {
             ExpressionKind::Binop { left, right, .. } => {
                 self.typecheck_expression(left)?;
                 self.typecheck_expression(right)?;
-                if left.r#type != right.r#type {
+                if left.ty != right.ty {
                     return Err(TypeError {
                         kind: TypeErrorKind::Todo,
                         loc: expression.loc.clone(),
                     });
                 }
-                expression.r#type.set(left.r#type.get());
+                expression.ty.set(left.ty.get());
             }
             ExpressionKind::Unary { item, .. } => {
                 self.typecheck_expression(item)?;
-                expression.r#type.set(item.r#type.get())
+                expression.ty.set(item.ty.get())
             }
             ExpressionKind::Assignment { target, value } => {
                 self.typecheck_expression(target)?;
                 self.typecheck_expression(value)?;
-                if target.r#type != value.r#type {
+                if target.ty != value.ty {
                     return Err(TypeError {
                         kind: TypeErrorKind::Todo,
                         loc: expression.loc.clone(),
                     });
                 }
-                expression.r#type.set(target.r#type.get());
+                expression.ty.set(target.ty.get());
             }
             ExpressionKind::Literal(_) => {
-                assert_ne!(expression.r#type.get(), Type::Unknown);
+                assert_ne!(expression.ty.get(), Type::Unknown);
             }
             ExpressionKind::VariableAccess(n) => {
                 let depth = self.resolutions.get(expression).expect("Analysis failed");
                 let var = self.locals.get_at(&n.name, *depth);
-                expression.r#type.set(var.r#type);
+                expression.ty.set(var.ty);
             }
             ExpressionKind::FunctionCall { .. } => {}
         }
@@ -170,7 +169,7 @@ impl<'ast> Analyzer<'ast> {
                     self.resolve_expression(init).map_err(|e| vec![e.into()])?;
                     self.typecheck_expression(init)
                         .map_err(|e| vec![e.into()])?;
-                    t = init.r#type.get();
+                    t = init.ty.get();
                 }
                 self.current_initializer = None;
                 self.declare(name, t);
@@ -233,7 +232,7 @@ impl<'ast> Analyzer<'ast> {
         }
         Ok(())
     }
-    fn declare(&mut self, name: &Identifier<'ast>, r#type: Type<'ast>) {
+    fn declare(&mut self, name: &Identifier<'ast>, ty: Type<'ast>) {
         let current_scope = current_scope!(self);
         // Case 1: there are already variables with that name defined in the scope.
         if let Some(declaration) = current_scope.get_mut(name.name) {
@@ -242,7 +241,7 @@ impl<'ast> Analyzer<'ast> {
             *declaration = Variable {
                 state: VariableState::Declared,
                 name: name.clone(),
-                r#type,
+                ty,
             };
             return;
         }
@@ -250,7 +249,7 @@ impl<'ast> Analyzer<'ast> {
         current_scope.insert(
             name.name,
             Variable {
-                r#type,
+                ty,
                 state: VariableState::Declared,
                 name: name.clone(),
             },
