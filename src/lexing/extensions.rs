@@ -38,6 +38,7 @@ impl StringExtensions for str {
         use crate::lexing::token::TokenType::*;
         match self {
             "func" => Func,
+            "extern" => Extern,
             _ => Id,
         }
     }
