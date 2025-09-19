@@ -167,7 +167,7 @@ fn main() -> io::Result<()> {
     let mut compiler = Compiler::new(&ir_allocator, analyzer.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
-    println!("{ir}"); // TODO: Compiler flag
+    println!("{ir}"); // TODO: Compiler flag for debugging
 
     let codegen = Codegen::new(ir);
     let generated_assembly = codegen.generate();

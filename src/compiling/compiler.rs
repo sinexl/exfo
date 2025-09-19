@@ -116,14 +116,15 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             }
             ExpressionKind::VariableAccess(n) => {
                 let depth = *self.resolutions.get(expression).expect("Analysis failed");
-                // TODO: this is kinda dumb hack to get things working.
                 let var = self.variables.get_at(&n.name, depth);
+                
+                // TODO: this is kinda dumb hack to get things working.
                 if var.is_function {
                     Arg::ExternalFunction(n.clone_into(self.bump))
                 } else {
                     Arg::StackOffset {
                         offset: var.stack_offset,
-                        size: 8, // TODO
+                        size: 8, // TODO: Size of the type 
                     }
                 }
             }
@@ -143,7 +144,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 });
                 Arg::StackOffset {
                     offset: result,
-                    size: 8, // TODO
+                    size: 8, // TODO: Size of the type 
                 }
             }
         }
@@ -154,7 +155,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             current_function.push(opcode);
             return;
         }
-        todo!()
+        todo!("Top-level statements are not supported yet")
     }
 
     pub fn compile_statement(&mut self, statement: &Statement<'ast>) {
@@ -216,7 +217,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 self.variables.pop();
                 self.stack_size = StackSize::zero();
             }
-            StatementKind::Block(_) => todo!(),
+            StatementKind::Block(_) => todo!("Block statements are not supported by compiler yet."),
             StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
                 let stack_offset = self.allocate_on_stack(8);
                 // Since shadowing is allowed, initializers are compiled before variable is inserted in the compiler tables.

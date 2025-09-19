@@ -309,7 +309,6 @@ impl<'ast> Analyzer<'ast> {
     ) -> Result<(), ResolverError> {
         for (i, scope) in self.locals.iter().rev().enumerate() {
             if scope.contains_key(var.name) {
-                // TODO
                 self.resolutions.insert(expression, i);
                 return Ok(());
             }

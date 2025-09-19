@@ -51,7 +51,7 @@ impl<'a> Codegen<'a> {
         if !function.params.is_empty() {
             comment!(self, "Function Arguments");
         }
-        assert!(function.params.len() <= CALL_REGISTERS.len()); // TODO
+        assert!(function.params.len() <= CALL_REGISTERS.len()); // TODO: more function parameters 
         for (i, offset) in function.params.iter().enumerate() {
             asm!(self, "  movq %{}, -{}(%rbp)", CALL_REGISTERS[i], offset);
         }
@@ -67,7 +67,7 @@ impl<'a> Codegen<'a> {
                 } => {
                     comment!(self, "Function call");
                     if args.len() > CALL_REGISTERS.len() {
-                        todo!()
+                        todo!("More function parameters")
                     }
 
                     for (i, arg) in args.iter().enumerate() {
@@ -100,7 +100,7 @@ impl<'a> Codegen<'a> {
                         | BinopKind::GreaterThan
                         | BinopKind::GreaterEq
                         | BinopKind::LessThan
-                        | BinopKind::LessEq => todo!(),
+                        | BinopKind::LessEq => todo!("Comparison operations are not implemented yet"),
                     }
                     asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
