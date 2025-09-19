@@ -12,7 +12,7 @@ pub enum Type<'ast> {
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub struct FunctionType<'ast> {
-    pub ret_type: &'ast Type<'ast>,
+    pub return_type: &'ast Type<'ast>,
     pub parameters: &'ast [Type<'ast>],
 }
 
@@ -31,7 +31,7 @@ impl<'ast> Display for Type<'ast> {
 
 impl <'ast> Display for FunctionType<'ast> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "func({}) -> {}", Join(self.parameters, ", "), self.ret_type)
+        write!(f, "func({}): {}", Join(self.parameters, ", "), self.return_type)
     }
 }
 

@@ -1,4 +1,4 @@
-func p(a: int) { 
+func p(a: int): void { 
   print_i64(a); 
 } 
 

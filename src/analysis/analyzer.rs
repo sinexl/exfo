@@ -56,7 +56,7 @@ impl<'ast> Analyzer<'ast> {
                     "print_i64",
                     Variable {
                         state: VariableState::Defined,
-                        ty: Type::Unknown, // todo
+                        ty: Type::Void,
                         name: Identifier {
                             name: "print_i64",
                             location: Default::default(),
@@ -149,12 +149,13 @@ impl<'ast> Analyzer<'ast> {
                 name,
                 body,
                 parameters,
+                return_type,
             }) => {
                 let b = self.bump;
                 self.declare(
                     name,
                     Type::Function(FunctionType {
-                        ret_type: &Type::Unknown,
+                        return_type, 
                         parameters: parameters
                             .iter()
                             .map(|p| p.ty)
@@ -187,7 +188,7 @@ impl<'ast> Analyzer<'ast> {
                 // a := 10;
                 // a := a + 15;
                 // That's why initializer is resolved prior to declaring variable
-                let mut t = Type::Unknown;
+                let mut t = Type::Unknown; // TODO: Store type in VariableDeclaration
                 if let Some(init) = initializer {
                     self.resolve_expression(init).map_err(|e| vec![e.into()])?;
                     self.typecheck_expression(init)

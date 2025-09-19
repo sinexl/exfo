@@ -130,7 +130,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 } else {
                     Arg::StackOffset {
                         offset: var.stack_offset,
-                        size: 8, // TODO: Size of the type
+                        size: var.ty.size(),
                     }
                 }
             }
@@ -142,7 +142,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     .map(|a| self.compile_expression(a))
                     .collect_in::<BumpVec<_>>(b)
                     .into_bump_slice();
-                let result = self.allocate_on_stack(8);
+                let result = self.allocate_on_stack(8); // TODO: Return value size
                 self.push_opcode(Opcode::FunctionCall {
                     callee,
                     args,
@@ -150,7 +150,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 });
                 Arg::StackOffset {
                     offset: result,
-                    size: 8, // TODO: Size of the type
+                    size: 8, // TODO: Return value size
                 }
             }
         }
@@ -164,7 +164,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
         todo!("Top-level statements are not supported yet")
     }
 
-    pub fn compile_statement(&mut self, statement: &Statement<'ast>) {
+    pub fn compile_statement(&mut self, statement: &'ast Statement<'ast>) {
         match &statement.kind {
             StatementKind::ExpressionStatement(expr) => {
                 // The result of compile_expression is always temporary unless we actually assign it.
@@ -177,6 +177,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 name,
                 body,
                 parameters,
+                return_type,
             }) => {
                 self.current_function = Some(BumpVec::new_in(self.ir_bump));
 
@@ -191,7 +192,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     name.name,
                     Variable {
                         ty: Type::Function(FunctionType {
-                            ret_type: &Type::Unknown,
+                            return_type,
                             parameters: parameters_types,
                         }),
                         stack_offset: 0,
@@ -265,7 +266,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             "print_i64",
             Variable {
                 ty: Type::Function(FunctionType {
-                    ret_type: &Type::Void,
+                    return_type: &Type::Void,
                     parameters: &[Type::Int64],
                 }),
                 stack_offset: 0,

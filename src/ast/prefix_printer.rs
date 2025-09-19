@@ -43,8 +43,9 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             name,
             body,
             parameters,
+            return_type
         }) => {
-            write!(f, "(func `{}` ({})", name.name, Join(*parameters, ", "))?;
+            write!(f, "(func `{}` ({}): {return_type}", name.name, Join(*parameters, ", "))?;
             if !body.is_empty() {
                 writeln!(f)?;
                 for statement in *body {

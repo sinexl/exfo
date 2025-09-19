@@ -19,6 +19,12 @@ pub struct FunctionDeclaration<'ast> {
     pub name: Identifier<'ast>,
     pub parameters: &'ast [FunctionParameter<'ast>],
     pub body: &'ast [&'ast Statement<'ast>],
+    pub return_type: Type<'ast>, 
+}
+
+pub struct VariableDeclaration<'a> {
+    pub name: Identifier<'a>,
+    pub initializer: Option<&'a Expression<'a>>,
 }
 
 pub struct FunctionParameter<'ast> {
@@ -30,9 +36,4 @@ impl<'ast> Display for FunctionParameter<'ast> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.name.name, self.ty)
     }
-}
-
-pub struct VariableDeclaration<'a> {
-    pub name: Identifier<'a>,
-    pub initializer: Option<&'a Expression<'a>>,
 }

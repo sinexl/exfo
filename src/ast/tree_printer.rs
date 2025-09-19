@@ -53,8 +53,8 @@ pub fn print_statement(
             writeln!(f, "Expression Statement")?;
             write!(f, "{tab}{}", Print(expr, indent + 1))?;
         }
-        StatementKind::FunctionDeclaration(FunctionDeclaration { name, body, parameters }) => {
-            writeln!(f, "Func `{}` ({})", name.name, Join(*parameters, ", "))?;
+        StatementKind::FunctionDeclaration(FunctionDeclaration { name, body, parameters, return_type }) => {
+            writeln!(f, "Func `{}` ({}): {return_type}", name.name, Join(*parameters, ", "))?;
             for statement in *body {
                 write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
             }

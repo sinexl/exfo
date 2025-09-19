@@ -24,7 +24,7 @@ use std::rc::Rc;
  expressionStatement => expression ";" ;
  varDecl             => IDENTIFIER ":" type? ("=" expression)? ";" ;
  funcDecl            => "func" IDENTIFIER function ;
- function            => "(" args ")" blockStatement ;
+ function            => "(" args ")" (":" type)? blockStatement ;
  blockStatement      => "{" (declaration*)? "}" ;
  expression          => assignment;
  assignment          => IDENTIFIER "=" assignment | binop;
@@ -123,13 +123,14 @@ impl<'a> Parser<'a> {
         let func_keyword = self.expect(&[TokenType::Func], "Expected function declaration")?;
         let name = self.expect(&[TokenType::Id], "Expected function name")?;
         debug_assert!(name.kind == TokenType::Id);
-        let (parameters, body) = self.parse_function()?;
+        let (parameters, body, return_type) = self.parse_function()?;
 
         Ok(self.bump.alloc(Statement {
             kind: StatementKind::FunctionDeclaration(FunctionDeclaration {
                 name: Identifier::from_token(name, self.bump),
                 body,
-                parameters
+                parameters,
+                return_type,
             }),
             loc: func_keyword.loc,
         }))
@@ -138,7 +139,14 @@ impl<'a> Parser<'a> {
     /// (args) {}
     pub fn parse_function(
         &mut self,
-    ) -> Result<(&'a [FunctionParameter<'a>], &'a [&'a Statement<'a>]), ParseError> {
+    ) -> Result<
+        (
+            &'a [FunctionParameter<'a>],
+            &'a [&'a Statement<'a>],
+            Type<'a>,
+        ),
+        ParseError,
+    > {
         let o_paren = self.expect(
             &[TokenType::OpenParen],
             "Expected opening parenthesis in function declaration",
@@ -174,11 +182,16 @@ impl<'a> Parser<'a> {
             "Expected closing parenthesis after argument list",
         )?;
 
+        let mut return_type = Type::Unknown;
+        if self.consume(&[TokenType::Colon]).is_some() {
+            return_type = self.parse_type()?;
+        }
+
         let block = self.parse_block_statement()?;
         let StatementKind::Block(statements) = block.kind else {
             unreachable!()
         };
-        Ok((arguments.into_bump_slice(), statements))
+        Ok((arguments.into_bump_slice(), statements, return_type))
     }
 
     pub fn parse_block_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
@@ -233,6 +246,8 @@ impl<'a> Parser<'a> {
         let name = self.expect(&[TokenType::Id], "Expected type name")?;
         if name.string.as_ref() == "int" {
             return Ok(Type::Int64);
+        } else if name.string.as_ref() == "void" {
+            return Ok(Type::Void);
         }
         Err(ParseError {
             kind: UnknownType(String::from(name.string.as_ref())),
