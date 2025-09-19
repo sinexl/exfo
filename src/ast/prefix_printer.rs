@@ -43,9 +43,14 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             name,
             body,
             parameters,
-            return_type
+            return_type,
         }) => {
-            write!(f, "(func `{}` ({}): {return_type}", name.name, Join(*parameters, ", "))?;
+            write!(
+                f,
+                "(func `{}` ({}): {return_type}",
+                name.name,
+                Join(*parameters, ", ")
+            )?;
             if !body.is_empty() {
                 writeln!(f)?;
                 for statement in *body {
@@ -64,8 +69,12 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             }
             writeln!(f, ")")?;
         }
-        StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
-            write!(f, "(`{}` :", name.name)?;
+        StatementKind::VariableDeclaration(VariableDeclaration {
+            name,
+            initializer,
+            ty,
+        }) => {
+            write!(f, "(`{}`: {} ", name.name, ty.get())?;
             if let Some(initializer) = initializer {
                 write!(f, "= {}", PrefixPrint(initializer))?;
             }

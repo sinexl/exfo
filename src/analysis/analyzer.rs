@@ -155,7 +155,7 @@ impl<'ast> Analyzer<'ast> {
                 self.declare(
                     name,
                     Type::Function(FunctionType {
-                        return_type, 
+                        return_type,
                         parameters: parameters
                             .iter()
                             .map(|p| p.ty)
@@ -165,7 +165,7 @@ impl<'ast> Analyzer<'ast> {
                 );
                 self.define(name);
                 self.enter_scope();
-                for param in *parameters  {
+                for param in *parameters {
                     self.declare(&param.name, param.ty);
                     self.define(&param.name);
                 }
@@ -182,21 +182,35 @@ impl<'ast> Analyzer<'ast> {
                 }
                 self.exit_scope();
             }
-            StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
+            StatementKind::VariableDeclaration(VariableDeclaration {
+                name,
+                initializer,
+                ty,
+            }) => {
                 self.current_initializer = Some(name.clone());
+                let variable_type = ty;
                 // In variable shadowing, user might want to read from variable with the same name.
                 // a := 10;
                 // a := a + 15;
                 // That's why initializer is resolved prior to declaring variable
-                let mut t = Type::Unknown; // TODO: Store type in VariableDeclaration
+                let mut initializer_type = Type::Unknown;
                 if let Some(init) = initializer {
                     self.resolve_expression(init).map_err(|e| vec![e.into()])?;
                     self.typecheck_expression(init)
                         .map_err(|e| vec![e.into()])?;
-                    t = init.ty.get();
+                    initializer_type = init.ty.get();
                 }
+
+                if variable_type.get() == Type::Unknown {
+                    variable_type.set(initializer_type);
+                } else {
+                    if variable_type.get() != initializer_type {
+                        todo!("For now, initializer type must be the same with declaration type")
+                    }
+                }
+
                 self.current_initializer = None;
-                self.declare(name, t);
+                self.declare(name, variable_type.get());
                 self.define(name);
             }
         }

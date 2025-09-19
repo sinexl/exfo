@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use crate::analysis::r#type::Type;
 use crate::ast::expression::Expression;
 use crate::common::{Identifier, SourceLocation};
@@ -25,6 +26,7 @@ pub struct FunctionDeclaration<'ast> {
 pub struct VariableDeclaration<'a> {
     pub name: Identifier<'a>,
     pub initializer: Option<&'a Expression<'a>>,
+    pub ty: Cell<Type<'a>>, 
 }
 
 pub struct FunctionParameter<'ast> {

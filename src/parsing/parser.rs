@@ -100,10 +100,18 @@ impl<'a> Parser<'a> {
     pub fn parse_variable_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
         let name = self.expect(&[TokenType::Id], "Expected variable name")?;
         let colon = self.expect(&[TokenType::Colon], "Expected colon")?;
+
         let mut initializer: Option<&'a Expression<'a>> = None;
-        if self.consume(&[TokenType::Equal]).is_some() {
-            initializer = Some(self.parse_expression()?);
+        let mut variable_type = Type::Unknown;
+        if self.consume(&[TokenType::Equal]).is_some() { 
+            initializer = Some(self.parse_expression()?); 
+        } else { 
+            variable_type = self.parse_type()?;
+            if self.consume(&[TokenType::Equal]).is_some() { 
+                initializer = Some(self.parse_expression()?); 
+            }
         }
+
         self.expect(
             &[TokenType::Semicolon],
             "Expected semicolon after variable declaration",
@@ -113,6 +121,7 @@ impl<'a> Parser<'a> {
             kind: StatementKind::VariableDeclaration(VariableDeclaration {
                 name: Identifier::from_token(name, self.bump),
                 initializer,
+                ty: Cell::new(variable_type),
             }),
             loc: colon.loc,
         }))

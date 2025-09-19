@@ -234,8 +234,8 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 self.stack_size = StackSize::zero();
             }
             StatementKind::Block(_) => todo!("Block statements are not supported by compiler yet."),
-            StatementKind::VariableDeclaration(VariableDeclaration { name, initializer }) => {
-                let stack_offset = self.allocate_on_stack(8);
+            StatementKind::VariableDeclaration(VariableDeclaration { name, initializer, ty }) => {
+                let stack_offset = self.allocate_on_stack(ty.get().size());
                 // Since shadowing is allowed, initializers are compiled before variable is inserted in the compiler tables.
                 // i. e
                 // a := 10;
@@ -249,7 +249,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 }
                 let var = Variable {
                     stack_offset,
-                    ty: Type::Unknown, // TODO
+                    ty: ty.get(),
                 };
                 self.variables
                     .last_mut()

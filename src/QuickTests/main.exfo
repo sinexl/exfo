@@ -4,6 +4,7 @@ func p(a: int): void {
 
 
 func main () {
-  p(10);
+  a: int = 10; 
+  p(a);
 }
   
