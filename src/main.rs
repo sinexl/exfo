@@ -72,7 +72,7 @@ fn dev_repl() {
         }
 
         if static_errors.is_empty() {
-            let mut comp = Compiler::new(&ir_alloc, analyzer.resolutions);
+            let mut comp = Compiler::new(&ir_alloc, &ast_alloc, analyzer.resolutions);
             comp.compile_statements(&statements);
             println!("{ir}", ir = comp.ir);
         } else {
@@ -164,7 +164,7 @@ fn main() -> io::Result<()> {
     }
 
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator, analyzer.resolutions);
+    let mut compiler = Compiler::new(&ir_allocator, &ast_allocator, analyzer.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
     println!("{ir}"); // TODO: Compiler flag for debugging
