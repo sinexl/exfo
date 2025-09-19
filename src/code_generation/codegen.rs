@@ -47,7 +47,17 @@ impl<'a> Codegen<'a> {
         if function.stack_size > 0 {
             asm!(self, "  subq ${size}, %rsp", size = function.stack_size);
         }
+
+        if !function.params.is_empty() {
+            comment!(self, "Function Arguments");
+        }
+        assert!(function.params.len() <= CALL_REGISTERS.len()); // TODO
+        for (i, offset) in function.params.iter().enumerate() {
+            asm!(self, "  movq %{}, -{}(%rbp)", CALL_REGISTERS[i], offset);
+        }
+
         comment!(self);
+
         for opcode in function.code {
             match opcode {
                 Opcode::FunctionCall {

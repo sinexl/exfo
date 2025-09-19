@@ -1,10 +1,9 @@
+func p(a: int) { 
+  print_i64(a); 
+} 
+
+
 func main () {
-  a := 0; // Declaration
-  print_i64(a);
-  a := 10; // Shadowing
-  print_i64(a);
-  a = a + 10; // Mutation
-  print_i64(a);
-  print_i64(65 * 2);
-  
+  p(10);
 }
+  

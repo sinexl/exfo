@@ -166,9 +166,37 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 self.compile_expression(expr);
                 self.stack_size.count = stack_size;
             }
-            StatementKind::FunctionDeclaration(FunctionDeclaration { name, body }) => {
+            StatementKind::FunctionDeclaration(FunctionDeclaration {
+                name,
+                body,
+                parameters,
+            }) => {
                 self.current_function = Some(BumpVec::new_in(self.bump));
+
+                let parent_scope = self.variables.len() - 1;
+                self.variables[parent_scope].insert(
+                    name.name,
+                    Variable {
+                        is_function: true,
+                        stack_offset: 0,
+                    },
+                );
+
+                let mut offsets = BumpVec::with_capacity_in(parameters.len(), self.bump);
                 self.variables.push(HashMap::new());
+                let function_scope = self.variables.len() - 1;
+                for param in *parameters {
+                    let stack_offset = self.allocate_on_stack(param.ty.size());
+                    self.variables[function_scope].insert(
+                        param.name.name,
+                        Variable {
+                            is_function: false,
+                            stack_offset,
+                        },
+                    );
+                    offsets.push(stack_offset);
+                }
+
                 for statement in *body {
                     self.compile_statement(statement);
                 }
@@ -180,6 +208,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                         name: name.clone_into(self.bump),
                         code,
                         stack_size: self.stack_size.max,
+                        params: offsets.into_bump_slice(),
                     }),
                 );
 

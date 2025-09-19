@@ -22,4 +22,6 @@ pub struct Function<'a> {
     pub name: Identifier<'a>,
     pub code: &'a [Opcode<'a>],
     pub stack_size: usize,
+    // Stores stack offset of each parameter 
+    pub params: &'a [usize]
 }
