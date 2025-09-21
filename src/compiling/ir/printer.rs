@@ -61,6 +61,13 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::Negate { result, item } => writeln!(f, "{tab}stack[{result}] = -{item}")?,
 
         Opcode::Assign { result, arg: item } => writeln!(f, "{tab}stack[{result}] = {item}")?,
+        Opcode::Return(ret) => {
+            write!(f, "{tab}return")?;
+            if let Some(ret) = ret {
+                write!(f, " {ret}")?;
+            }
+            writeln!(f, ";")?;
+        }
     }
 
     Ok(())

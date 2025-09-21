@@ -39,6 +39,7 @@ impl StringExtensions for str {
         match self {
             "func" => Func,
             "extern" => Extern,
+            "return" => Return, 
             _ => Id,
         }
     }

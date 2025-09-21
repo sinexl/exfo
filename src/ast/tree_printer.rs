@@ -61,9 +61,10 @@ pub fn print_statement(
         }) => {
             writeln!(
                 f,
-                "Func `{}` ({}): {return_type}",
+                "Func `{}` ({}): {}",
                 name.name,
-                Join(*parameters, ", ")
+                Join(*parameters, ", "),
+                return_type.get()
             )?;
             for statement in *body {
                 write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
@@ -83,6 +84,12 @@ pub fn print_statement(
             writeln!(f, "Variable `{}`: {}", name.name, ty.get())?;
             if let Some(init) = initializer {
                 write!(f, "{tab}Initializer = {init}")?;
+            }
+        }
+        StatementKind::Return(ret) => {
+            writeln!(f, "Return")?; 
+            if let Some(ret) = ret { 
+                write!(f, "{tab}{ret}")?; 
             }
         }
     }

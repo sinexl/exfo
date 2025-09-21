@@ -80,6 +80,7 @@ pub(crate) enum TokenType {
     // Keywords
     Func,
     Extern,
+    Return,
 
     // Punctuation
     OpenParen,

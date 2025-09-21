@@ -47,9 +47,10 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
         }) => {
             write!(
                 f,
-                "(func `{}` ({}): {return_type}",
+                "(func `{}` ({}): {}",
                 name.name,
-                Join(*parameters, ", ")
+                Join(*parameters, ", "),
+                return_type.get()
             )?;
             if !body.is_empty() {
                 writeln!(f)?;
@@ -77,6 +78,13 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             write!(f, "(`{}`: {} ", name.name, ty.get())?;
             if let Some(initializer) = initializer {
                 write!(f, "= {}", PrefixPrint(initializer))?;
+            }
+            writeln!(f, ")")?;
+        }
+        StatementKind::Return(ret) => {
+            write!(f, "(return")?;
+            if let Some(ret) = ret {
+                write!(f, " {ret}")?;
             }
             writeln!(f, ")")?;
         }

@@ -21,6 +21,8 @@ pub struct Analyzer<'ast> {
     locals: Stack<Scope<'ast>>,
     current_initializer: Option<Identifier<'ast>>,
 
+    current_function: Option<&'ast FunctionDeclaration<'ast>>,
+
     pub resolutions: Resolutions<'ast>,
 }
 
@@ -56,7 +58,10 @@ impl<'ast> Analyzer<'ast> {
                     "print_i64",
                     Variable {
                         state: VariableState::Defined,
-                        ty: Type::Void,
+                        ty: Type::Function(FunctionType {
+                            return_type: &Type::Void,
+                            parameters: &[Type::Int64],
+                        }),
                         name: Identifier {
                             name: "print_i64",
                             location: Default::default(),
@@ -66,6 +71,7 @@ impl<'ast> Analyzer<'ast> {
                 globals
             }],
             bump,
+            current_function: None,
         }
     }
 
@@ -126,7 +132,22 @@ impl<'ast> Analyzer<'ast> {
                 let var = self.locals.get_at(&n.name, *depth);
                 expression.ty.set(var.ty);
             }
-            ExpressionKind::FunctionCall { .. } => {}
+            ExpressionKind::FunctionCall { callee, arguments } => {
+                self.typecheck_expression(callee)?;
+                for arg in *arguments {
+                    self.typecheck_expression(arg)?;
+                }
+                dbg!(callee.ty.get());
+                if let Type::Function(FunctionType {
+                    return_type,
+                    parameters: _,
+                }) = callee.ty.get()
+                {
+                    expression.ty.set(*return_type);
+                } else {
+                    todo!("Proper error handling")
+                }
+            }
         }
         Ok(())
     }
@@ -145,32 +166,30 @@ impl<'ast> Analyzer<'ast> {
                 self.typecheck_expression(expression)
                     .map_err(|e| vec![e.into()])?;
             }
-            StatementKind::FunctionDeclaration(FunctionDeclaration {
-                name,
-                body,
-                parameters,
-                return_type,
-            }) => {
+            StatementKind::FunctionDeclaration(decl) => {
                 let b = self.bump;
-                self.declare(
-                    name,
-                    Type::Function(FunctionType {
-                        return_type,
-                        parameters: parameters
-                            .iter()
-                            .map(|p| p.ty)
-                            .collect_in::<BumpVec<_>>(b)
-                            .into_bump_slice(),
-                    }),
-                );
-                self.define(name);
+                let return_type = self.bump.alloc(decl.return_type.get());
+                let fn_type = FunctionType {
+                    return_type,
+                    parameters: decl
+                        .parameters
+                        .iter()
+                        .map(|p| p.ty)
+                        .collect_in::<BumpVec<_>>(b)
+                        .into_bump_slice(),
+                };
+                // TODO: Ensure that in_function is returned to false in cases where function exits early (? operator)
+                self.current_function = Some(decl);
+                self.declare(&decl.name, Type::Function(fn_type));
+                self.define(&decl.name);
                 self.enter_scope();
-                for param in *parameters {
+                for param in decl.parameters {
                     self.declare(&param.name, param.ty);
                     self.define(&param.name);
                 }
-                let errors = self.resolve_statements(body);
+                let errors = self.resolve_statements(decl.body);
                 self.exit_scope();
+                self.current_function = None;
                 if !errors.is_empty() {
                     return Err(errors);
                 }
@@ -203,15 +222,28 @@ impl<'ast> Analyzer<'ast> {
 
                 if variable_type.get() == Type::Unknown {
                     variable_type.set(initializer_type);
-                } else {
-                    if variable_type.get() != initializer_type {
-                        todo!("For now, initializer type must be the same with declaration type")
-                    }
+                } else if variable_type.get() != initializer_type {
+                    todo!("For now, initializer type must be the same with declaration type")
                 }
 
                 self.current_initializer = None;
                 self.declare(name, variable_type.get());
                 self.define(name);
+            }
+            StatementKind::Return(val) => {
+                let current_fn = self
+                    .current_function
+                    .ok_or_else(|| vec![AnalysisError::TopLevelReturn(statement.loc.clone())])?;
+                if let Some(val) = val {
+                    self.resolve_expression(val).map_err(|e| vec![e.into()])?;
+                    self.typecheck_expression(val).map_err(|e| vec![e.into()])?;
+
+                    if let Type::Unknown = current_fn.return_type.get() {
+                        current_fn.return_type.set(val.ty.get());
+                    } else if current_fn.return_type != val.ty {
+                        todo!("TODO: Proper error handling")
+                    }
+                }
             }
         }
         Ok(())
@@ -247,16 +279,16 @@ impl<'ast> Analyzer<'ast> {
                 self.resolve_expression(value)?;
             }
             ExpressionKind::VariableAccess(read) => {
-                if let Some(value) = current_scope!(self).get(read.name) {
-                    if value.state < VariableState::Defined {
-                        // TODO: This is kinda unreachable
-                        return Err(ResolverError {
-                            loc: read.location.clone(),
-                            kind: ResolverErrorKind::ReadingFromInitializer {
-                                read: IdentifierBox::from_borrowed(read),
-                            },
-                        });
-                    }
+                if let Some(value) = current_scope!(self).get(read.name)
+                    && value.state < VariableState::Defined
+                {
+                    // TODO: This is kinda unreachable
+                    return Err(ResolverError {
+                        loc: read.location.clone(),
+                        kind: ResolverErrorKind::ReadingFromInitializer {
+                            read: IdentifierBox::from_borrowed(read),
+                        },
+                    });
                 }
                 self.resolve_local_variable(expression, read)?;
             }
@@ -293,7 +325,7 @@ impl<'ast> Analyzer<'ast> {
             },
         );
     }
-    fn define(&mut self, name: &Identifier<'ast>) -> () {
+    fn define(&mut self, name: &Identifier<'ast>) {
         if let Some(var) = current_scope!(self).get_mut(&name.name) {
             if var.state == VariableState::Defined {
                 panic!(
@@ -370,27 +402,31 @@ fn debug_scope(scope: &Scope<'_>) {
 pub enum AnalysisError {
     ResolverError(ResolverError),
     TypeError(TypeError),
+    TopLevelReturn(SourceLocation),
 }
 
 impl CompilerError for AnalysisError {
     fn location(&self) -> SourceLocation {
-        match self {
+        match &self {
             AnalysisError::ResolverError(e) => e.loc.clone(),
             AnalysisError::TypeError(e) => e.loc.clone(),
+            &AnalysisError::TopLevelReturn(loc) => loc.clone(),
         }
     }
 
     fn message(&self) -> String {
-        match self {
+        match &self {
             AnalysisError::ResolverError(e) => e.message(),
             AnalysisError::TypeError(e) => e.message(),
+            AnalysisError::TopLevelReturn(_) => "Could not return from top-level.".to_string(),
         }
     }
 
     fn note(&self) -> Option<String> {
-        match self {
+        match &self {
             AnalysisError::ResolverError(e) => e.note(),
             AnalysisError::TypeError(e) => e.note(),
+            AnalysisError::TopLevelReturn(_) => None,
         }
     }
 }

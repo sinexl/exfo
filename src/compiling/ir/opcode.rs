@@ -22,6 +22,7 @@ pub enum Opcode<'a> {
         result: usize,
         arg: Arg<'a>,
     },
+    Return(Option<Arg<'a>>),
 }
 
 #[derive(Clone, Debug)]

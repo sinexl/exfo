@@ -20,12 +20,14 @@ use std::rc::Rc;
 /* Grammar:
     program             => decl* EOF ;
     decl                => funcDecl | varDecl | statement ;
-    statement           => expressionStatement | blockStatement ;
+    statement           => expressionStatement | blockStatement | returnStatement ;
     expressionStatement => expression ";" ;
+    blockStatement      => "{" (declaration*)? "}" ;
     varDecl             => IDENTIFIER ":" type? ("=" expression)? ";" ;
+    returnStatement     => "return" expression? ";" 
     funcDecl            => "func" IDENTIFIER function ;
     function            => "(" args ")" (":" type)? blockStatement ;
-    blockStatement      => "{" (declaration*)? "}" ;
+    
     expression          => assignment;
     assignment          => IDENTIFIER "=" assignment | binop;
     binop*              => ** | unary;
@@ -66,6 +68,7 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[allow(clippy::result_large_err)]
 impl<'a> Parser<'a> {
     pub fn parse_program(&mut self) -> (&'a [&'a Statement<'a>], Box<[ParseError]>) {
         let mut statements = BumpVec::new_in(self.bump);
@@ -103,12 +106,12 @@ impl<'a> Parser<'a> {
 
         let mut initializer: Option<&'a Expression<'a>> = None;
         let mut variable_type = Type::Unknown;
-        if self.consume(&[TokenType::Equal]).is_some() { 
-            initializer = Some(self.parse_expression()?); 
-        } else { 
+        if self.consume(&[TokenType::Equal]).is_some() {
+            initializer = Some(self.parse_expression()?);
+        } else {
             variable_type = self.parse_type()?;
-            if self.consume(&[TokenType::Equal]).is_some() { 
-                initializer = Some(self.parse_expression()?); 
+            if self.consume(&[TokenType::Equal]).is_some() {
+                initializer = Some(self.parse_expression()?);
             }
         }
 
@@ -139,7 +142,7 @@ impl<'a> Parser<'a> {
                 name: Identifier::from_token(name, self.bump),
                 body,
                 parameters,
-                return_type,
+                return_type: Cell::from(return_type),
             }),
             loc: func_keyword.loc,
         }))
@@ -167,7 +170,7 @@ impl<'a> Parser<'a> {
                 e
             })
         };
-        let mut arguments = BumpVec::new_in(&self.bump);
+        let mut arguments = BumpVec::new_in(self.bump);
         if peek(self, o_paren.clone())?.kind != TokenType::CloseParen {
             let mut id = self.expect(&[TokenType::Id], "Expected parameter name")?;
             self.expect(&[TokenType::Colon], "Expected colon")?;
@@ -203,6 +206,34 @@ impl<'a> Parser<'a> {
         Ok((arguments.into_bump_slice(), statements, return_type))
     }
 
+    pub fn parse_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let state = self.save_state();
+        if self.consume(&[TokenType::OpenBrace]).is_some() {
+            self.restore_state(state);
+            return self.parse_block_statement();
+        } else if self.consume(&[TokenType::Return]).is_some() {
+            self.restore_state(state);
+            return self.parse_return_statement();
+        }
+        self.parse_expression_statement()
+    }
+    
+    pub fn parse_return_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> { 
+        let loc = self.expect(&[TokenType::Return], "Expected return keyword")?.loc; 
+        let mut val: Option<&'a Expression<'a>> = None; 
+        if self.peek_token()?.kind != TokenType::Semicolon { 
+            val = Some(self.parse_expression()?); 
+        }
+        
+        self.expect(&[TokenType::Semicolon], "Expected semicolon in return expression")?;
+        
+        
+        Ok(self.bump.alloc(Statement {
+            kind: StatementKind::Return(val),
+            loc,
+        }))
+    }
+
     pub fn parse_block_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
         let mut statements = BumpVec::new_in(self.bump);
         let left_brace = self.expect(
@@ -228,14 +259,6 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    pub fn parse_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
-        let state = self.save_state();
-        if self.consume(&[TokenType::OpenBrace]).is_some() {
-            self.restore_state(state);
-            return self.parse_block_statement();
-        }
-        self.parse_expression_statement()
-    }
 
     fn parse_expression_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
         let loc = self.peek_token()?.loc;
@@ -450,6 +473,7 @@ impl<'a> Parser<'a> {
 }
 
 // Helper methods.
+#[allow(clippy::result_large_err)]
 impl Parser<'_> {
     fn next_token(&mut self) -> Result<Token, ParseError> {
         let tk = self

@@ -14,13 +14,14 @@ pub enum StatementKind<'a> {
     FunctionDeclaration(FunctionDeclaration<'a>),
     VariableDeclaration(VariableDeclaration<'a>),
     Block(&'a [&'a Statement<'a>]),
+    Return(Option<&'a Expression<'a>>),
 }
 
 pub struct FunctionDeclaration<'ast> {
     pub name: Identifier<'ast>,
     pub parameters: &'ast [FunctionParameter<'ast>],
     pub body: &'ast [&'ast Statement<'ast>],
-    pub return_type: Type<'ast>, 
+    pub return_type: Cell<Type<'ast>>, 
 }
 
 pub struct VariableDeclaration<'a> {

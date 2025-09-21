@@ -188,6 +188,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     .map(|p| p.ty)
                     .collect_in::<BumpVec<_>>(self.ast_bump)
                     .into_bump_slice();
+                let return_type = self.ast_bump.alloc(return_type.get());
                 self.variables[parent_scope].insert(
                     name.name,
                     Variable {
@@ -234,7 +235,11 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 self.stack_size = StackSize::zero();
             }
             StatementKind::Block(_) => todo!("Block statements are not supported by compiler yet."),
-            StatementKind::VariableDeclaration(VariableDeclaration { name, initializer, ty }) => {
+            StatementKind::VariableDeclaration(VariableDeclaration {
+                name,
+                initializer,
+                ty,
+            }) => {
                 let stack_offset = self.allocate_on_stack(ty.get().size());
                 // Since shadowing is allowed, initializers are compiled before variable is inserted in the compiler tables.
                 // i. e
@@ -255,6 +260,14 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     .last_mut()
                     .expect("variable stack is empty")
                     .insert(name.name, var);
+            }
+            StatementKind::Return(val) => {
+                let ret_arg = if let Some(arg) = val {
+                    Some(self.compile_expression(arg))
+                } else {
+                    None
+                };
+                self.push_opcode(Opcode::Return(ret_arg));
             }
         }
     }

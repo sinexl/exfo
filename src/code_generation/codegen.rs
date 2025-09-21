@@ -100,7 +100,9 @@ impl<'a> Codegen<'a> {
                         | BinopKind::GreaterThan
                         | BinopKind::GreaterEq
                         | BinopKind::LessThan
-                        | BinopKind::LessEq => todo!("Comparison operations are not implemented yet"),
+                        | BinopKind::LessEq => {
+                            todo!("Comparison operations are not implemented yet")
+                        }
                     }
                     asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
@@ -114,6 +116,14 @@ impl<'a> Codegen<'a> {
                     comment!(self, "Assign");
                     self.load_arg_to_reg(item, "rax");
                     asm!(self, "  movq %rax, -{result}(%rbp)");
+                }
+                Opcode::Return(ret) => {
+                    if let Some(ret) = ret { 
+                        self.load_arg_to_reg(ret, "rax"); 
+                    }
+                    asm!(self, "  movq %rbp, %rsp");
+                    asm!(self, "  popq %rbp");
+                    asm!(self, "  ret");
                 }
             }
             comment!(self);
