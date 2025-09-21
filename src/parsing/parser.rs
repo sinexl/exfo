@@ -18,21 +18,21 @@ use bumpalo::Bump;
 use std::cell::Cell;
 use std::rc::Rc;
 /* Grammar:
- program             => decl* EOF ;
- decl                => funcDecl | varDecl | statement ;
- statement           => expressionStatement | blockStatement ;
- expressionStatement => expression ";" ;
- varDecl             => IDENTIFIER ":" type? ("=" expression)? ";" ;
- funcDecl            => "func" IDENTIFIER function ;
- function            => "(" args ")" (":" type)? blockStatement ;
- blockStatement      => "{" (declaration*)? "}" ;
- expression          => assignment;
- assignment          => IDENTIFIER "=" assignment | binop;
- binop*              => ** | unary;
- unary               => "-" unary | functionCall;
- functionCall        => primary ( "( args ")" )*
- primary             => NUMBER | STRING | IDENTIFIER | "(" expression ")" ;
- type                => IDENTIFIER
+    program             => decl* EOF ;
+    decl                => funcDecl | varDecl | statement ;
+    statement           => expressionStatement | blockStatement ;
+    expressionStatement => expression ";" ;
+    varDecl             => IDENTIFIER ":" type? ("=" expression)? ";" ;
+    funcDecl            => "func" IDENTIFIER function ;
+    function            => "(" args ")" (":" type)? blockStatement ;
+    blockStatement      => "{" (declaration*)? "}" ;
+    expression          => assignment;
+    assignment          => IDENTIFIER "=" assignment | binop;
+    binop*              => ** | unary;
+    unary               => "-" unary | functionCall;
+    functionCall        => primary ( "( args ")" )*
+    primary             => NUMBER | STRING | IDENTIFIER | "(" expression ")" ;
+    type                => IDENTIFIER
 
 
  * - For Binary Operator Precedence, visit ./src/ast/binop.rs
