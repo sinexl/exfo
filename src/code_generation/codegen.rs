@@ -86,25 +86,41 @@ impl<'a> Codegen<'a> {
                     comment!(self, "Binop ({})", kind.operator());
                     self.load_arg_to_reg(left, "rax");
                     self.load_arg_to_reg(right, "rcx");
-                    match kind {
-                        BinopKind::Addition => asm!(self, "  addq %rcx, %rax"),
-                        BinopKind::Subtraction => asm!(self, "  subq %rcx, %rax"),
-                        BinopKind::Multiplication => asm!(self, "  imulq %rcx, %rax"),
-                        BinopKind::Division => {
-                            asm!(self, "  cqto");
-                            asm!(self, "  idivq %rcx");
+                    match (kind, kind.is_logical()) {
+                        (kind, false) => {
+                            match kind {
+                                BinopKind::Addition => asm!(self, "  addq %rcx, %rax"),
+                                BinopKind::Subtraction => asm!(self, "  subq %rcx, %rax"),
+                                BinopKind::Multiplication => asm!(self, "  imulq %rcx, %rax"),
+                                BinopKind::Division => {
+                                    asm!(self, "  cqto");
+                                    asm!(self, "  idivq %rcx");
+                                }
+                                _ => unreachable!("is_logical() should be updated."),
+                            }
+                            asm!(self, "  movq %rax, -{result}(%rbp)");
                         }
 
-                        BinopKind::Equality
-                        | BinopKind::Inequality
-                        | BinopKind::GreaterThan
-                        | BinopKind::GreaterEq
-                        | BinopKind::LessThan
-                        | BinopKind::LessEq => {
-                            todo!("Comparison operations are not implemented yet")
+                        (kind, true) => {
+                            asm!(self, "  cmpq %rcx, %rax");
+                            match kind {
+                                BinopKind::Equality => asm!(self, "  sete %al"), 
+                                BinopKind::Inequality => asm!(self, "  setne %al"),
+                                BinopKind::GreaterThan => asm!(self, "  setg %al"), 
+                                BinopKind::GreaterEq => asm!(self, "  setge %al"),
+                                BinopKind::LessThan => asm!(self, "  setl %al"),
+                                BinopKind::LessEq => asm!(self, "  setle %al"), 
+
+                                BinopKind::Addition
+                                | BinopKind::Subtraction
+                                | BinopKind::Multiplication
+                                | BinopKind::Division => 
+                                    unreachable!("is_logical() should be updated"), 
+                                
+                            }
+                            asm!(self, "  movb %al, -{result}(%rbp)");
                         }
                     }
-                    asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
                 Opcode::Negate { result, item } => {
                     comment!(self, "Negate");
@@ -118,8 +134,8 @@ impl<'a> Codegen<'a> {
                     asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
                 Opcode::Return(ret) => {
-                    if let Some(ret) = ret { 
-                        self.load_arg_to_reg(ret, "rax"); 
+                    if let Some(ret) = ret {
+                        self.load_arg_to_reg(ret, "rax");
                     }
                     asm!(self, "  movq %rbp, %rsp");
                     asm!(self, "  popq %rbp");
@@ -142,12 +158,15 @@ impl<'a> Codegen<'a> {
                 asm!(self, "  movq ${}, %{}", value, reg);
             }
             Arg::Bool(bool) => {
-                asm!(self, "  movq ${}, %{}", *bool as i32, reg); 
+                asm!(self, "  movq ${}, %{}", *bool as i32, reg);
             }
-            Arg::ExternalFunction(_) => todo!(),
+            Arg::ExternalFunction(name) => {
+                todo!("Deal with some leaq for PIC");
+                asm!(self, "  movq ${name}, %{reg}");
+            }
             Arg::StackOffset { offset, size: _ } => {
                 asm!(self, "  movq -{offset}(%rbp), %{reg}");
-            },
+            }
         }
     }
 

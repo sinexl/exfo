@@ -72,6 +72,22 @@ impl BinopKind {
             "if you reach this, it means that precedence table doesn't contain all of the possible operations"
         )
     }
+
+    pub fn is_logical(self) -> bool {
+        match self {
+            BinopKind::Addition
+            | BinopKind::Subtraction
+            | BinopKind::Multiplication
+            | BinopKind::Division => false,
+            
+            BinopKind::Equality
+            | BinopKind::Inequality
+            | BinopKind::GreaterThan
+            | BinopKind::GreaterEq
+            | BinopKind::LessThan
+            | BinopKind::LessEq => true,
+        }
+    }
     pub fn operator(self) -> &'static str {
         match self {
             BinopKind::Addition => "+",

@@ -7,15 +7,11 @@ func add(a: int, b: int): int {
 } 
 
 func main () {
-    arg := false; 
-    a := print_bool(arg); // false 
-    b := add(30, 20); 
-    print_i64(b);
-    
-    result := add_i64(11, 12); 
-    print_i64(result); // 23 
-    result = add(result, 10); 
-    print_i64(result); // 33 
+    a := 2 >= 2; 
+    print_bool(a); 
+    a := 10 + 15; 
+    print_i64(a);
+   
     
 }
   

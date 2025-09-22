@@ -143,7 +143,6 @@ impl<'a> Parser<'a> {
             &[TokenType::String],
             "Expected external kind (for example \"C\")",
         )?;
-        dbg!(&kind);
 
         let kind = match kind.string.as_ref() {
             "C" => ExternKind::C,

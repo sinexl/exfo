@@ -81,7 +81,7 @@ impl<'ast> Analyzer<'ast> {
         expression: &'ast Expression<'ast>,
     ) -> Result<(), TypeError> {
         match &expression.kind {
-            ExpressionKind::Binop { left, right, .. } => {
+            ExpressionKind::Binop { left, right, kind } => {
                 self.typecheck_expression(left)?;
                 self.typecheck_expression(right)?;
                 if left.ty != right.ty {
@@ -90,7 +90,10 @@ impl<'ast> Analyzer<'ast> {
                         loc: expression.loc.clone(),
                     });
                 }
-                expression.ty.set(left.ty.get());
+                expression.ty.set(match kind.is_logical() {
+                    true => Type::Bool,
+                    false => left.ty.get(),
+                });
             }
             ExpressionKind::Unary { item, .. } => {
                 self.typecheck_expression(item)?;
