@@ -1,7 +1,7 @@
 use crate::analysis::get_at::GetAt;
 use crate::analysis::r#type::{FunctionType, Type};
 use crate::ast::expression::{Expression, ExpressionKind};
-use crate::ast::statement::{FunctionDeclaration, VariableDeclaration};
+use crate::ast::statement::VariableDeclaration;
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{BumpVec, CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
 use bumpalo::Bump;
@@ -141,9 +141,33 @@ impl<'ast> Analyzer<'ast> {
                 }
                 if let Type::Function(FunctionType {
                     return_type,
-                    parameters: _, // TODO: Typecheck passed parameters
+                    parameters,
                 }) = callee.ty.get()
                 {
+                    if parameters.len() != arguments.len() {
+                        return Err(TypeError {
+                            loc: expression.loc.clone(),
+                            kind: TypeErrorKind::InvalidArity {
+                                expected_arguments: parameters.len(),
+                                actual_arguments: arguments.len(),
+                                function_name: None, // TODO: Get function name.
+                            },
+                        });
+                    }
+                    for (expected, arg) in parameters.iter().zip(arguments.iter()) {
+                        let got = arg.ty.get();
+                        if *expected != got {
+                            return Err(TypeError {
+                                loc: arg.loc.clone(),
+                                kind: TypeErrorKind::MismatchedArgumentType {
+                                    function_location: None,
+                                    function_name: None, // TODO: Get function name and location
+                                    expected_type: expected.to_string(),
+                                    actual_type: got.to_string(),
+                                },
+                            });
+                        }
+                    }
                     expression.ty.set(*return_type);
                 } else {
                     todo!("Proper error handling")
@@ -192,7 +216,7 @@ impl<'ast> Analyzer<'ast> {
                     self.define(&param.name);
                 }
                 let errors = self.resolve_statements(decl.body);
-                // TODO: If there are no return in function and no return type is specified, treat it as returning void 
+                // TODO: If there are no return in function and no return type is specified, treat it as returning void
                 self.exit_scope();
                 self.current_function_type = None;
                 if !errors.is_empty() {
@@ -412,7 +436,6 @@ fn debug_scope(scope: &Scope<'_>) {
     }
 }
 
-#[derive(Clone)]
 pub enum AnalysisError {
     ResolverError(ResolverError),
     TypeError(TypeError),
@@ -445,15 +468,24 @@ impl CompilerError for AnalysisError {
     }
 }
 
-#[derive(Clone)]
 pub struct TypeError {
     pub loc: SourceLocation,
     pub kind: TypeErrorKind,
 }
 
-#[derive(Clone)]
 pub enum TypeErrorKind {
     Todo,
+    MismatchedArgumentType {
+        function_location: Option<SourceLocation>,
+        function_name: Option<Box<str>>,
+        expected_type: String,
+        actual_type: String,
+    },
+    InvalidArity {
+        expected_arguments: usize,
+        actual_arguments: usize,
+        function_name: Option<String>,
+    },
 }
 
 #[derive(Clone)]
@@ -498,14 +530,66 @@ impl CompilerError for TypeError {
     }
 
     fn message(&self) -> String {
-        match self.kind {
+        match &self.kind {
             TypeErrorKind::Todo => todo!(),
+            TypeErrorKind::MismatchedArgumentType {
+                function_location: _function_location,
+                function_name: _function_name,
+                expected_type,
+                actual_type,
+            } => format!(
+                "Expected `{}`, found `{}`, Mismatched argument type. ",
+                expected_type, actual_type
+            ),
+            //
+            //
+            TypeErrorKind::InvalidArity {
+                expected_arguments,
+                actual_arguments,
+                function_name,
+            } => {
+                assert_ne!(actual_arguments, expected_arguments);
+                let s = if expected_arguments < actual_arguments {
+                    "too many"
+                } else {
+                    "not enough"
+                };
+
+                let function_name = if let Some(function_name) = function_name {
+                    format!(" `{}`", function_name)
+                } else {
+                    "".to_string()
+                };
+                format!(
+                    "{s} arguments were provided. Function{function_name} expects {expected_arguments} arguments, but got {actual_arguments}"
+                )
+            }
         }
     }
 
     fn note(&self) -> Option<String> {
-        match self.kind {
+        match &self.kind {
             TypeErrorKind::Todo => None,
+            TypeErrorKind::MismatchedArgumentType {
+                function_location,
+                function_name,
+                expected_type: _expected_type,
+                actual_type: _actual_type,
+            } => {
+                if let Some(function_location) = function_location {
+                    return Some(format!(
+                        "{}is defined here: {loc}",
+                        if let Some(function_name) = function_name {
+                            format!("`{}` ", function_name)
+                        } else {
+                            "function ".to_owned()
+                        },
+                        loc = function_location,
+                    ));
+                }
+                None
+            }
+            TypeErrorKind::InvalidArity { .. } => None,
         }
     }
 }
