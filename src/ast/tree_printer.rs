@@ -1,5 +1,5 @@
 use crate::ast::expression::{Expression, ExpressionKind};
-use crate::ast::statement::{FunctionDeclaration, VariableDeclaration};
+use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::Join;
 use std::fmt::{Display, Formatter, Write};
@@ -70,6 +70,21 @@ pub fn print_statement(
                 write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
             }
         }
+
+        StatementKind::Extern(ExternalFunction {
+            name,
+            kind,
+            parameters,
+            return_type,
+        }) => {
+            writeln!(
+                f,
+                "Extern \"{kind:?}\" `{}` ({}): {}",
+                name.name,
+                Join(*parameters, ", "),
+                return_type.get()
+            )?;
+        }
         StatementKind::Block(statements) => {
             writeln!(f, "Block")?;
             for statement in *statements {
@@ -87,9 +102,9 @@ pub fn print_statement(
             }
         }
         StatementKind::Return(ret) => {
-            writeln!(f, "Return")?; 
-            if let Some(ret) = ret { 
-                write!(f, "{tab}{ret}")?; 
+            writeln!(f, "Return")?;
+            if let Some(ret) = ret {
+                write!(f, "{tab}{ret}")?;
             }
         }
     }

@@ -1,9 +1,11 @@
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
-use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
+use crate::ast::statement::{
+    ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
+};
 use crate::common::Join;
 use std::fmt::{Display, Formatter, Write};
 
-pub const PREFIX_TAB: &'static str = " ";
+pub const PREFIX_TAB: &str = " ";
 
 pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Result {
     match &expr.kind {
@@ -59,6 +61,21 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
                 }
             }
             writeln!(f, ")")?;
+        }
+
+        StatementKind::Extern(ExternalFunction {
+            name,
+            kind,
+            parameters,
+            return_type,
+        }) => {
+            write!(
+                f,
+                "(extern \"{kind:?}\" `{}` ({}): {}",
+                name.name,
+                Join(*parameters, ", "),
+                return_type.get()
+            )?;
         }
         StatementKind::Block(body) => {
             writeln!(f, "(block")?;

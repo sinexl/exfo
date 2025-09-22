@@ -1,10 +1,21 @@
-func add(a: int, b: int): int  { 
+extern "C" func print_bool(bool): void;
+extern "C" func print_i64(int): void; 
+extern "C" func add_i64(int, int): int; 
+
+func add(a: int, b: int): int { 
     return a + b;
 } 
 
 func main () {
     arg := false; 
-    b := add(15, arg); 
+    a := print_bool(arg); // false 
+    b := add(30, 20); 
     print_i64(b);
+    
+    result := add_i64(11, 12); 
+    print_i64(result); // 23 
+    result = add(result, 10); 
+    print_i64(result); // 33 
+    
 }
   

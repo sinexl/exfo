@@ -6,7 +6,8 @@ use crate::ast::expression::ExpressionKind::{
 };
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
-    FunctionDeclaration, FunctionParameter, Statement, StatementKind, VariableDeclaration,
+    ExternKind, ExternalFunction, FunctionDeclaration, FunctionParameter, Statement, StatementKind,
+    VariableDeclaration,
 };
 use crate::common::BumpVec;
 use crate::common::{CompilerError, Identifier, SourceLocation};
@@ -19,7 +20,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 /* Grammar:
     program             => decl* EOF ;
-    decl                => funcDecl | varDecl | statement ;
+    decl                => funcDecl | varDecl | externDecl | statement ;
     statement           => expressionStatement | blockStatement | returnStatement ;
     expressionStatement => expression ";" ;
     blockStatement      => "{" (declaration*)? "}" ;
@@ -27,6 +28,8 @@ use std::rc::Rc;
     returnStatement     => "return" expression? ";"
     funcDecl            => "func" IDENTIFIER function ;
     function            => "(" args ")" (":" type)? blockStatement ;
+    externDecl          => "extern" extern_kind  "func" IDENTIFIER "(" args ")" ":" type ";"
+    externKind          => "C" ;
 
     expression          => assignment;
     assignment          => IDENTIFIER "=" assignment | binop;
@@ -96,6 +99,10 @@ impl<'a> Parser<'a> {
             }
             self.restore_state(state);
         }
+        if self.consume(&[TokenType::Extern]).is_some() {
+            self.restore_state(state);
+            return self.parse_external_declaration();
+        }
 
         self.parse_statement()
     }
@@ -127,6 +134,58 @@ impl<'a> Parser<'a> {
                 ty: Cell::new(variable_type),
             }),
             loc: colon.loc,
+        }))
+    }
+
+    pub fn parse_external_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let keyword = self.expect(&[TokenType::Extern], "Expected extern keyword")?;
+        let kind = self.expect(
+            &[TokenType::String],
+            "Expected external kind (for example \"C\")",
+        )?;
+        dbg!(&kind);
+
+        let kind = match kind.string.as_ref() {
+            "C" => ExternKind::C,
+            _ => {
+                return Err(ParseError {
+                    location: kind.loc.clone(),
+                    kind: ParserErrorKind::UnknownExternKind(String::from(kind.string.as_ref())),
+                });
+            }
+        };
+
+        self.expect(&[TokenType::Func], "Expected func keyword")?;
+        let name = self.expect(&[TokenType::Id], "Expected identifier")?;
+
+        self.expect(&[TokenType::OpenParen], "Expected open parenthesis")?;
+
+        let mut parameters: &[Type<'a>] = &[];
+        // TODO : On error, we should map error into UnbalancedParens
+        if self.peek_token()?.kind != TokenType::CloseParen {
+            parameters = self.parse_comma_separated(|this| this.parse_type())?;
+        }
+        self.expect(&[TokenType::CloseParen], "Expected closing parenthesis")?;
+        self.expect(
+            &[TokenType::Colon],
+            "Expected colon after argument list. \
+            In external functions its mandatory to provide return type of the function explicitly",
+        )?;
+        let return_type = self.parse_type()?;
+        self.expect(
+            &[TokenType::Semicolon],
+            "Expected semicolon after external function declaration. \
+        External functions can't have body",
+        )?;
+
+        Ok(self.bump.alloc(Statement {
+            kind: StatementKind::Extern(ExternalFunction {
+                name: Identifier::from_token(name, self.bump),
+                kind,
+                parameters,
+                return_type: Cell::from(return_type),
+            }),
+            loc: keyword.loc,
         }))
     }
 
@@ -170,24 +229,23 @@ impl<'a> Parser<'a> {
                 e
             })
         };
-        let mut arguments = BumpVec::new_in(self.bump);
+        let mut arguments: &[FunctionParameter<'a>] = &[];
         if peek(self, o_paren.clone())?.kind != TokenType::CloseParen {
-            let mut id = self.expect(&[TokenType::Id], "Expected parameter name")?;
-            self.expect(&[TokenType::Colon], "Expected colon")?;
-            let mut ty = self.parse_type()?;
-            arguments.push(FunctionParameter {
-                name: Identifier::from_token(id, self.bump),
-                ty,
-            });
-            while self.consume(&[TokenType::Comma]).is_some() {
-                id = self.expect(&[TokenType::Id], "Expected parameter name")?;
-                self.expect(&[TokenType::Colon], "Expected colon")?;
-                ty = self.parse_type()?;
-                arguments.push(FunctionParameter {
-                    name: Identifier::from_token(id, self.bump),
-                    ty,
-                });
-            }
+            arguments = self
+                .parse_comma_separated(|this| {
+                    let id = this.expect(&[TokenType::Id], "Expected parameter name")?;
+                    this.expect(&[TokenType::Colon], "Expected colon")?;
+                    let ty = this.parse_type()?;
+                    Ok(FunctionParameter {
+                        name: Identifier::from_token(id, this.bump),
+                        ty,
+                    })
+                })
+                .map_err(|mut e| {
+                    e.kind = UnbalancedParens;
+                    e.location = o_paren.loc;
+                    e
+                })?;
         }
         self.expect(
             &[TokenType::CloseParen],
@@ -203,7 +261,7 @@ impl<'a> Parser<'a> {
         let StatementKind::Block(statements) = block.kind else {
             unreachable!()
         };
-        Ok((arguments.into_bump_slice(), statements, return_type))
+        Ok((arguments, statements, return_type))
     }
 
     pub fn parse_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
@@ -289,7 +347,6 @@ impl<'a> Parser<'a> {
                 location: name.loc.clone(),
             }),
         }
-
     }
 
     fn parse_assignment(&mut self) -> Result<&'a Expression<'a>, ParseError> {
@@ -387,12 +444,7 @@ impl<'a> Parser<'a> {
     fn parse_args(&mut self) -> Result<&'a [&'a Expression<'a>], ParseError> {
         let mut args = BumpVec::new_in(self.bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
-            let expr = self.parse_expression()?;
-            args.push(expr);
-
-            while self.consume(&[TokenType::Comma]).is_some() {
-                args.push(self.parse_expression()?);
-            }
+            args.extend(self.parse_comma_separated(|this| this.parse_expression())?);
         }
         Ok(args.into_bump_slice())
     }
@@ -458,7 +510,7 @@ impl<'a> Parser<'a> {
             return Ok(expr);
         }
 
-        panic!("unknown token {}", token);
+        panic!("unknown token {}", token); // TODO: replace panic with error: UnexpectedToken;
     }
 
     pub fn construct_literal(
@@ -492,8 +544,25 @@ impl<'a> Parser<'a> {
         })
     }
 }
+/// Helper methods for parsing
+impl<'a> Parser<'a> {
+    #[allow(clippy::result_large_err)]
+    pub fn parse_comma_separated<T>(
+        &mut self,
+        mut single_item: impl FnMut(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<&'a [T], ParseError> {
+        let mut res = BumpVec::new_in(self.bump);
+        let expr = single_item(self)?;
+        res.push(expr);
 
-// Helper methods.
+        while self.consume(&[TokenType::Comma]).is_some() {
+            res.push(single_item(self)?);
+        }
+        Ok(res.into_bump_slice())
+    }
+}
+
+// Machinery for parser.
 #[allow(clippy::result_large_err)]
 impl Parser<'_> {
     fn next_token(&mut self) -> Result<Token, ParseError> {
@@ -588,6 +657,7 @@ pub enum ParserErrorKind {
         got: Token,
         message: String,
     },
+    UnknownExternKind(String),
 }
 
 impl CompilerError for ParseError {
@@ -611,6 +681,7 @@ impl CompilerError for ParseError {
             }
             UnbalancedBraces => "unbalanced braces".to_string(),
             UnknownType(b) => format!("unknown type {}", b),
+            UnknownExternKind(k) => format!("unknown extern kind: \"{}\"", k),
         }
     }
 
@@ -623,6 +694,7 @@ impl CompilerError for ParseError {
             UnexpectedToken { .. } => None,
             UnbalancedBraces => Some(format!("last braces located here: {}", self.location)),
             UnknownType(_) => None,
+            UnknownExternKind(_) => None, // todo: maybe point out existing external kinds.
         }
     }
 }

@@ -2,7 +2,9 @@ use crate::analysis::analyzer::Resolutions;
 use crate::analysis::get_at::GetAt;
 use crate::analysis::r#type::{FunctionType, Type};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
-use crate::ast::statement::{FunctionDeclaration, Statement, StatementKind, VariableDeclaration};
+use crate::ast::statement::{
+    ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
+};
 use crate::common::{BumpVec, Stack};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
@@ -119,7 +121,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     AstLiteral::FloatingPoint(_) => {
                         todo!()
                     }
-                    AstLiteral::Boolean(b) => Arg::Bool(*b), 
+                    AstLiteral::Boolean(b) => Arg::Bool(*b),
                 }
             }
             ExpressionKind::VariableAccess(n) => {
@@ -235,6 +237,25 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 self.variables.pop();
                 self.stack_size = StackSize::zero();
             }
+
+            StatementKind::Extern(ExternalFunction {
+                name,
+                kind: _kind,
+                parameters,
+                return_type,
+            }) => {
+                let var = Variable {
+                    ty: Type::Function(FunctionType {
+                        return_type: self.ast_bump.alloc(return_type.get()),
+                        parameters,
+                    }),
+                    stack_offset: 0,
+                };
+                self.variables
+                    .last_mut()
+                    .expect("Compiler bug: there should be at least global scope")
+                    .insert(name.name, var);
+            }
             StatementKind::Block(_) => todo!("Block statements are not supported by compiler yet."),
             StatementKind::VariableDeclaration(VariableDeclaration {
                 name,
@@ -259,34 +280,18 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 };
                 self.variables
                     .last_mut()
-                    .expect("variable stack is empty")
+                    .expect("Compiler bug: there should be at least global scope")
                     .insert(name.name, var);
             }
             StatementKind::Return(val) => {
-                let ret_arg = if let Some(arg) = val {
-                    Some(self.compile_expression(arg))
-                } else {
-                    None
-                };
+                let ret_arg = val.as_ref().map(|arg| self.compile_expression(arg));
                 self.push_opcode(Opcode::Return(ret_arg));
             }
         }
     }
 
     pub fn compile_statements(&mut self, statements: &[&'ast Statement<'ast>]) {
-        // TODO: Obviously, this is a hack.
-        let mut globals = HashMap::new();
-        globals.insert(
-            "print_i64",
-            Variable {
-                ty: Type::Function(FunctionType {
-                    return_type: &Type::Void,
-                    parameters: &[Type::Int64],
-                }),
-                stack_offset: 0,
-            },
-        );
-        self.variables.push(globals);
+        self.variables.push(HashMap::new());
         for statement in statements {
             self.compile_statement(statement);
         }

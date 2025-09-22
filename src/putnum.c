@@ -10,3 +10,7 @@ void print_f64(double num) {
 void print_bool(bool b) { 
     printf("%s\n", b ? "true" : "false");
 }
+
+long long add_i64(long long a, long long b) { 
+    return a + b; 
+}

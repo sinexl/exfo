@@ -1,7 +1,7 @@
 use crate::analysis::get_at::GetAt;
 use crate::analysis::r#type::{FunctionType, Type};
 use crate::ast::expression::{Expression, ExpressionKind};
-use crate::ast::statement::VariableDeclaration;
+use crate::ast::statement::{ExternalFunction, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{BumpVec, CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
 use bumpalo::Bump;
@@ -52,26 +52,7 @@ impl<'ast> Analyzer<'ast> {
         Analyzer {
             resolutions: HashMap::new(),
             current_initializer: None,
-            locals: vec![{
-                // TODO: Obviously, this is a hack.
-                let mut globals = HashMap::new();
-                globals.insert(
-                    "print_i64",
-                    Variable {
-                        state: VariableState::Defined,
-                        ty: Type::Function(FunctionType {
-                            return_type: &Type::Void,
-                            parameters: &[Type::Int64],
-                        })
-                        .into(),
-                        name: Identifier {
-                            name: "print_i64",
-                            location: Default::default(),
-                        },
-                    },
-                );
-                globals
-            }],
+            locals: vec![HashMap::new()],
             bump,
             current_function_type: None,
         }
@@ -282,6 +263,21 @@ impl<'ast> Analyzer<'ast> {
                         panic!("Caller of resolve_statement() is broken.")
                     }
                 }
+            }
+            StatementKind::Extern(ExternalFunction {
+                name,
+                kind: _kind,
+                parameters,
+                return_type,
+            }) => {
+                self.declare(
+                    name,
+                    Type::Function(FunctionType {
+                        return_type: self.bump.alloc(return_type.get()),
+                        parameters,
+                    }),
+                );
+                self.define(name);
             }
         }
         Ok(())

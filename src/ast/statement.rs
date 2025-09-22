@@ -17,6 +17,7 @@ pub enum StatementKind<'a> {
     VariableDeclaration(VariableDeclaration<'a>),
     Block(&'a [&'a Statement<'a>]),
     Return(Option<&'a Expression<'a>>),
+    Extern(ExternalFunction<'a>), 
 }
 
 #[derive(Debug)]
@@ -25,6 +26,19 @@ pub struct FunctionDeclaration<'ast> {
     pub parameters: &'ast [FunctionParameter<'ast>],
     pub body: &'ast [&'ast Statement<'ast>],
     pub return_type: Cell<Type<'ast>>, 
+}
+
+#[derive(Debug)]
+pub struct ExternalFunction<'ast> { 
+    pub name: Identifier<'ast>,
+    pub kind: ExternKind, 
+    pub parameters: &'ast [Type<'ast>], 
+    pub return_type: Cell<Type<'ast>>, 
+}
+
+#[derive(Debug)]
+pub enum ExternKind { 
+    C,
 }
 
 #[derive(Debug)]
