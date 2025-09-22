@@ -538,7 +538,7 @@ impl CompilerError for TypeError {
                 expected_type,
                 actual_type,
             } => format!(
-                "Expected `{}`, found `{}`, Mismatched argument type. ",
+                "Expected `{}`, found `{}`, Mismatched argument type",
                 expected_type, actual_type
             ),
             //

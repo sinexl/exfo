@@ -3,7 +3,7 @@ use crate::compiling::ir::intermediate_representation::{Function, IntermediateRe
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use std::fmt::Write;
 
-pub const CALL_REGISTERS: &[&'static str] = &["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+pub const CALL_REGISTERS: &[&str] = &["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 
 macro_rules! asm {
     ($dst:expr, $($fmt:tt)*) => {
@@ -141,16 +141,19 @@ impl<'a> Codegen<'a> {
                 let value = i64::from_le_bytes(*bits);
                 asm!(self, "  movq ${}, %{}", value, reg);
             }
+            Arg::Bool(bool) => {
+                asm!(self, "  movq ${}, %{}", *bool as i32, reg); 
+            }
             Arg::ExternalFunction(_) => todo!(),
             Arg::StackOffset { offset, size: _ } => {
                 asm!(self, "  movq -{offset}(%rbp), %{reg}");
-            }
+            },
         }
     }
 
     pub fn generate(mut self) -> String {
         asm!(self, ".section .text");
-        for (_, v) in &self.ir.functions {
+        for v in self.ir.functions.values() {
             self.generate_function(v);
         }
         self.output

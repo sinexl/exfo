@@ -3,7 +3,8 @@ func add(a: int, b: int): int  {
 } 
 
 func main () {
-    b := add(15, 123, 123); 
+    arg := false; 
+    b := add(15, arg); 
     print_i64(b);
 }
   

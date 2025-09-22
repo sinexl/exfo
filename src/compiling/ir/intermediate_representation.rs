@@ -4,14 +4,12 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct IntermediateRepresentation<'a> {
-    pub bump: &'a bumpalo::Bump,
     pub functions: HashMap<Identifier<'a>, &'a Function<'a>>,
 }
 
 impl<'a> IntermediateRepresentation<'a> {
-    pub fn new(bump: &'a bumpalo::Bump) -> Self {
+    pub fn new() -> Self {
         Self {
-            bump,
             functions: HashMap::new(),
         }
     }

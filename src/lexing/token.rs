@@ -81,6 +81,8 @@ pub(crate) enum TokenType {
     Func,
     Extern,
     Return,
+    True,
+    False,
 
     // Punctuation
     OpenParen,
@@ -116,6 +118,7 @@ pub(crate) enum TokenType {
 }
 
 impl TokenType {
+    #[allow(dead_code)]
     pub fn from_punct(p: &str) -> Self {
         PUNCTS.with(|c| c[&p])
     }

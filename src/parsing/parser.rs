@@ -24,16 +24,16 @@ use std::rc::Rc;
     expressionStatement => expression ";" ;
     blockStatement      => "{" (declaration*)? "}" ;
     varDecl             => IDENTIFIER ":" type? ("=" expression)? ";" ;
-    returnStatement     => "return" expression? ";" 
+    returnStatement     => "return" expression? ";"
     funcDecl            => "func" IDENTIFIER function ;
     function            => "(" args ")" (":" type)? blockStatement ;
-    
+
     expression          => assignment;
     assignment          => IDENTIFIER "=" assignment | binop;
     binop*              => ** | unary;
     unary               => "-" unary | functionCall;
     functionCall        => primary ( "( args ")" )*
-    primary             => NUMBER | STRING | IDENTIFIER | "(" expression ")" ;
+    primary             => NUMBER | STRING | BOOLEAN | IDENTIFIER | "(" expression ")" ;
     type                => IDENTIFIER
 
 
@@ -217,17 +217,21 @@ impl<'a> Parser<'a> {
         }
         self.parse_expression_statement()
     }
-    
-    pub fn parse_return_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> { 
-        let loc = self.expect(&[TokenType::Return], "Expected return keyword")?.loc; 
-        let mut val: Option<&'a Expression<'a>> = None; 
-        if self.peek_token()?.kind != TokenType::Semicolon { 
-            val = Some(self.parse_expression()?); 
+
+    pub fn parse_return_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let loc = self
+            .expect(&[TokenType::Return], "Expected return keyword")?
+            .loc;
+        let mut val: Option<&'a Expression<'a>> = None;
+        if self.peek_token()?.kind != TokenType::Semicolon {
+            val = Some(self.parse_expression()?);
         }
-        
-        self.expect(&[TokenType::Semicolon], "Expected semicolon in return expression")?;
-        
-        
+
+        self.expect(
+            &[TokenType::Semicolon],
+            "Expected semicolon in return expression",
+        )?;
+
         Ok(self.bump.alloc(Statement {
             kind: StatementKind::Return(val),
             loc,
@@ -259,7 +263,6 @@ impl<'a> Parser<'a> {
         }))
     }
 
-
     fn parse_expression_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
         let loc = self.peek_token()?.loc;
         let expr = self.parse_expression()?;
@@ -276,15 +279,17 @@ impl<'a> Parser<'a> {
 
     pub fn parse_type(&mut self) -> Result<Type<'a>, ParseError> {
         let name = self.expect(&[TokenType::Id], "Expected type name")?;
-        if name.string.as_ref() == "int" {
-            return Ok(Type::Int64);
-        } else if name.string.as_ref() == "void" {
-            return Ok(Type::Void);
+
+        match name.string.as_ref() {
+            "int" => Ok(Type::Int64),
+            "void" => Ok(Type::Void),
+            "bool" => Ok(Type::Bool),
+            _ => Err(ParseError {
+                kind: UnknownType(String::from(name.string.as_ref())),
+                location: name.loc.clone(),
+            }),
         }
-        Err(ParseError {
-            kind: UnknownType(String::from(name.string.as_ref())),
-            location: name.loc.clone(),
-        })
+
     }
 
     fn parse_assignment(&mut self) -> Result<&'a Expression<'a>, ParseError> {
@@ -405,6 +410,7 @@ impl<'a> Parser<'a> {
                 ty: Cell::new(Type::Unknown),
             }));
         }
+
         if let Some(integer) = self.consume(&[Integer]) {
             let value = integer.integer;
             let id = self.id();
@@ -423,6 +429,21 @@ impl<'a> Parser<'a> {
                 double.loc.clone(),
                 id,
                 Type::Float64,
+            ));
+        }
+        if let Some(boolean) = self.consume(&[False, True]) {
+            let id = self.id();
+            let bool = match boolean.kind {
+                False => false,
+                True => true,
+                _ => unreachable!(),
+            };
+
+            return Ok(self.construct_literal(
+                AstLiteral::Boolean(bool),
+                boolean.loc.clone(),
+                id,
+                Type::Bool,
             ));
         }
         if let Some(paren) = self.consume(&[OpenParen]) {

@@ -82,6 +82,7 @@ impl UnaryKind {
 pub enum AstLiteral {
     Integral(i64),
     FloatingPoint(f64),
+    Boolean(bool),
 }
 impl Eq for AstLiteral {}
 
@@ -93,6 +94,7 @@ impl Hash for AstLiteral {
             // I guess, we will only care for structural identity, not mathematical one.
             // So -0.0 and 0.0 will be considered "distinct", and NaN will be equal to NaN
             AstLiteral::FloatingPoint(f) => f.to_bits().hash(state),
+            AstLiteral::Boolean(b) => b.hash(state),
         }
     }
 }
@@ -102,6 +104,7 @@ impl Display for AstLiteral {
         match &self {
             AstLiteral::Integral(i) => write!(f, "{}", i),
             AstLiteral::FloatingPoint(fl) => write!(f, "{}", fl),
+            AstLiteral::Boolean(b) => write!(f, "{}", b),
         }
     }
 }

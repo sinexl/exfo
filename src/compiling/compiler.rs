@@ -48,7 +48,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
         Self {
             ir_bump,
             ast_bump,
-            ir: ir_bump.alloc(IntermediateRepresentation::new(ir_bump)),
+            ir: ir_bump.alloc(IntermediateRepresentation::new()),
             current_function: None,
             stack_size: StackSize::zero(),
             resolutions,
@@ -119,6 +119,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     AstLiteral::FloatingPoint(_) => {
                         todo!()
                     }
+                    AstLiteral::Boolean(b) => Arg::Bool(*b), 
                 }
             }
             ExpressionKind::VariableAccess(n) => {

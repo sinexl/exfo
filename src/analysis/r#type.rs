@@ -13,6 +13,7 @@ pub enum Type<'ast> {
     Void,
     Int64,
     Float64,
+    Bool, 
     Function(FunctionType<'ast>),
 }
 
@@ -24,12 +25,13 @@ pub struct FunctionType<'ast> {
 
 impl<'ast> Display for Type<'ast> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
+        match &self {
             Type::Unknown => write!(f, "<unknown>")?,
             Type::Int64 => write!(f, "int64")?,
             Type::Float64 => write!(f, "float64")?,
             Type::Function(fun) => write!(f, "{}", fun)?,
-            Type::Void => write!(f, "void")?, 
+            Type::Void => write!(f, "void")?,
+            Type::Bool => write!(f, "bool")?,
         }
         Ok(())
     }
@@ -48,6 +50,7 @@ impl<'ast> Type<'ast> {
             Type::Int64 | Type::Float64 => 8,
             Type::Function(_) => 8,
             Type::Void => 0,
+            Type::Bool => 1, 
         }
     }
 }

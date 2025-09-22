@@ -27,6 +27,7 @@ pub enum Opcode<'a> {
 
 #[derive(Clone, Debug)]
 pub enum Arg<'a> {
+    Bool(bool), 
     Int64 { bits: [u8; 8], signed: bool },
     ExternalFunction(Identifier<'a>),
     StackOffset { offset: usize, size: usize },

@@ -23,6 +23,7 @@ impl Lexer {
             token_start: LexerState::default(),
         }
     }
+    #[allow(dead_code)]
     pub fn file(path: &str) -> Self {
         let contents = fs::read_to_string(path).expect("Could not read file");
         Self::new(contents.as_str(), path)

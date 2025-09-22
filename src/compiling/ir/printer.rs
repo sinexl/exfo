@@ -82,6 +82,7 @@ pub fn print_arg(arg: &Arg, f: &mut impl Write) -> std::fmt::Result {
             };
             write!(f, "{literal}")?;
         }
+        Arg::Bool(bool) => write!(f, "{}", bool)?, 
         Arg::ExternalFunction(id) => {
             write!(f, "external fn(\"{name}\")", name = id.name)?;
         }
