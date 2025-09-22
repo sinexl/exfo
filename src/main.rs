@@ -73,7 +73,7 @@ fn dev_repl() {
 
         if static_errors.is_empty() {
             let mut comp = Compiler::new(&ir_alloc, &ast_alloc, analyzer.resolutions);
-            comp.compile_statements(&statements);
+            comp.compile_statements(statements);
             println!("{ir}", ir = comp.ir);
         } else {
             for e in static_errors {
@@ -137,7 +137,7 @@ fn main() -> io::Result<()> {
     };
     let path = Path::new(&path);
 
-    let file = fs::read_to_string(&path)?;
+    let file = fs::read_to_string(path)?;
 
     // Compilation process.
     let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
@@ -153,7 +153,7 @@ fn main() -> io::Result<()> {
 
     // Static analysis
     let mut analyzer = Analyzer::new(&ast_allocator);
-    let errors = analyzer.analyze_statements(&ast);
+    let errors = analyzer.analyze_statements(ast);
     push_errors!(static_errors, errors);
     // Error reporting
     if !static_errors.is_empty() {

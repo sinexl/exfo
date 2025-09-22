@@ -6,6 +6,7 @@ use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{BumpVec, CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
 use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
+use std::cell::Cell;
 use std::collections::HashMap;
 
 type Scope<'ast> = HashMap<
@@ -21,7 +22,7 @@ pub struct Analyzer<'ast> {
     locals: Stack<Scope<'ast>>,
     current_initializer: Option<Identifier<'ast>>,
 
-    current_function: Option<&'ast FunctionDeclaration<'ast>>,
+    current_function_type: Option<*const Cell<Type<'ast>>>,
 
     pub resolutions: Resolutions<'ast>,
 }
@@ -30,7 +31,7 @@ pub struct Analyzer<'ast> {
 struct Variable<'ast> {
     pub state: VariableState,
     pub name: Identifier<'ast>,
-    pub ty: Type<'ast>,
+    pub ty: Cell<Type<'ast>>,
 }
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum VariableState {
@@ -61,7 +62,8 @@ impl<'ast> Analyzer<'ast> {
                         ty: Type::Function(FunctionType {
                             return_type: &Type::Void,
                             parameters: &[Type::Int64],
-                        }),
+                        })
+                        .into(),
                         name: Identifier {
                             name: "print_i64",
                             location: Default::default(),
@@ -71,7 +73,7 @@ impl<'ast> Analyzer<'ast> {
                 globals
             }],
             bump,
-            current_function: None,
+            current_function_type: None,
         }
     }
 
@@ -130,17 +132,16 @@ impl<'ast> Analyzer<'ast> {
             ExpressionKind::VariableAccess(n) => {
                 let depth = self.resolutions.get(expression).expect("Analysis failed");
                 let var = self.locals.get_at(&n.name, *depth);
-                expression.ty.set(var.ty);
+                expression.ty.set(var.ty.get());
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
                 self.typecheck_expression(callee)?;
                 for arg in *arguments {
                     self.typecheck_expression(arg)?;
                 }
-                dbg!(callee.ty.get());
                 if let Type::Function(FunctionType {
                     return_type,
-                    parameters: _,
+                    parameters: _, // TODO: Typecheck passed parameters
                 }) = callee.ty.get()
                 {
                     expression.ty.set(*return_type);
@@ -179,8 +180,11 @@ impl<'ast> Analyzer<'ast> {
                         .into_bump_slice(),
                 };
                 // TODO: Ensure that in_function is returned to false in cases where function exits early (? operator)
-                self.current_function = Some(decl);
                 self.declare(&decl.name, Type::Function(fn_type));
+                let inserted = current_scope!(self)
+                    .get(decl.name.name)
+                    .expect("Analyzer.declare() failed");
+                self.current_function_type = Some(&inserted.ty);
                 self.define(&decl.name);
                 self.enter_scope();
                 for param in decl.parameters {
@@ -188,8 +192,9 @@ impl<'ast> Analyzer<'ast> {
                     self.define(&param.name);
                 }
                 let errors = self.resolve_statements(decl.body);
+                // TODO: If there are no return in function and no return type is specified, treat it as returning void 
                 self.exit_scope();
-                self.current_function = None;
+                self.current_function_type = None;
                 if !errors.is_empty() {
                     return Err(errors);
                 }
@@ -232,16 +237,25 @@ impl<'ast> Analyzer<'ast> {
             }
             StatementKind::Return(val) => {
                 let current_fn = self
-                    .current_function
+                    .current_function_type
                     .ok_or_else(|| vec![AnalysisError::TopLevelReturn(statement.loc.clone())])?;
                 if let Some(val) = val {
                     self.resolve_expression(val).map_err(|e| vec![e.into()])?;
                     self.typecheck_expression(val).map_err(|e| vec![e.into()])?;
 
-                    if let Type::Unknown = current_fn.return_type.get() {
-                        current_fn.return_type.set(val.ty.get());
-                    } else if current_fn.return_type != val.ty {
-                        todo!("TODO: Proper error handling")
+                    let current_ty = unsafe { (*current_fn).get() };
+
+                    if let Type::Function(mut fn_type) = current_ty {
+                        if let Type::Unknown = fn_type.return_type {
+                            fn_type.return_type = self.bump.alloc(val.ty.get());
+                        } else if *fn_type.return_type != val.ty.get() {
+                            todo!("TODO: Proper error handling")
+                        }
+                        unsafe {
+                            (*current_fn).set(Type::Function(fn_type));
+                        }
+                    } else {
+                        panic!("Caller of resolve_statement() is broken.")
                     }
                 }
             }
@@ -311,7 +325,7 @@ impl<'ast> Analyzer<'ast> {
             *declaration = Variable {
                 state: VariableState::Declared,
                 name: name.clone(),
-                ty,
+                ty: ty.into(),
             };
             return;
         }
@@ -319,7 +333,7 @@ impl<'ast> Analyzer<'ast> {
         current_scope.insert(
             name.name,
             Variable {
-                ty,
+                ty: ty.into(),
                 state: VariableState::Declared,
                 name: name.clone(),
             },

@@ -4,11 +4,13 @@ use crate::ast::expression::Expression;
 use crate::common::{Identifier, SourceLocation};
 use std::fmt::{Display, Formatter};
 
+#[derive(Debug)]
 pub struct Statement<'a> {
     pub kind: StatementKind<'a>,
     pub loc: SourceLocation,
 }
 
+#[derive(Debug)]
 pub enum StatementKind<'a> {
     ExpressionStatement(&'a Expression<'a>),
     FunctionDeclaration(FunctionDeclaration<'a>),
@@ -17,6 +19,7 @@ pub enum StatementKind<'a> {
     Return(Option<&'a Expression<'a>>),
 }
 
+#[derive(Debug)]
 pub struct FunctionDeclaration<'ast> {
     pub name: Identifier<'ast>,
     pub parameters: &'ast [FunctionParameter<'ast>],
@@ -24,12 +27,14 @@ pub struct FunctionDeclaration<'ast> {
     pub return_type: Cell<Type<'ast>>, 
 }
 
+#[derive(Debug)]
 pub struct VariableDeclaration<'a> {
     pub name: Identifier<'a>,
     pub initializer: Option<&'a Expression<'a>>,
     pub ty: Cell<Type<'a>>, 
 }
 
+#[derive(Debug)]
 pub struct FunctionParameter<'ast> {
     pub name: Identifier<'ast>,
     pub ty: Type<'ast>,

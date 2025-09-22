@@ -1,6 +1,12 @@
 use crate::common::Join;
 use std::fmt::{Display, Formatter};
 
+
+// TODO: 
+//  Current representation of type is not suitable for the language. 
+//  All types should by default allow internal mutability. 
+//  Apart from that, all fields in intermediate representations (AST/3AC IR/etc.) 
+//  should store references (or ids ) who point to the actual type.
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub enum Type<'ast> {
     Unknown,
