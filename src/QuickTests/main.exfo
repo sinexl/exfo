@@ -7,10 +7,15 @@ func add(a: int, b: int): int {
 } 
 
 func main () {
-    a := 2 >= 2; 
-    print_bool(a); 
-    a := 10 + 15; 
-    print_i64(a);
+    f := 10; 
+    s := 15;
+    a: bool = false; 
+    a = f == s;
+    a = f != s;
+    a = f > s;
+    a = f >= s;
+    a = f < s;
+    a = f <= s;
    
     
 }

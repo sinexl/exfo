@@ -1,150 +1,44 @@
 use crate::analysis::analyzer::Analyzer;
-use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::code_generation::codegen::Codegen;
 use crate::common::CompilerError;
+use crate::compiler_io::compiler_arguments::CompilerArguments;
+use crate::compiler_io::dev_repl::dev_repl;
+use crate::compiler_io::util::{DisplayCommand, create_dir_if_not_exists, run_command};
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
-use std::fmt::{Display, Formatter};
-use std::io::Write;
+use clap::Parser as ClapParser;
 use std::path::Path;
-use std::process::{exit, Command, Stdio};
-use std::{env, fs, io};
+use std::process::{Command, Stdio, exit};
+use std::{fs, io};
 
 mod analysis;
 mod ast;
 mod code_generation;
 pub mod common;
+mod compiler_io;
 mod compiling;
 pub mod lexing;
 mod parsing;
 
-fn get_line(msg: &str) -> String {
-    let mut res = String::new();
-    print!("{msg}");
-    let _ = io::stdout().flush();
-    io::stdin().read_line(&mut res).unwrap();
-    if let Some('\n') = res.chars().next_back() {
-        res.pop();
-    };
-    if let Some('\r') = res.chars().next_back() {
-        res.pop();
-    };
-    res
-}
-macro_rules! push_errors {
-    ($compilation_errors:expr, $errors:expr) => {{
-        $compilation_errors.reserve($errors.len());
-        for e in $errors {
-            $compilation_errors.push(Box::new(e));
-        }
-    }};
-}
-fn dev_repl() {
-    let mut exit = false;
-    while !exit {
-        let ast_alloc = Bump::new();
-        let ir_alloc = Bump::new();
-        let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
-        let input = get_line("> ");
-
-        if input == ":quit" {
-            exit = true;
-        }
-
-        let (tokens, errors) = Lexer::new(&input, "<REPL>").accumulate();
-        push_errors!(static_errors, errors);
-
-        let mut parser = Parser::new(tokens.into(), &ast_alloc);
-        let (statements, errors) = parser.parse_program();
-        push_errors!(static_errors, errors);
-
-        let mut analyzer = Analyzer::new(&ast_alloc);
-        let errors = analyzer.analyze_statements(statements);
-        push_errors!(static_errors, errors);
-
-        for statement in statements {
-            println!("{}", statement);
-        }
-        for statement in statements {
-            println!("{}", PrefixPrintStatement(statement));
-        }
-
-        if static_errors.is_empty() {
-            let mut comp = Compiler::new(&ir_alloc, &ast_alloc, analyzer.resolutions);
-            comp.compile_statements(statements);
-            println!("{ir}", ir = comp.ir);
-        } else {
-            for e in static_errors {
-                println!("{e}");
-            }
-        }
-    }
-}
-
-fn create_dir_if_not_exists<P: AsRef<Path>>(path: P) -> io::Result<()> {
-    match fs::create_dir(path) {
-        Ok(_) => {}
-        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
-        Err(e) => return Err(e),
-    }
-    Ok(())
-}
-
-struct DisplayCommand<'a>(&'a Command);
-
-impl<'a> Display for DisplayCommand<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} {}",
-            self.0.get_program().to_string_lossy(),
-            self.0
-                .get_args()
-                .map(|a| a.to_string_lossy())
-                .collect::<Vec<_>>()
-                .join(" ")
-        )
-    }
-}
-
-pub fn run_command(cmd: &mut Command, if_non0_exit: &str, if_run_failed: &str) {
-    match cmd.status() {
-        Ok(status) => {
-            if !status.success() {
-                eprintln!("{}", if_non0_exit);
-                exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("{e}");
-            eprintln!("{}", if_run_failed,);
-            exit(1);
-        }
-    }
-}
-
 fn main() -> io::Result<()> {
-    if env::args().next_back() == Some("--repl".to_owned()) {
+    let args = CompilerArguments::parse();
+    if args.repl {
         dev_repl();
         return Ok(());
     }
-    let path = if let Some(filename) = env::args().nth(1) {
-        filename
-    } else {
-        return Ok(());
-    };
-    let path = Path::new(&path);
 
-    let file = fs::read_to_string(path)?;
+    let input = Path::new(&args.input);
+    let output = args.output_file();
+    let file = fs::read_to_string(input)?;
 
     // Compilation process.
     let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
     let ast_allocator = Bump::new();
     let ir_allocator = Bump::new();
     // Lexing.
-    let (tokens, errors) = Lexer::new(&file, path.to_str().unwrap()).accumulate();
+    let (tokens, errors) = Lexer::new(&file, input.to_str().unwrap()).accumulate();
     push_errors!(static_errors, errors);
     // Parsing
     let mut parser = Parser::new(tokens.into(), &ast_allocator);
@@ -158,7 +52,7 @@ fn main() -> io::Result<()> {
     // Error reporting
     if !static_errors.is_empty() {
         for e in static_errors {
-            println!("{e}");
+            eprintln!("{e}");
         }
         exit(1);
     }
@@ -167,17 +61,17 @@ fn main() -> io::Result<()> {
     let mut compiler = Compiler::new(&ir_allocator, &ast_allocator, analyzer.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
-    println!("{ir}"); // TODO: Compiler flag for debugging
+    dprintln!(args, "{ir}");
 
     let codegen = Codegen::new(ir);
     let generated_assembly = codegen.generate();
-    println!("{}", generated_assembly);
+    dprintln!(args, "{}", generated_assembly);
 
     // Outputting the result of compilation to user.
     const BUILD_DIR: &str = "./.exfo_build";
 
     create_dir_if_not_exists(BUILD_DIR)?;
-    let file_name = path.file_stem().and_then(|s| s.to_str()).unwrap();
+    let file_name = input.file_stem().and_then(|s| s.to_str()).unwrap();
     let asm_path = format!("{BUILD_DIR}/{file_name}.s");
     let asm_path = asm_path.as_str();
     fs::write(asm_path, generated_assembly.as_bytes())?;
@@ -192,7 +86,7 @@ fn main() -> io::Result<()> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    println!("- Running assembler:\n{gas}", gas = DisplayCommand(&gas));
+    println!("Running assembler:\n{gas}", gas = DisplayCommand(&gas));
     run_command(
         &mut gas,
         "Assembler error occurred. Exiting.",
@@ -200,15 +94,16 @@ fn main() -> io::Result<()> {
                      Make sure that you have installed GNU Assembler and it's available in $PATH",
     );
 
+    println!();
     let mut cc = Command::new("cc");
     cc.arg(object_path)
         .arg("src/putnum.c")
         .arg("-o")
-        .arg(file_name)
+        .arg(output)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    println!("- Running cc:\n{cc}", cc = DisplayCommand(&cc));
+    println!("Running cc:\n{cc}", cc = DisplayCommand(&cc));
     run_command(
         &mut cc,
         "Failed to run cc. Exiting.",

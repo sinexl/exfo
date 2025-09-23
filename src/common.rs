@@ -118,3 +118,12 @@ macro_rules! hashmap {
         map
     }};
 }
+#[macro_export]
+macro_rules! push_errors {
+    ($compilation_errors:expr, $errors:expr) => {{
+        $compilation_errors.reserve($errors.len());
+        for e in $errors {
+            $compilation_errors.push(Box::new(e));
+        }
+    }};
+}
