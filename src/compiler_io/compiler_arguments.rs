@@ -16,10 +16,14 @@ pub struct CompilerArguments {
     /// Start development REPL instead of compiling
     #[arg(long)]
     pub repl: bool,
-    
+
     /// Output intermediate representations (IR & ASM) into stdout.
     #[arg(long)]
     pub debug_compiler: bool,
+
+    /// Generate position-dependent code
+    #[arg(long)]
+    pub no_pic: bool,
 }
 
 impl CompilerArguments {
@@ -31,5 +35,8 @@ impl CompilerArguments {
                 inp.file_stem().map(PathBuf::from).unwrap()
             }
         }
+    }
+    pub fn pic(&self) -> bool {
+        !self.no_pic
     }
 }

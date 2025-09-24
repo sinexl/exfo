@@ -24,15 +24,17 @@ macro_rules! comment {
 
 pub struct Codegen<'a> {
     ir: &'a IntermediateRepresentation<'a>,
+    pic: bool,
     output: String,
 }
 
 //noinspection SpellCheckingInspection
 impl<'a> Codegen<'a> {
-    pub fn new(ir: &'a IntermediateRepresentation<'a>) -> Self {
+    pub fn new(ir: &'a IntermediateRepresentation<'a>, pic: bool) -> Self {
         Self {
             ir,
             output: String::new(),
+            pic,
         }
     }
 
@@ -104,19 +106,19 @@ impl<'a> Codegen<'a> {
                         (kind, true) => {
                             asm!(self, "  cmpq %rcx, %rax");
                             match kind {
-                                BinopKind::Equality => asm!(self, "  sete %al"), 
+                                BinopKind::Equality => asm!(self, "  sete %al"),
                                 BinopKind::Inequality => asm!(self, "  setne %al"),
-                                BinopKind::GreaterThan => asm!(self, "  setg %al"), 
+                                BinopKind::GreaterThan => asm!(self, "  setg %al"),
                                 BinopKind::GreaterEq => asm!(self, "  setge %al"),
                                 BinopKind::LessThan => asm!(self, "  setl %al"),
-                                BinopKind::LessEq => asm!(self, "  setle %al"), 
+                                BinopKind::LessEq => asm!(self, "  setle %al"),
 
                                 BinopKind::Addition
                                 | BinopKind::Subtraction
                                 | BinopKind::Multiplication
-                                | BinopKind::Division => 
-                                    unreachable!("is_logical() should be updated"), 
-                                
+                                | BinopKind::Division => {
+                                    unreachable!("is_logical() should be updated")
+                                }
                             }
                             asm!(self, "  movb %al, -{result}(%rbp)");
                         }
@@ -161,8 +163,11 @@ impl<'a> Codegen<'a> {
                 asm!(self, "  movq ${}, %{}", *bool as i32, reg);
             }
             Arg::ExternalFunction(name) => {
-                todo!("Deal with some leaq for PIC");
-                asm!(self, "  movq ${name}, %{reg}");
+                if self.pic {
+                    asm!(self, "  movq {}@GOTPCREL(%rip), %{reg}", name.name)
+                } else {
+                    asm!(self, "  movq {}, %{reg}", name.name,);
+                }
             }
             Arg::StackOffset { offset, size: _ } => {
                 asm!(self, "  movq -{offset}(%rbp), %{reg}");
@@ -181,7 +186,12 @@ impl<'a> Codegen<'a> {
     fn call_arg(&mut self, arg: &Arg<'a>) {
         match arg {
             Arg::ExternalFunction(name) => {
-                asm!(self, "  call {}", name.name);
+                let name = if self.pic {
+                    format!("{}@PLT", name.name)
+                } else {
+                    name.name.to_string()
+                };
+                asm!(self, "  call {}", name);
             }
             _ => todo!(),
         }

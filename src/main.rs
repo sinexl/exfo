@@ -63,7 +63,7 @@ fn main() -> io::Result<()> {
     let ir = compiler.ir;
     dprintln!(args, "{ir}");
 
-    let codegen = Codegen::new(ir);
+    let codegen = Codegen::new(ir, args.pic());
     let generated_assembly = codegen.generate();
     dprintln!(args, "{}", generated_assembly);
 
@@ -80,6 +80,9 @@ fn main() -> io::Result<()> {
     let object_path = object_path.as_str();
 
     let mut gas = Command::new("as");
+    if args.debug_compiler {
+        gas.arg("-g");
+    }
     gas.arg(asm_path)
         .arg("-o")
         .arg(object_path)
@@ -102,6 +105,9 @@ fn main() -> io::Result<()> {
         .arg(output)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
+    if args.pic() {
+        cc.arg("-fPIC");
+    }
 
     println!("Running cc:\n{cc}", cc = DisplayCommand(&cc));
     run_command(

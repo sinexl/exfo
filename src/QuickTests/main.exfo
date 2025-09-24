@@ -7,16 +7,18 @@ func add(a: int, b: int): int {
 } 
 
 func main () {
-    f := 10; 
-    s := 15;
-    a: bool = false; 
-    a = f == s;
-    a = f != s;
-    a = f > s;
-    a = f >= s;
-    a = f < s;
-    a = f <= s;
+    // f := 10; 
+    // s := 15;
+    // a: bool = false; 
+    // a = f == s;
+    // a = f != s;
+    // a = f > s;
+    // a = f >= s;
+    // a = f < s;
+    // a = f <= s;
    
+   // a := add; 
+   print_i64(add(10, 15));
     
 }
   
