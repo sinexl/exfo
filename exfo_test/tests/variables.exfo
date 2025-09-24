@@ -1,0 +1,18 @@
+extern "C" func print_bool(bool): void; 
+extern "C" func print_i64(int): void; 
+
+func main(): int { 
+    a := 1; 
+    print_i64(a); 
+    a := a + 1; // Shadowing 
+    print_i64(a); 
+ 
+    a := false; // Changing type
+    print_bool(a); 
+    
+    a := 2; 
+    a = a + 1; // Mutation 
+    print_i64(a);
+    
+    return 0; 
+} 
