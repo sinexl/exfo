@@ -86,7 +86,7 @@ fn main() -> io::Result<()> {
 
 fn record_tests<P: AsRef<Path>>(
     compiler_path: P,
-    paths: &'_ [impl AsRef<Path>],
+    paths: &[impl AsRef<Path>],
     test_bin: P,
 ) -> io::Result<TestResults> {
     let compiler_path = compiler_path.as_ref();
@@ -138,8 +138,8 @@ fn check_tests(recorded: &TestResults, got: &TestResults) {
         print!("{case}:{tab}");
         if recorded.get(case).unwrap() == got.get(case).unwrap() {
             println!("{GREEN}OK{RESET}");
-        } else { 
-            println!("{RED}ERR{RESET}"); 
+        } else {
+            println!("{RED}ERR{RESET}");
         }
     }
 }

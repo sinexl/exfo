@@ -50,7 +50,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
         Self {
             ir_bump,
             ast_bump,
-            ir: ir_bump.alloc(IntermediateRepresentation::new()),
+            ir: ir_bump.alloc(IntermediateRepresentation::new(ir_bump)),
             current_function: None,
             stack_size: StackSize::zero(),
             resolutions,
@@ -122,6 +122,12 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                         todo!()
                     }
                     AstLiteral::Boolean(b) => Arg::Bool(*b),
+                    AstLiteral::String(s) => {
+                        let index = self.ir.strings.len(); 
+                        self.ir.strings.push(self.ir_bump.alloc_str(s)); 
+                        
+                        Arg::String { index }
+                    }
                 }
             }
             ExpressionKind::VariableAccess(n) => {

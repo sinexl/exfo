@@ -1,10 +1,11 @@
 extern "C" func print_bool(bool): void;
 extern "C" func print_i64(int): void; 
 extern "C" func add_i64(int, int): int; 
+extern "C" func puts(char_ptr): void;
 
-func add(a: int, b: int): int { 
-    return a + b;
-} 
+// func add(a: int, b: int): int { 
+//     return a + b;
+// } 
 
 func main () {
     // f := 10; 
@@ -18,7 +19,7 @@ func main () {
     // a = f <= s;
    
    // a := add; 
-   print_i64(add(10, 15));
-    
+   puts("Hello, World");
+   puts("Ayo");
 }
   

@@ -1,0 +1,7 @@
+extern "C" func puts(char_ptr): void; 
+
+func main(): int { 
+    puts("Hello, World!"); 
+    puts("Ayooo"); 
+    return 0;
+} 

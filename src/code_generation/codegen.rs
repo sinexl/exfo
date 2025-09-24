@@ -172,6 +172,13 @@ impl<'a> Codegen<'a> {
             Arg::StackOffset { offset, size: _ } => {
                 asm!(self, "  movq -{offset}(%rbp), %{reg}");
             }
+            Arg::String { index } => {
+                if self.pic { 
+                    asm!(self, "  leaq .STR{index}(%rip), %{reg}")
+                } else { 
+                    asm!(self, "  movq $.STR{index}, %{reg}")
+                }
+            }
         }
     }
 
@@ -179,10 +186,25 @@ impl<'a> Codegen<'a> {
         asm!(self, ".section .text");
         for v in self.ir.functions.values() {
             self.generate_function(v);
-        }
+        } 
+        self.generate_data(); 
         self.output
     }
 
+    fn generate_data(&mut self) {
+        comment!(self, "--- Data Section ---");
+        asm!(self, ".section .rodata"); 
+        for (i, s) in self.ir.strings.iter().enumerate() { 
+            asm!(self, ".STR{i}:");
+            comment!(self, "{:?}", s);
+            write!(self.output, "  .byte ").unwrap(); 
+            for c in s.chars() { 
+                write!(self.output, "0x{:02X}, ", c as u8).unwrap(); 
+            }
+            asm!(self, "0x00"); 
+        }
+    }
+    
     fn call_arg(&mut self, arg: &Arg<'a>) {
         match arg {
             Arg::ExternalFunction(name) => {
@@ -193,7 +215,10 @@ impl<'a> Codegen<'a> {
                 };
                 asm!(self, "  call {}", name);
             }
-            _ => todo!(),
+            _ => {
+                self.load_arg_to_reg(arg, "rax"); 
+                asm!(self, "  call *%rax"); 
+            }
         }
     }
 }

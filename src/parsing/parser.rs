@@ -341,6 +341,7 @@ impl<'a> Parser<'a> {
             "int" => Ok(Type::Int64),
             "void" => Ok(Type::Void),
             "bool" => Ok(Type::Bool),
+            "char_ptr" => Ok(Type::CharPtr),
             _ => Err(ParseError {
                 kind: UnknownType(String::from(name.string.as_ref())),
                 location: name.loc.clone(),
@@ -497,6 +498,17 @@ impl<'a> Parser<'a> {
                 Type::Bool,
             ));
         }
+        if let Some(string) = self.consume(&[String]) {
+            let id = self.id();
+            let val = self.bump.alloc_str(string.string.as_ref());
+            return Ok(self.construct_literal(
+                AstLiteral::String(val),
+                string.loc.clone(),
+                id,
+                Type::CharPtr,
+            ));
+        }
+        
         if let Some(paren) = self.consume(&[OpenParen]) {
             let parenthesis_loc = paren.loc;
             let expr = self.parse_expression()?;
@@ -514,7 +526,7 @@ impl<'a> Parser<'a> {
 
     pub fn construct_literal(
         &self,
-        value: AstLiteral,
+        value: AstLiteral<'a>,
         loc: SourceLocation,
         id: usize,
         ty: Type<'a>,

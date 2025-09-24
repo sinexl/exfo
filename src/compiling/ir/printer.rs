@@ -82,13 +82,14 @@ pub fn print_arg(arg: &Arg, f: &mut impl Write) -> std::fmt::Result {
             };
             write!(f, "{literal}")?;
         }
-        Arg::Bool(bool) => write!(f, "{}", bool)?, 
+        Arg::Bool(bool) => write!(f, "{}", bool)?,
         Arg::ExternalFunction(id) => {
             write!(f, "external fn(\"{name}\")", name = id.name)?;
         }
         Arg::StackOffset { offset, size: _ } => {
             write!(f, "stack[{offset}]")?;
         }
+        Arg::String { index } => write!(f, "string[{index}]")?,
     }
 
     Ok(())

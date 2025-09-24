@@ -34,7 +34,7 @@ pub enum ExpressionKind<'ast> {
         target: &'ast Expression<'ast>,
         value: &'ast Expression<'ast>,
     },
-    Literal(AstLiteral),
+    Literal(AstLiteral<'ast>),
     VariableAccess(Identifier<'ast>),
     FunctionCall {
         callee: &'ast Expression<'ast>,
@@ -79,14 +79,15 @@ impl UnaryKind {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum AstLiteral {
+pub enum AstLiteral<'a> {
     Integral(i64),
     FloatingPoint(f64),
     Boolean(bool),
+    String(&'a str),
 }
-impl Eq for AstLiteral {}
+impl Eq for AstLiteral<'_> {}
 
-impl Hash for AstLiteral {
+impl Hash for AstLiteral<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             AstLiteral::Integral(i) => i.hash(state),
@@ -95,16 +96,18 @@ impl Hash for AstLiteral {
             // So -0.0 and 0.0 will be considered "distinct", and NaN will be equal to NaN
             AstLiteral::FloatingPoint(f) => f.to_bits().hash(state),
             AstLiteral::Boolean(b) => b.hash(state),
+            AstLiteral::String(s) => s.hash(state),
         }
     }
 }
 
-impl Display for AstLiteral {
+impl<'a> Display for AstLiteral<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             AstLiteral::Integral(i) => write!(f, "{}", i),
             AstLiteral::FloatingPoint(fl) => write!(f, "{}", fl),
             AstLiteral::Boolean(b) => write!(f, "{}", b),
+            AstLiteral::String(s) => write!(f, "{}", s),
         }
     }
 }

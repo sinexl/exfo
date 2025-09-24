@@ -29,6 +29,7 @@ pub enum Opcode<'a> {
 pub enum Arg<'a> {
     Bool(bool),
     Int64 { bits: [u8; 8], signed: bool },
+    String { index: usize }, // Index is in ir.strings
     ExternalFunction(Identifier<'a>),
     StackOffset { offset: usize, size: usize },
 }

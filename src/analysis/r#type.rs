@@ -14,6 +14,7 @@ pub enum Type<'ast> {
     Int64,
     Float64,
     Bool, 
+    CharPtr, 
     Function(FunctionType<'ast>),
 }
 
@@ -32,6 +33,7 @@ impl<'ast> Display for Type<'ast> {
             Type::Function(fun) => write!(f, "{}", fun)?,
             Type::Void => write!(f, "void")?,
             Type::Bool => write!(f, "bool")?,
+            Type::CharPtr => write!(f, "char_ptr")?, 
         }
         Ok(())
     }
@@ -50,7 +52,8 @@ impl<'ast> Type<'ast> {
             Type::Int64 | Type::Float64 => 8,
             Type::Function(_) => 8,
             Type::Void => 0,
-            Type::Bool => 1, 
+            Type::Bool => 1,
+            Type::CharPtr => 8,
         }
     }
 }
