@@ -123,9 +123,9 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     }
                     AstLiteral::Boolean(b) => Arg::Bool(*b),
                     AstLiteral::String(s) => {
-                        let index = self.ir.strings.len(); 
-                        self.ir.strings.push(self.ir_bump.alloc_str(s)); 
-                        
+                        let index = self.ir.strings.len();
+                        self.ir.strings.push(self.ir_bump.alloc_str(s));
+
                         Arg::String { index }
                     }
                 }
@@ -262,7 +262,15 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     .expect("Compiler bug: there should be at least global scope")
                     .insert(name.name, var);
             }
-            StatementKind::Block(_) => todo!("Block statements are not supported by compiler yet."),
+            StatementKind::Block(statements) => {
+                self.variables.push(HashMap::new());
+                let stack_size = self.stack_size.count;
+                for i in *statements {
+                    self.compile_statement(i);
+                }
+                self.stack_size.count = stack_size;
+                self.variables.pop();
+            }
             StatementKind::VariableDeclaration(VariableDeclaration {
                 name,
                 initializer,
