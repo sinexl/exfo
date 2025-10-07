@@ -83,6 +83,7 @@ pub(crate) enum TokenType {
     Return,
     True,
     False,
+    If, Else,
 
     // Punctuation
     OpenParen,

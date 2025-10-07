@@ -105,6 +105,17 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             }
             writeln!(f, ")")?;
         }
+        StatementKind::If {
+            condition,
+            then,
+            r#else,
+        } => {
+            write!(f, "(if {condition}: {then}")?;
+            if let Some(r#else) = r#else {
+                write!(f, "else: {r}", r = r#else)?;
+            }
+            writeln!(f, ")")?;
+        }
     }
 
     Ok(())

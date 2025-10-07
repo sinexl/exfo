@@ -282,6 +282,26 @@ impl<'ast> Analyzer<'ast> {
                 );
                 self.define(name);
             }
+            StatementKind::If {
+                condition,
+                then,
+                r#else,
+            } => {
+                self.resolve_expression(condition)
+                    .map_err(|e| vec![e.into()])?;
+                self.typecheck_expression(condition)
+                    .map_err(|e| vec![e.into()])?;
+                if condition.ty.get() != Type::Bool {
+                    return Err(vec![AnalysisError::TypeError(TypeError {
+                        loc: statement.loc.clone(),
+                        kind: TypeErrorKind::MismatchedIfConditionType,
+                    })]);
+                }
+                self.resolve_statement(then)?;
+                if let Some(r#else) = r#else {
+                    self.resolve_statement(r#else)?;
+                }
+            }
         }
         Ok(())
     }
@@ -485,6 +505,7 @@ pub enum TypeErrorKind {
         actual_arguments: usize,
         function_name: Option<String>,
     },
+    MismatchedIfConditionType,
 }
 
 #[derive(Clone)]
@@ -563,6 +584,9 @@ impl CompilerError for TypeError {
                     "{s} arguments were provided. Function{function_name} expects {expected_arguments} arguments, but got {actual_arguments}"
                 )
             }
+            TypeErrorKind::MismatchedIfConditionType => {
+                "If condition should evaluate to `bool` type".to_string()
+            }
         }
     }
 
@@ -589,6 +613,7 @@ impl CompilerError for TypeError {
                 None
             }
             TypeErrorKind::InvalidArity { .. } => None,
+            TypeErrorKind::MismatchedIfConditionType => None,
         }
     }
 }

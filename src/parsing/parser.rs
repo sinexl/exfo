@@ -21,7 +21,8 @@ use std::rc::Rc;
 /* Grammar:
     program             => decl* EOF ;
     decl                => funcDecl | varDecl | externDecl | statement ;
-    statement           => expressionStatement | blockStatement | returnStatement ;
+    statement           => expressionStatement | blockStatement | returnStatement | ifStatement ; 
+    ifStatement         => "if" expression statement ( "else" statement )? ;
     expressionStatement => expression ";" ;
     blockStatement      => "{" (declaration*)? "}" ;
     varDecl             => IDENTIFIER ":" type? ("=" expression)? ";" ;
@@ -271,8 +272,32 @@ impl<'a> Parser<'a> {
         } else if self.consume(&[TokenType::Return]).is_some() {
             self.restore_state(state);
             return self.parse_return_statement();
+        } else if self.consume(&[TokenType::If]).is_some() { 
+            self.restore_state(state); 
+            return self.parse_if_statement(); 
         }
         self.parse_expression_statement()
+    }
+    
+    pub fn parse_if_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let loc = self.expect(&[TokenType::If], "Expected if keyword")?.loc;
+        
+        let condition = self.parse_expression()?; 
+        
+        let then = self.parse_statement()?; 
+        let mut r#else = None; 
+        if self.consume(&[TokenType::Else]).is_some() { 
+            r#else = Some(self.parse_statement()?); 
+        }
+        
+        Ok(self.bump.alloc(Statement { 
+            kind: StatementKind::If {
+                condition,
+                then,
+                r#else,
+            },
+            loc,
+        }))
     }
 
     pub fn parse_return_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {

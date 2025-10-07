@@ -68,6 +68,15 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             }
             writeln!(f, ";")?;
         }
+        Opcode::Label { index } => {
+            writeln!(f, ".label{index}:")?;
+        }
+        Opcode::JmpIfNot { label, condition } => {
+            writeln!(f, "{tab}jmp_if_not {condition} -> .label{label}")?
+        }
+        Opcode::Jmp { label } => { 
+            writeln!(f, "{tab}jmp -> {label}")? 
+        }
     }
 
     Ok(())

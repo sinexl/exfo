@@ -22,6 +22,7 @@ pub struct Compiler<'ir, 'ast> {
     pub ir: &'ir mut IntermediateRepresentation<'ir>,
 
     stack_size: StackSize,
+    label_count: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -55,6 +56,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             stack_size: StackSize::zero(),
             resolutions,
             variables: Stack::new(),
+            label_count: 0,
         }
     }
 }
@@ -67,6 +69,14 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
         }
         self.stack_size.count
     }
+    // This functions allocates a label but doesn't place it anywhere.
+    // To place label, Op::Label is used.
+    pub fn allocate_label(&mut self) -> usize {
+        let index = self.label_count;
+        self.label_count += 1;
+        index
+    }
+
     pub fn compile_expression(&mut self, expression: &Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind } => {
@@ -300,6 +310,49 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             StatementKind::Return(val) => {
                 let ret_arg = val.as_ref().map(|arg| self.compile_expression(arg));
                 self.push_opcode(Opcode::Return(ret_arg));
+            }
+            StatementKind::If {
+                condition,
+                then,
+                r#else,
+            } => {
+                let has_else = r#else.is_some();
+                /*
+                  Scheme of if statement in IR:
+                    stmt1;
+                    condition;
+                    if !condition: jump else_label
+                        then; // only going to be executed if condition is true
+                        out;  // prevent falling through to `else_branch`.
+                    else_label:
+                        r#else
+                    out_label:
+                    stmt2 // code after if-else block.
+                */
+
+                let stack_size = self.stack_size.count;
+                let condition = self.compile_expression(condition);
+                self.stack_size.count = stack_size;
+
+                let else_label = if has_else { self.allocate_label() } else { 0 };
+                let out_label = self.allocate_label();
+                self.push_opcode(Opcode::JmpIfNot {
+                    label: if has_else { else_label } else { out_label },
+                    condition,
+                });
+                self.compile_statement(then);
+
+                if has_else {
+                    self.push_opcode(Opcode::Jmp { label: out_label });
+                }
+
+                if let Some(r#else) = r#else {
+                    self.push_opcode(Opcode::Label { index: else_label });
+                    self.compile_statement(r#else);
+                }
+                self.push_opcode(Opcode::Label {
+                    index: if has_else { out_label } else { else_label },
+                });
             }
         }
     }

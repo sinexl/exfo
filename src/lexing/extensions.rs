@@ -42,6 +42,8 @@ impl StringExtensions for str {
             "return" => Return,
             "true" => True,
             "false" => False,
+            "if" => If,
+            "else" => Else,
             _ => Id,
         }
     }

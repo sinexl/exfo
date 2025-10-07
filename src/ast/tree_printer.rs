@@ -107,6 +107,23 @@ pub fn print_statement(
                 write!(f, "{tab}{ret}")?;
             }
         }
+        StatementKind::If {
+            condition,
+            then,
+            r#else,
+        } => {
+            writeln!(f, "If")?;
+            write!(f, "{tab}condition = {condition}")?;
+            write!(
+                f,
+                "{tab}do = \n{then}",
+                then = PrintStatement(then, indent + 1)
+            )?;
+
+            if let Some(r#else) = r#else {
+                write!(f, "else = \n{}", PrintStatement(r#else, indent + 1))?;
+            }
+        }
     }
     Ok(())
 }

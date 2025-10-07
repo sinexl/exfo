@@ -22,6 +22,16 @@ pub enum Opcode<'a> {
         result: usize,
         arg: Arg<'a>,
     },
+    Label {
+        index: usize,
+    },
+    JmpIfNot {
+        label: usize,
+        condition: Arg<'a>,
+    },
+    Jmp {
+        label: usize,
+    },
     Return(Option<Arg<'a>>),
 }
 

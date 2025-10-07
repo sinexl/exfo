@@ -143,6 +143,19 @@ impl<'a> Codegen<'a> {
                     asm!(self, "  popq %rbp");
                     asm!(self, "  ret");
                 }
+                Opcode::Label { index } => {
+                    asm!(self, ".label_{index}:")
+                }
+                Opcode::JmpIfNot { label, condition } => { 
+                    comment!(self, "JmpIfNot");
+                    self.load_arg_to_reg(condition, "rax");
+                    asm!(self, "  test %rax, %rax"); 
+                    asm!(self, "  jnz .label_{label}")
+                }
+                Opcode::Jmp { label } => {
+                    comment!(self, "Jmp");
+                    asm!(self, "  jmp .label_{label}");
+                }
             }
             comment!(self);
         }
