@@ -1,0 +1,12 @@
+extern "C" func print_bool(bool): void; 
+func main(): void { 
+    f := 10; 
+    s := 15;
+    a: bool = false; 
+    a = f == s; print_bool(a); 
+    a = f != s; print_bool(a); 
+    a = f > s;  print_bool(a); 
+    a = f >= s; print_bool(a); 
+    a = f < s;  print_bool(a); 
+    a = f <= s; print_bool(a); 
+} 

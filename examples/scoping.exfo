@@ -1,0 +1,29 @@
+extern "C" func print_bool(bool): void; 
+extern "C" func print_i64(int): void; 
+
+func main(): int { 
+    a := 1; 
+    print_i64(a);  // prints "1" 
+    a := a + 1; // Shadowing. `a` now points to another variable on the stack. 
+    print_i64(a); // prints "2" 
+    
+    // Changing type via shadowing. Exfo is statically typed language, but a single name can point 
+    // to couple if different "objects" in memory 
+    // After variable shadowing, previous value unreachable.
+    a := false; 
+    print_bool(a);  // prints "false" 
+    
+    a := 2; 
+    a = a + 1; // Mutation. Update add "1" to the memory pointed by "a" 
+    print_i64(a);
+    
+    b := 10 
+    print_i64(b); 
+    { 
+        b = b + 1; 
+        print_i64(b); 
+    } 
+    print_i64(b);
+    
+    return 0; 
+} 

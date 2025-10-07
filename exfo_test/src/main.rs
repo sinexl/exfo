@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::env::Args;
 use std::path::Path;
 use std::process::Command;
-use std::{fs, io};
+use std::{env, fs, io};
 
 #[derive(Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq, Eq)]
 struct TestResult {
@@ -96,9 +96,14 @@ fn record_tests<P: AsRef<Path>>(
         let path = path.as_ref();
         let stem = path.file_stem().unwrap().to_str().unwrap();
         let test_bin_path = test_bin.join(stem);
+        println!("{}", env::current_dir()?.display()); 
+        let helper_path = Path::new("./putnum.c");
+        dbg!(helper_path.exists());
         Command::new(compiler_path)
             .arg(path)
             .arg("-o")
+            .arg("-c_helper")
+            .arg(helper_path)
             .arg(&test_bin_path)
             .output()?;
 

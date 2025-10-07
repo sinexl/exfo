@@ -316,7 +316,6 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 then,
                 r#else,
             } => {
-                let has_else = r#else.is_some();
                 /*
                   Scheme of if statement in IR:
                     stmt1;
@@ -334,25 +333,22 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 let condition = self.compile_expression(condition);
                 self.stack_size.count = stack_size;
 
-                let else_label = if has_else { self.allocate_label() } else { 0 };
-                let out_label = self.allocate_label();
+                let else_label = self.allocate_label();
                 self.push_opcode(Opcode::JmpIfNot {
-                    label: if has_else { else_label } else { out_label },
+                    label: else_label,
                     condition,
                 });
                 self.compile_statement(then);
 
-                if has_else {
-                    self.push_opcode(Opcode::Jmp { label: out_label });
-                }
-
                 if let Some(r#else) = r#else {
+                    let out_label = self.allocate_label();
+                    self.push_opcode(Opcode::Jmp { label: out_label });
                     self.push_opcode(Opcode::Label { index: else_label });
                     self.compile_statement(r#else);
+                    self.push_opcode(Opcode::Label { index: out_label });
+                } else {
+                    self.push_opcode(Opcode::Label { index: else_label })
                 }
-                self.push_opcode(Opcode::Label {
-                    index: if has_else { out_label } else { else_label },
-                });
             }
         }
     }

@@ -1,0 +1,12 @@
+extern "C" func puts(char_ptr): void; 
+extern "C" func print_bool(bool): void;
+func main(): void { 
+   a := 15; 
+   b := 15; 
+   print_bool(a > b); 
+   if a > b 
+       puts("a is greater than b"); 
+   else if a < b 
+       puts("a is less than b"); 
+   else puts("a is equal to b");
+}

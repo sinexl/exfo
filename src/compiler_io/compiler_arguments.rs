@@ -24,6 +24,9 @@ pub struct CompilerArguments {
     /// Generate position-dependent code
     #[arg(long)]
     pub no_pic: bool,
+    /// Will be removed later. Provide a path for a .c file that will be linked with the final executable
+    #[arg(default_value = "src/putnum.c", long)]
+    pub helper: PathBuf,
 }
 
 impl CompilerArguments {

@@ -150,7 +150,7 @@ impl<'a> Codegen<'a> {
                     comment!(self, "JmpIfNot");
                     self.load_arg_to_reg(condition, "rax");
                     asm!(self, "  test %rax, %rax"); 
-                    asm!(self, "  jnz .label_{label}")
+                    asm!(self, "  jz .label_{label}")
                 }
                 Opcode::Jmp { label } => {
                     comment!(self, "Jmp");

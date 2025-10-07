@@ -100,7 +100,7 @@ fn main() -> io::Result<()> {
     println!();
     let mut cc = Command::new("cc");
     cc.arg(object_path)
-        .arg("src/putnum.c")
+        .arg(&args.helper)
         .arg("-o")
         .arg(output)
         .stdout(Stdio::inherit())

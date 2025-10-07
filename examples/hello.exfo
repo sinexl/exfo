@@ -1,0 +1,7 @@
+// Make C standard function "puts" available in the global scope 
+extern "C" func puts(char_ptr): void; 
+
+func main(): int { 
+    puts("Hello, World!"); 
+    return 0;
+} 
