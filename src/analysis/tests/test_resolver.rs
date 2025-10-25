@@ -1,4 +1,4 @@
-use crate::analysis::analyzer::{AnalysisError, Analyzer, ResolverError, ResolverErrorKind};
+use crate::analysis::resolver::{Resolver, ResolverError, ResolverErrorKind};
 use crate::common::{IdentifierBox, SourceLocation};
 use crate::hashmap;
 use crate::lexing::lexer::Lexer;
@@ -90,10 +90,10 @@ fn success(src: &str) -> HashMap<(usize, usize), usize> {
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
-    let mut analyzer = Analyzer::new(&ast_alloc);
-    let errors = analyzer.resolve_statements(ast);
+    let mut resolver = Resolver::new();
+    let errors = resolver.resolve_statements(ast);
     assert_eq!(errors.len(), 0);
-    analyzer
+    resolver
         .resolutions
         .iter()
         .map(|(expr, depth)| ((expr.loc.line, expr.loc.offset), *depth))
@@ -115,16 +115,7 @@ fn errors(src: &str) -> Vec<ResolverError> {
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
-    let mut analyzer = Analyzer::new(&ast_alloc);
-    analyzer
-        .resolve_statements(ast)
-        .iter()
-        .filter_map(|e| {
-            if let AnalysisError::ResolverError(e) = e {
-                return Some(e);
-            }
-            None
-        })
-        .cloned()
-        .collect()
+    let mut resolver = Resolver::new();
+    resolver
+        .resolve_statements(ast).to_vec()
 }

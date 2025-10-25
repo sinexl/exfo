@@ -1,4 +1,4 @@
-use crate::analysis::analyzer::Resolutions;
+use crate::analysis::resolver::Resolutions;
 use crate::analysis::get_at::GetAt;
 use crate::analysis::r#type::{FunctionType, Type};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'ast> {
     ir_bump: &'ir Bump,
-    ast_bump: &'ast Bump,
+    ast_bump: &'ast Bump, // TODO: Compiler should not do any ast-related allocations.
     current_function: Option<BumpVec<'ir, Opcode<'ir>>>,
     variables: Stack<HashMap<&'ast str, Variable<'ast>>>,
 
@@ -26,7 +26,7 @@ pub struct Compiler<'ir, 'ast> {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct Variable<'a> {
+struct Variable<'a> {
     ty: Type<'a>,
     stack_offset: usize,
 }

@@ -1,4 +1,4 @@
-use crate::analysis::analyzer::Analyzer;
+use crate::analysis::resolver::Resolver;
 use crate::code_generation::codegen::Codegen;
 use crate::common::CompilerError;
 use crate::compiler_io::compiler_arguments::CompilerArguments;
@@ -46,8 +46,8 @@ fn main() -> io::Result<()> {
     push_errors!(static_errors, errors);
 
     // Static analysis
-    let mut analyzer = Analyzer::new(&ast_allocator);
-    let errors = analyzer.analyze_statements(ast);
+    let mut resolver = Resolver::new();
+    let errors = resolver.resolve_statements(ast);
     push_errors!(static_errors, errors);
     // Error reporting
     if !static_errors.is_empty() {
@@ -58,7 +58,7 @@ fn main() -> io::Result<()> {
     }
 
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator, &ast_allocator, analyzer.resolutions);
+    let mut compiler = Compiler::new(&ir_allocator, &ast_allocator, resolver.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
     dprintln!(args, "{ir}");

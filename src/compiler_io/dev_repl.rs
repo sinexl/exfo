@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use crate::analysis::analyzer::Analyzer;
+use crate::analysis::resolver::Resolver;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::common::CompilerError;
 use crate::compiler_io::util::get_line;
@@ -26,8 +26,8 @@ pub fn dev_repl() {
         let (statements, errors) = parser.parse_program();
         crate::push_errors!(static_errors, errors);
 
-        let mut analyzer = Analyzer::new(&ast_alloc);
-        let errors = analyzer.analyze_statements(statements);
+        let mut resolver = Resolver::new();
+        let errors = resolver.resolve_statements(statements);
         crate::push_errors!(static_errors, errors);
 
         for statement in statements {
@@ -38,7 +38,7 @@ pub fn dev_repl() {
         }
 
         if static_errors.is_empty() {
-            let mut comp = Compiler::new(&ir_alloc, &ast_alloc, analyzer.resolutions);
+            let mut comp = Compiler::new(&ir_alloc, &ast_alloc, resolver.resolutions);
             comp.compile_statements(statements);
             println!("{ir}", ir = comp.ir);
         } else {
