@@ -43,3 +43,15 @@ pub enum Arg<'a> {
     ExternalFunction(Identifier<'a>),
     StackOffset { offset: usize, size: usize },
 }
+
+impl Arg<'_> {
+    pub fn size(&self) -> usize {
+        match self {
+            Arg::Bool(_) => 1,
+            Arg::Int64 { .. } => 8,
+            Arg::String { .. } => 8,
+            Arg::ExternalFunction(_) => 8,
+            Arg::StackOffset { size, .. } => *size,
+        }
+    }
+}

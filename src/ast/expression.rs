@@ -19,7 +19,7 @@ impl<'a> Hash for Expression<'a> {
     }
 }
 
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ExpressionKind<'ast> {
     Binop {
         left: &'ast Expression<'ast>,

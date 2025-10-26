@@ -2,6 +2,7 @@ use crate::lexing::token::Token;
 use bumpalo::Bump;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 use std::rc::Rc;
 
 #[derive(Debug, Hash, Default, Clone, Eq, PartialEq)]

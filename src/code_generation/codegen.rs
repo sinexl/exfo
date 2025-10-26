@@ -1,9 +1,11 @@
 use crate::ast::binop::BinopKind;
+use crate::code_generation::register::Register;
+use crate::code_generation::register::Register::*;
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use std::fmt::Write;
 
-pub const CALL_REGISTERS: &[&str] = &["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+pub const CALL_REGISTERS: &[Register] = &[Rdi, Rsi, Rdx, Rcx, R8, R9];
 
 macro_rules! asm {
     ($dst:expr, $($fmt:tt)*) => {
@@ -86,8 +88,8 @@ impl<'a> Codegen<'a> {
                     kind,
                 } => {
                     comment!(self, "Binop ({})", kind.operator());
-                    self.load_arg_to_reg(left, "rax");
-                    self.load_arg_to_reg(right, "rcx");
+                    self.load_arg_to_reg(left, Rax);
+                    self.load_arg_to_reg(right, Rcx);
                     match (kind, kind.is_logical()) {
                         (kind, false) => {
                             match kind {
@@ -126,18 +128,24 @@ impl<'a> Codegen<'a> {
                 }
                 Opcode::Negate { result, item } => {
                     comment!(self, "Negate");
-                    self.load_arg_to_reg(item, "rax");
+                    self.load_arg_to_reg(item, Rax);
                     asm!(self, "  negq %rax");
                     asm!(self, "  movq %rax, -{result}(%rbp)");
                 }
                 Opcode::Assign { result, arg: item } => {
                     comment!(self, "Assign");
-                    self.load_arg_to_reg(item, "rax");
-                    asm!(self, "  movq %rax, -{result}(%rbp)");
+                    let register = match item.size() {
+                        8 => Rax,
+                        1 => Al,
+                        _ => unreachable!("unsupported size of operation"),
+                    };
+                    let p = register.prefix();
+                    self.load_arg_to_reg(item, register);
+                    asm!(self, "  mov{p} %{register}, -{result}(%rbp)");
                 }
                 Opcode::Return(ret) => {
                     if let Some(ret) = ret {
-                        self.load_arg_to_reg(ret, "rax");
+                        self.load_arg_to_reg(ret, Rax);
                     }
                     asm!(self, "  movq %rbp, %rsp");
                     asm!(self, "  popq %rbp");
@@ -146,10 +154,10 @@ impl<'a> Codegen<'a> {
                 Opcode::Label { index } => {
                     asm!(self, ".label_{index}:")
                 }
-                Opcode::JmpIfNot { label, condition } => { 
+                Opcode::JmpIfNot { label, condition } => {
                     comment!(self, "JmpIfNot");
-                    self.load_arg_to_reg(condition, "rax");
-                    asm!(self, "  test %rax, %rax"); 
+                    self.load_arg_to_reg(condition, Register::Al);
+                    asm!(self, "  test %rax, %rax");
                     asm!(self, "  jz .label_{label}")
                 }
                 Opcode::Jmp { label } => {
@@ -165,30 +173,31 @@ impl<'a> Codegen<'a> {
         asm!(self, "  ret");
     }
 
-    pub fn load_arg_to_reg(&mut self, arg: &Arg<'a>, reg: &str) {
+    pub fn load_arg_to_reg(&mut self, arg: &Arg<'a>, reg: Register) {
+        let p = reg.prefix();
         match arg {
             Arg::Int64 { bits, signed } => {
                 assert!(signed); // TODO 
                 let value = i64::from_le_bytes(*bits);
-                asm!(self, "  movq ${}, %{}", value, reg);
+                asm!(self, "  mov{p} ${}, %{}", value, reg);
             }
             Arg::Bool(bool) => {
-                asm!(self, "  movq ${}, %{}", *bool as i32, reg);
+                asm!(self, "  mov{p} ${}, %{}", *bool as i32, reg);
             }
             Arg::ExternalFunction(name) => {
                 if self.pic {
-                    asm!(self, "  movq {}@GOTPCREL(%rip), %{reg}", name.name)
+                    asm!(self, "  mov{p} {}@GOTPCREL(%rip), %{reg}", name.name)
                 } else {
-                    asm!(self, "  movq {}, %{reg}", name.name,);
+                    asm!(self, "  mov{p} {}, %{reg}", name.name,);
                 }
             }
-            Arg::StackOffset { offset, size: _ } => {
-                asm!(self, "  movq -{offset}(%rbp), %{reg}");
+            Arg::StackOffset { offset, size } => {
+                asm!(self, "  mov{p} -{offset}(%rbp), %{reg}");
             }
             Arg::String { index } => {
-                if self.pic { 
+                if self.pic {
                     asm!(self, "  leaq .STR{index}(%rip), %{reg}")
-                } else { 
+                } else {
                     asm!(self, "  movq $.STR{index}, %{reg}")
                 }
             }
@@ -199,25 +208,25 @@ impl<'a> Codegen<'a> {
         asm!(self, ".section .text");
         for v in self.ir.functions.values() {
             self.generate_function(v);
-        } 
-        self.generate_data(); 
+        }
+        self.generate_data();
         self.output
     }
 
     fn generate_data(&mut self) {
         comment!(self, "--- Data Section ---");
-        asm!(self, ".section .rodata"); 
-        for (i, s) in self.ir.strings.iter().enumerate() { 
+        asm!(self, ".section .rodata");
+        for (i, s) in self.ir.strings.iter().enumerate() {
             asm!(self, ".STR{i}:");
             comment!(self, "{:?}", s);
-            write!(self.output, "  .byte ").unwrap(); 
-            for c in s.chars() { 
-                write!(self.output, "0x{:02X}, ", c as u8).unwrap(); 
+            write!(self.output, "  .byte ").unwrap();
+            for c in s.chars() {
+                write!(self.output, "0x{:02X}, ", c as u8).unwrap();
             }
-            asm!(self, "0x00"); 
+            asm!(self, "0x00");
         }
     }
-    
+
     fn call_arg(&mut self, arg: &Arg<'a>) {
         match arg {
             Arg::ExternalFunction(name) => {
@@ -229,8 +238,8 @@ impl<'a> Codegen<'a> {
                 asm!(self, "  call {}", name);
             }
             _ => {
-                self.load_arg_to_reg(arg, "rax"); 
-                asm!(self, "  call *%rax"); 
+                self.load_arg_to_reg(arg, Rax);
+                asm!(self, "  call *%rax");
             }
         }
     }

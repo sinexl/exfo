@@ -80,7 +80,10 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
     pub fn compile_expression(&mut self, expression: &Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind } => {
-                let size = left.ty.get().size();
+                let size = match kind.is_logical() {
+                    true => Type::Bool.size(),
+                    false => left.ty.get().size()
+                };
                 let left = self.compile_expression(left);
                 let right = self.compile_expression(right);
                 let offset = self.allocate_on_stack(size);
