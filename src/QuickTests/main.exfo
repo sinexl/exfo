@@ -1,39 +1,14 @@
-func main(): void { 
-    extern "C" func puts(char_ptr): void;
-    if 1 > 2 puts("1 is bigger than 2"); 
-    else puts("1 is less than 2");
-} 
-/*
-extern "C" func print_bool(bool): void; 
-/*
-func pbool(a: bool) { 
-    if a { 
-        puts("true"); 
-        return;
-    } 
-    puts("false");
-    return;
-}
-*/
-func main(): void { 
-    extern "C" func puts(char_ptr): void; 
-    if 10 == 15 { 
-        puts("10 is equal to 15");
-    } 
-    else { 
-        puts("10 is not equal to 15"); 
-    }  
-   
-    /*
-    a = f == s; pbool(a); 
-    a = f != s; pbool(a); 
-    a = f >  s; pbool(a); 
-    a = f >= s; pbool(a); 
-    a = f <  s; pbool(a); 
-    a = f <= s; pbool(a); 
-    */
-    
-   
-} 
 
-*/
+extern "C" func print_i64(int): void;
+func factorial(n: int): int {
+    if n < 1 return 1;
+    return n * factorial(n - 1);
+}
+
+func main(): int {
+    a := 5;
+    factorial := factorial(a);
+    print_i64(factorial);
+    b := factorial + a;
+    print_i64(b);
+}

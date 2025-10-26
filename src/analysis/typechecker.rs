@@ -1,15 +1,16 @@
-use crate::analysis::r#type::{FunctionType, Type};
-use crate::ast::expression::{Expression, ExpressionKind};
-use crate::ast::statement::VariableDeclaration;
-use crate::ast::statement::{Statement, StatementKind};
-use crate::common::{CompilerError, SourceLocation, Stack};
-use bumpalo::Bump;
-use std::cell::Cell;
-use std::collections::HashMap;
 use crate::analysis::get_at::GetAt;
 use crate::analysis::resolver::Resolutions;
+use crate::analysis::r#type::{FunctionType, Type};
+use crate::ast::expression::{Expression, ExpressionKind};
+use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
+use crate::ast::statement::{Statement, StatementKind};
+use crate::common::{BumpVec, CompilerError, SourceLocation, Stack};
+use bumpalo::Bump;
+use bumpalo::collections::CollectIn;
+use std::cell::Cell;
+use std::collections::HashMap;
 
-struct Typechecker<'ast> {
+pub struct Typechecker<'ast> {
     current_function_type: Option<*const Cell<Type<'ast>>>,
     bump: &'ast Bump,
 
@@ -19,6 +20,17 @@ struct Typechecker<'ast> {
 
 struct Variable<'a> {
     ty: Cell<Type<'a>>,
+}
+
+impl<'ast> Typechecker<'ast> {
+    pub fn new(bump: &'ast Bump, resolutions: Resolutions<'ast>) -> Self {
+        Self {
+            current_function_type: None,
+            bump,
+            resolutions,
+            locals: vec![HashMap::new()],
+        }
+    }
 }
 
 impl<'ast> Typechecker<'ast> {
@@ -32,7 +44,7 @@ impl<'ast> Typechecker<'ast> {
                 self.typecheck_expression(right)?;
                 if left.ty != right.ty {
                     return Err(TypeError {
-                        kind: TypeErrorKind::Todo,
+                        kind: TypeErrorKind::Todo("coercion".to_owned()),
                         loc: expression.loc.clone(),
                     });
                 }
@@ -50,17 +62,24 @@ impl<'ast> Typechecker<'ast> {
                 self.typecheck_expression(value)?;
                 if target.ty != value.ty {
                     return Err(TypeError {
-                        kind: TypeErrorKind::Todo,
+                        kind: TypeErrorKind::Todo("coercion".to_owned()),
                         loc: expression.loc.clone(),
                     });
                 }
                 expression.ty.set(target.ty.get());
             }
             ExpressionKind::Literal(_) => {
-                assert_ne!(expression.ty.get(), Type::Unknown);
+                assert_ne!(
+                    expression.ty.get(),
+                    Type::Unknown,
+                    "Compiler bug: literals should always have a type."
+                );
             }
             ExpressionKind::VariableAccess(n) => {
-                let depth = self.resolutions.get(expression).expect("Analysis failed");
+                let depth = self
+                    .resolutions
+                    .get(expression)
+                    .expect("Compiler bug: resolution failed");
                 let var = self.locals.get_at(&n.name, *depth);
                 expression.ty.set(var.ty.get());
             }
@@ -92,8 +111,8 @@ impl<'ast> Typechecker<'ast> {
                                 kind: TypeErrorKind::MismatchedArgumentType {
                                     function_location: None,
                                     function_name: None, // TODO: Get function name and location
-                                    expected_type: expected.to_string(),
-                                    actual_type: got.to_string(),
+                                    expected_type: Box::from(expected.to_string().as_str()),
+                                    actual_type: Box::from(expected.to_string().as_str()),
                                 },
                             });
                         }
@@ -107,6 +126,22 @@ impl<'ast> Typechecker<'ast> {
         Ok(())
     }
 
+    pub fn typecheck_statements(
+        &mut self,
+        statements: &'ast [&'ast Statement<'ast>],
+    ) -> Result<(), Vec<TypeError>> {
+        let mut errors = Vec::new();
+        for statement in statements {
+            if let Err(e) = self.typecheck_statement(statement) {
+                errors.push(e);
+            }
+        }
+
+        if errors.is_empty() {
+            return Ok(());
+        }
+        Err(errors)
+    }
     pub fn typecheck_statement(
         &mut self,
         statement: &'ast Statement<'ast>,
@@ -116,8 +151,51 @@ impl<'ast> Typechecker<'ast> {
                 self.typecheck_expression(expression)?
             }
 
-            StatementKind::FunctionDeclaration(_) => {
-                todo!("Typecheck functions not yet implemented")
+            StatementKind::FunctionDeclaration(FunctionDeclaration {
+                name,
+                parameters,
+                body,
+                return_type,
+            }) => {
+                // if return_type.get() == Type::Unknown {
+                //     let actual = self.try_infer_type(body)?;
+                //     return_type.set(actual);
+                // }
+                let b = self.bump;
+                let fn_type = FunctionType {
+                    return_type: b.alloc(return_type.get()),
+                    parameters: parameters
+                        .iter()
+                        .map(|p| p.ty)
+                        .collect_in::<BumpVec<_>>(b)
+                        .into_bump_slice(),
+                };
+                self.locals
+                    .last_mut()
+                    .expect("Compiler bug: there should be at least a global scope")
+                    .insert(
+                        name.name,
+                        Variable {
+                            ty: Type::Function(fn_type).into(),
+                        },
+                    );
+                self.current_function_type =
+                    Some(&self.locals.last().unwrap().get(name.name).unwrap().ty);
+                self.locals.push(HashMap::new());
+                for param in *parameters {
+                    self.locals.last_mut().unwrap().insert(
+                        param.name.name,
+                        Variable {
+                            ty: param.ty.into(),
+                        },
+                    );
+                }
+                for statement in *body {
+                    self.typecheck_statement(statement)?;
+                }
+                self.current_function_type = None;
+
+                self.locals.pop();
                 // TODO: If there are no return in function and no return type is specified, treat it as returning void
             }
             StatementKind::VariableDeclaration(VariableDeclaration {
@@ -146,8 +224,15 @@ impl<'ast> Typechecker<'ast> {
                 if variable_type.get() == Type::Unknown {
                     variable_type.set(initializer_type);
                 } else if variable_type.get() != initializer_type {
-                    todo!("For now, initializer type must be the same with declaration type")
+                    return Err(TypeError {
+                        loc: Default::default(),
+                        kind: TypeErrorKind::Todo("Coercions are not implemented yet".to_owned()),
+                    });
                 }
+                self.locals
+                    .last_mut()
+                    .expect("Compiler bug: there should be at least a global scope")
+                    .insert(name.name, Variable { ty: ty.clone() });
             }
             StatementKind::Block(statements) => {
                 for statement in *statements {
@@ -179,8 +264,24 @@ impl<'ast> Typechecker<'ast> {
                     }
                 }
             }
-            StatementKind::Extern(_) => {
-                todo!("Typecheck extern")
+            StatementKind::Extern(ExternalFunction {
+                name,
+                kind: _kind,
+                parameters,
+                return_type,
+            }) => {
+                self.locals
+                    .last_mut()
+                    .expect("Compiler bug: there should be at least a global scope.")
+                    .insert(
+                        name.name,
+                        Variable {
+                            ty: Cell::new(Type::Function(FunctionType {
+                                return_type: self.bump.alloc(return_type.get()),
+                                parameters,
+                            })),
+                        },
+                    );
             }
             StatementKind::If {
                 condition,
@@ -203,10 +304,34 @@ impl<'ast> Typechecker<'ast> {
 
         Ok(())
     }
+
+    pub fn try_infer_type(
+        &mut self,
+        body: &'ast [&'ast Statement<'ast>],
+    ) -> Result<Type<'ast>, TypeError> {
+        todo!()
+    }
 }
 pub struct TypeError {
     pub loc: SourceLocation,
     pub kind: TypeErrorKind,
+}
+
+pub enum TypeErrorKind {
+    Todo(String),
+    MismatchedArgumentType {
+        function_location: Option<SourceLocation>,
+        function_name: Option<Box<str>>,
+        expected_type: Box<str>,
+        actual_type: Box<str>,
+    },
+    InvalidArity {
+        expected_arguments: usize,
+        actual_arguments: usize,
+        function_name: Option<String>,
+    },
+    MismatchedIfConditionType,
+    CouldntInferFunctionReturnType,
 }
 impl CompilerError for TypeError {
     fn location(&self) -> SourceLocation {
@@ -215,7 +340,7 @@ impl CompilerError for TypeError {
 
     fn message(&self) -> String {
         match &self.kind {
-            TypeErrorKind::Todo => todo!(),
+            TypeErrorKind::Todo(message) => format!("Not implemented: {}", message),
             TypeErrorKind::MismatchedArgumentType {
                 function_location: _function_location,
                 function_name: _function_name,
@@ -251,12 +376,15 @@ impl CompilerError for TypeError {
             TypeErrorKind::MismatchedIfConditionType => {
                 "If condition should evaluate to `bool` type".to_string()
             }
+            TypeErrorKind::CouldntInferFunctionReturnType => {
+                "Could not infer function return type".to_string()
+            }
         }
     }
 
     fn note(&self) -> Option<String> {
         match &self.kind {
-            TypeErrorKind::Todo => None,
+            TypeErrorKind::Todo(_) => None,
             TypeErrorKind::MismatchedArgumentType {
                 function_location,
                 function_name,
@@ -278,21 +406,7 @@ impl CompilerError for TypeError {
             }
             TypeErrorKind::InvalidArity { .. } => None,
             TypeErrorKind::MismatchedIfConditionType => None,
+            TypeErrorKind::CouldntInferFunctionReturnType => None,
         }
     }
-}
-pub enum TypeErrorKind {
-    Todo,
-    MismatchedArgumentType {
-        function_location: Option<SourceLocation>,
-        function_name: Option<Box<str>>,
-        expected_type: String,
-        actual_type: String,
-    },
-    InvalidArity {
-        expected_arguments: usize,
-        actual_arguments: usize,
-        function_name: Option<String>,
-    },
-    MismatchedIfConditionType,
 }

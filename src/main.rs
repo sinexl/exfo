@@ -1,4 +1,5 @@
 use crate::analysis::resolver::Resolver;
+use crate::analysis::typechecker::Typechecker;
 use crate::code_generation::codegen::Codegen;
 use crate::common::CompilerError;
 use crate::compiler_io::compiler_arguments::CompilerArguments;
@@ -49,6 +50,14 @@ fn main() -> io::Result<()> {
     let mut resolver = Resolver::new();
     let errors = resolver.resolve_statements(ast);
     push_errors!(static_errors, errors);
+    let resolutions = resolver.resolutions;
+
+    let mut type_checker = Typechecker::new(&ast_allocator, resolutions);
+    let errors = type_checker.typecheck_statements(ast);
+    if let Err(r) = errors {
+        push_errors!(static_errors, r);
+    }
+
     // Error reporting
     if !static_errors.is_empty() {
         for e in static_errors {
@@ -58,7 +67,7 @@ fn main() -> io::Result<()> {
     }
 
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator, &ast_allocator, resolver.resolutions);
+    let mut compiler = Compiler::new(&ir_allocator, &ast_allocator, type_checker.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
     dprintln!(args, "{ir}");
