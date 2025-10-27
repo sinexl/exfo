@@ -77,6 +77,16 @@ impl<'a> Parser<'a> {
     pub fn parse_program(&mut self) -> (&'a [&'a Statement<'a>], Box<[ParseError]>) {
         let mut statements = BumpVec::new_in(self.bump);
         let mut errors = Vec::new();
+        if self.tokens.len() == 1 {
+            return (
+                &[],
+                vec![ParseError {
+                    location: self.tokens.last().unwrap().loc.clone(),
+                    kind: ParseErrorKind::EmptyInput,
+                }]
+                .into_boxed_slice(),
+            );
+        }
         while !self.at_eof() {
             match self.parse_declaration() {
                 Err(error) => errors.push(error),
@@ -594,7 +604,7 @@ impl<'a> Parser<'a> {
             kind: Binop { left, right, kind },
             loc,
             id,
-            ty: Cell::new(Type::Unknown), // TODO: maybe use type of left or right
+            ty: Cell::new(Type::Unknown),
         })
     }
 
@@ -700,7 +710,7 @@ impl Parser<'_> {
         if let Some(tk) = self.consume(expected) {
             return Ok(tk);
         }
-        let last_token_in_input = self.tokens.last().unwrap().clone(); // TODO: Ensure that input is not empty preemptively 
+        let last_token_in_input = self.tokens.last().unwrap().clone();
         let token = self.next_token().unwrap_or(last_token_in_input.clone());
         Err(ParseError {
             location: self.peek_token().unwrap_or(last_token_in_input).loc,
@@ -741,6 +751,7 @@ pub enum ParseErrorKind {
     },
     UnknownToken(Token),
     UnknownExternKind(String),
+    EmptyInput,
 }
 
 impl CompilerError for ParseError {
@@ -766,6 +777,7 @@ impl CompilerError for ParseError {
             UnknownType(b) => format!("unknown type {}", b),
             UnknownExternKind(k) => format!("unknown extern kind: \"{}\"", k),
             UnknownToken(tk) => format!("unknown token: {tk}").to_string(),
+            EmptyInput => "empty input: nothing to parse".to_string(),
         }
     }
 
@@ -779,7 +791,8 @@ impl CompilerError for ParseError {
             UnbalancedBraces => Some(format!("last braces located here: {}", self.location)),
             UnknownType(_) => None,
             UnknownExternKind(_) => None, // todo: maybe point out existing external kinds.
-            UnknownToken(tk) => None,
+            UnknownToken(_) => None,
+            EmptyInput => None,
         }
     }
 }
