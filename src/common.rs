@@ -32,10 +32,14 @@ pub trait CompilerError {
 
 impl Display for dyn CompilerError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let message = self.message();
+        if message.is_empty() {
+            return Ok(());
+        }
         write!(
             f,
             "{loc}: error: {desc}.",
-            desc = self.message(),
+            desc = message,
             loc = self.location()
         )?;
         if let Some(note) = self.note() {

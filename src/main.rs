@@ -52,6 +52,16 @@ fn main() -> io::Result<()> {
     push_errors!(static_errors, errors);
     let resolutions = resolver.resolutions;
 
+    // Error reporting
+    // TODO: Currently, compiler exits if are any errors at resolution pass, which is not correct.
+    //   Ideally, Resolver and Typechecker should produce dummy-results on error, as much as possible
+    //   errors could be reported.
+    if !static_errors.is_empty() {
+        for e in static_errors {
+            eprintln!("{e}");
+        }
+        exit(1);
+    }
     let mut type_checker = Typechecker::new(&ast_allocator, resolutions);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {

@@ -245,7 +245,7 @@ impl<'ast> Typechecker<'ast> {
                     let current_fn = if let Some(current_fn) = self.current_function_type {
                         current_fn
                     } else {
-                        unreachable!("this should be handled by resolver.");
+                        unreachable!("Compiler bug: Top-level returns should be handled by Resolver.")
                     };
 
                     let current_ty = unsafe { (*current_fn).get() };
@@ -332,6 +332,9 @@ pub enum TypeErrorKind {
     },
     MismatchedIfConditionType,
     CouldntInferFunctionReturnType,
+    /// This error kind is needed to ignore malformed code that should be marked as erroneous by previous passes.
+    /// For example, Top-level returns are handled by resolver, so, if we meet such in typechecker, we can skip it
+    FromPrevious,
 }
 impl CompilerError for TypeError {
     fn location(&self) -> SourceLocation {
@@ -379,6 +382,7 @@ impl CompilerError for TypeError {
             TypeErrorKind::CouldntInferFunctionReturnType => {
                 "Could not infer function return type".to_string()
             }
+            TypeErrorKind::FromPrevious => "".to_string(),
         }
     }
 
@@ -407,6 +411,7 @@ impl CompilerError for TypeError {
             TypeErrorKind::InvalidArity { .. } => None,
             TypeErrorKind::MismatchedIfConditionType => None,
             TypeErrorKind::CouldntInferFunctionReturnType => None,
+            TypeErrorKind::FromPrevious => None,
         }
     }
 }
