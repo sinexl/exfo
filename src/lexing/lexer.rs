@@ -1,7 +1,7 @@
 use crate::common::{CompilerError, SourceLocation};
 use crate::lexing::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
-use crate::lexing::lexer::LexerErrorKind::{UnterminatedComment, UnterminatedString};
-use crate::lexing::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
+use crate::lexing::lexer::LexerErrorKind::{UnexpectedCharacter, UnterminatedComment, UnterminatedString};
+use crate::lexing::token::{SINGLE_PUNCTS, Token, TokenType, is_punct};
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::rc::Rc;
@@ -82,8 +82,10 @@ impl Lexer {
                 self.scan_identifier_or_keyword()
             }
             c => {
-                eprintln!("Unexpected character {c}");
-                panic!();
+                return Err(LexerError {
+                    kind: UnexpectedCharacter(c),
+                    location: self.source_loc(self.state),
+                });
             }
         };
 
@@ -348,6 +350,7 @@ impl LexerError {
 pub enum LexerErrorKind {
     UnterminatedString,
     UnterminatedComment,
+    UnexpectedCharacter(char),
 }
 
 impl CompilerError for LexerError {
@@ -359,17 +362,18 @@ impl CompilerError for LexerError {
         use LexerErrorKind::*;
         match self.kind {
             UnterminatedString => "Unterminated string".to_string(),
-            UnterminatedComment => "unclosed comment".to_string(),
+            UnterminatedComment => "Unterminated comment".to_string(),
+            UnexpectedCharacter(ch) => format!("Unexpected character: `{}`", ch),
         }
     }
 
     fn note(&self) -> Option<String> {
         use LexerErrorKind::*;
-        let v = match self.kind {
-            UnterminatedString => &format!("string literal begins here: {}", self.location),
-            UnterminatedComment => &format!("comment begins here: {}", self.location),
-        };
-        Some(v.to_string())
+        match self.kind {
+            UnterminatedString => Some(format!("string literal begins here: {}", self.location)),
+            UnterminatedComment => Some(format!("comment begins here: {}", self.location)),
+            UnexpectedCharacter(_) => None,
+        }
     }
 }
 
