@@ -124,6 +124,17 @@ impl TokenType {
     pub fn from_punct(p: &str) -> Self {
         PUNCTS.with(|c| c[&p])
     }
+
+    pub fn is_statement_beginning(&self) -> bool {
+        match self {
+            Func | Extern | Return | If | Else => true,
+
+            Eof | True | False | OpenParen | CloseParen | OpenBrace | CloseBrace | Dot | Comma
+            | Semicolon | Colon | Equal | EqualEqual | Bang | BangEqual | Less | LessEqual
+            | Greater | GreaterEqual | Plus | Minus | Star | Slash | Id | Integer | Double
+            | String => false,
+        }
+    }
 }
 
 use TokenType::*;

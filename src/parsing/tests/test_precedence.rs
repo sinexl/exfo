@@ -3,7 +3,7 @@ use crate::ast::expression::ExpressionKind;
 use crate::ast::prefix_printer::PrefixPrint;
 use crate::common::SourceLocation;
 use crate::lexing::lexer::Lexer;
-use crate::parsing::parser::{ParseError, Parser, ParserErrorKind};
+use crate::parsing::parser::{ParseError, ParseErrorKind, Parser};
 use bumpalo::Bump;
 use std::rc::Rc;
 
@@ -32,14 +32,14 @@ pub fn parens_unbalanced() {
     assert_eq!(
         fail("(1"),
         ParseError {
-            kind: ParserErrorKind::UnbalancedParens,
+            kind: ParseErrorKind::UnbalancedParens,
             location: SourceLocation::new(Rc::from(PATH), 1, 1),
         }
     );
     assert_eq!(
         fail(" ((1 + 2)"),
         ParseError {
-            kind: ParserErrorKind::UnbalancedParens,
+            kind: ParseErrorKind::UnbalancedParens,
             location: SourceLocation {
                 line: 1,
                 offset: 2,
@@ -93,13 +93,13 @@ pub fn invalid_assignment() {
     assert_eq!(
         fail("1 = 2"),
         ParseError {
-            kind: ParserErrorKind::InvalidAssignment(msg.clone()),
+            kind: ParseErrorKind::InvalidAssignment(msg.clone()),
             location: SourceLocation::new(Rc::from(PATH), 1, 1),
         }
     );
     assert_eq!(
         fail("(1 + a = 5) = 3").kind,
-        ParserErrorKind::InvalidAssignment("binary operation".into())
+        ParseErrorKind::InvalidAssignment("binary operation".into())
     );
 }
 

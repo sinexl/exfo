@@ -12,7 +12,7 @@ use crate::ast::statement::{
 use crate::common::BumpVec;
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
-use crate::parsing::parser::ParserErrorKind::{
+use crate::parsing::parser::ParseErrorKind::{
     InvalidAssignment, UnbalancedParens, UnexpectedToken, UnknownType,
 };
 use bumpalo::Bump;
@@ -21,7 +21,7 @@ use std::rc::Rc;
 /* Grammar:
     program             => decl* EOF ;
     decl                => funcDecl | varDecl | externDecl | statement ;
-    statement           => expressionStatement | blockStatement | returnStatement | ifStatement ; 
+    statement           => expressionStatement | blockStatement | returnStatement | ifStatement ;
     ifStatement         => "if" expression statement ( "else" statement )? ;
     expressionStatement => expression ";" ;
     blockStatement      => "{" (declaration*)? "}" ;
@@ -89,23 +89,37 @@ impl<'a> Parser<'a> {
 
     pub fn parse_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
         let state = self.save_state();
+
+        // --- Function declaration ---
         if self.consume(&[TokenType::Func]).is_some() {
             self.restore_state(state);
-            return self.parse_function_declaration(); // TODO: Sync state of parser on error
+            return self
+                .parse_function_declaration()
+                .map_err(|e| self.sync_and_return(e));
         }
+
+        // --- Variable declaration ---
         if self.consume(&[TokenType::Id]).is_some() {
             if self.consume(&[TokenType::Colon]).is_some() {
                 self.restore_state(state);
-                return self.parse_variable_declaration(); // TODO: Sync state of parser on error
+                return self
+                    .parse_variable_declaration()
+                    .map_err(|e| self.sync_and_return(e));
             }
             self.restore_state(state);
         }
+
+        // --- External declaration ---
         if self.consume(&[TokenType::Extern]).is_some() {
             self.restore_state(state);
-            return self.parse_external_declaration();
+            return self
+                .parse_external_declaration()
+                .map_err(|e| self.sync_and_return(e));
         }
 
-        self.parse_statement()
+        // --- other: statement ---
+        dbg!(self.peek_token());
+        self.parse_statement().map_err(|e| self.sync_and_return(e))
     }
 
     pub fn parse_variable_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
@@ -150,7 +164,7 @@ impl<'a> Parser<'a> {
             _ => {
                 return Err(ParseError {
                     location: kind.loc.clone(),
-                    kind: ParserErrorKind::UnknownExternKind(String::from(kind.string.as_ref())),
+                    kind: ParseErrorKind::UnknownExternKind(String::from(kind.string.as_ref())),
                 });
             }
         };
@@ -272,25 +286,25 @@ impl<'a> Parser<'a> {
         } else if self.consume(&[TokenType::Return]).is_some() {
             self.restore_state(state);
             return self.parse_return_statement();
-        } else if self.consume(&[TokenType::If]).is_some() { 
-            self.restore_state(state); 
-            return self.parse_if_statement(); 
+        } else if self.consume(&[TokenType::If]).is_some() {
+            self.restore_state(state);
+            return self.parse_if_statement();
         }
         self.parse_expression_statement()
     }
-    
+
     pub fn parse_if_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
         let loc = self.expect(&[TokenType::If], "Expected if keyword")?.loc;
-        
-        let condition = self.parse_expression()?; 
-        
-        let then = self.parse_statement()?; 
-        let mut r#else = None; 
-        if self.consume(&[TokenType::Else]).is_some() { 
-            r#else = Some(self.parse_statement()?); 
+
+        let condition = self.parse_expression()?;
+
+        let then = self.parse_statement()?;
+        let mut r#else = None;
+        if self.consume(&[TokenType::Else]).is_some() {
+            r#else = Some(self.parse_statement()?);
         }
-        
-        Ok(self.bump.alloc(Statement { 
+
+        Ok(self.bump.alloc(Statement {
             kind: StatementKind::If {
                 condition,
                 then,
@@ -335,7 +349,7 @@ impl<'a> Parser<'a> {
         if self.consume(&[TokenType::CloseBrace]).is_none() {
             return Err(ParseError {
                 location: left_brace.clone().loc,
-                kind: ParserErrorKind::UnbalancedBraces,
+                kind: ParseErrorKind::UnbalancedBraces,
             });
         }
 
@@ -533,7 +547,7 @@ impl<'a> Parser<'a> {
                 Type::CharPtr,
             ));
         }
-        
+
         if let Some(paren) = self.consume(&[OpenParen]) {
             let parenthesis_loc = paren.loc;
             let expr = self.parse_expression()?;
@@ -546,7 +560,11 @@ impl<'a> Parser<'a> {
             return Ok(expr);
         }
 
-        panic!("unknown token {}", token); // TODO: replace panic with error: UnexpectedToken;
+        self.skip_token();
+        Err(ParseError {
+            kind: ParseErrorKind::UnknownToken(token.clone()),
+            location: token.loc,
+        })
     }
 
     pub fn construct_literal(
@@ -579,6 +597,34 @@ impl<'a> Parser<'a> {
             ty: Cell::new(Type::Unknown), // TODO: maybe use type of left or right
         })
     }
+
+    pub fn sync_and_return<T>(&mut self, err: T) -> T {
+        self.sync_state_to_statement();
+        err
+    }
+    pub fn sync_state_to_statement(&mut self) {
+        if self.at_eof() {
+            return;
+        }
+        self.skip_token();
+
+        while let Ok(tk) = self.peek_token() {
+            if tk.kind.is_statement_beginning() {
+                break;
+            }
+            if tk.kind == TokenType::Semicolon {
+                self.skip_token();
+                break;
+            }
+            self.skip_token();
+        }
+        // while !self.at_eof() && self.peek_token().unwrap().kind != TokenType::Semicolon
+        // {
+        //     // if (self.peek().Type == TokenType.Semicolon) return;
+        //     // if (PeekToken().Type.IsStatementBeginning()) return;
+        //     // SkipToken();
+        // }
+    }
 }
 /// Helper methods for parsing
 impl<'a> Parser<'a> {
@@ -608,7 +654,7 @@ impl Parser<'_> {
             .cloned()
             .ok_or_else(|| ParseError {
                 location: self.tokens.last().unwrap().loc.clone(),
-                kind: ParserErrorKind::AtEof,
+                kind: ParseErrorKind::AtEof,
             })?;
         self.current += 1;
         Ok(tk)
@@ -624,7 +670,7 @@ impl Parser<'_> {
 
         Err(ParseError {
             location: self.tokens.last().unwrap().loc.clone(),
-            kind: ParserErrorKind::AtEof,
+            kind: ParseErrorKind::AtEof,
         })
     }
 
@@ -678,11 +724,11 @@ impl Parser<'_> {
 #[derive(Debug, Eq, PartialEq)]
 pub struct ParseError {
     pub location: SourceLocation,
-    pub kind: ParserErrorKind,
+    pub kind: ParseErrorKind,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ParserErrorKind {
+pub enum ParseErrorKind {
     UnknownType(String),
     AtEof,
     UnbalancedParens,
@@ -693,6 +739,7 @@ pub enum ParserErrorKind {
         got: Token,
         message: String,
     },
+    UnknownToken(Token),
     UnknownExternKind(String),
 }
 
@@ -702,7 +749,7 @@ impl CompilerError for ParseError {
     }
 
     fn message(&self) -> String {
-        use ParserErrorKind::*;
+        use ParseErrorKind::*;
         match &self.kind {
             AtEof => "Nothing to parse".to_string(),
             UnbalancedParens => "unbalanced parentheses".to_string(),
@@ -718,11 +765,12 @@ impl CompilerError for ParseError {
             UnbalancedBraces => "unbalanced braces".to_string(),
             UnknownType(b) => format!("unknown type {}", b),
             UnknownExternKind(k) => format!("unknown extern kind: \"{}\"", k),
+            UnknownToken(tk) => format!("unknown token: {tk}").to_string(),
         }
     }
 
     fn note(&self) -> Option<String> {
-        use ParserErrorKind::*;
+        use ParseErrorKind::*;
         match &self.kind {
             AtEof => None,
             UnbalancedParens => Some(format!("last parenthesis located here: {}", self.location)),
@@ -731,6 +779,7 @@ impl CompilerError for ParseError {
             UnbalancedBraces => Some(format!("last braces located here: {}", self.location)),
             UnknownType(_) => None,
             UnknownExternKind(_) => None, // todo: maybe point out existing external kinds.
+            UnknownToken(tk) => None,
         }
     }
 }
