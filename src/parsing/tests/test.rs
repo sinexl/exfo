@@ -15,7 +15,7 @@ pub fn parser() {
         println!("{:?}", e);
     }
     if !errors.is_empty() {
-        panic!(); 
+        panic!();
     }
 
     for statement in statements {

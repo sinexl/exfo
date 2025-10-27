@@ -79,7 +79,7 @@ impl BinopKind {
             | BinopKind::Subtraction
             | BinopKind::Multiplication
             | BinopKind::Division => false,
-            
+
             BinopKind::Equality
             | BinopKind::Inequality
             | BinopKind::GreaterThan

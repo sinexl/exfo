@@ -1,5 +1,5 @@
-use crate::analysis::resolver::Resolutions;
 use crate::analysis::get_at::GetAt;
+use crate::analysis::resolver::Resolutions;
 use crate::analysis::r#type::{FunctionType, Type};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
@@ -82,7 +82,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             ExpressionKind::Binop { left, right, kind } => {
                 let size = match kind.is_logical() {
                     true => Type::Bool.size(),
-                    false => left.ty.get().size()
+                    false => left.ty.get().size(),
                 };
                 let left = self.compile_expression(left);
                 let right = self.compile_expression(right);
@@ -132,7 +132,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                         }
                     }
                     AstLiteral::FloatingPoint(_) => {
-                        todo!()
+                        todo!("Floats are not supported by compiler yet")
                     }
                     AstLiteral::Boolean(b) => Arg::Bool(*b),
                     AstLiteral::String(s) => {

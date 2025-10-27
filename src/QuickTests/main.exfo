@@ -1,4 +1,3 @@
-
 extern "C" func print_i64(int): void;
 func factorial(n: int): int {
     if n < 1 return 1;
@@ -7,7 +6,7 @@ func factorial(n: int): int {
 
 func main(): int {
     a := 5;
-    factorial := factorial(a);
+    result := factorial(a);
     print_i64(factorial);
     b := factorial + a;
     print_i64(b);

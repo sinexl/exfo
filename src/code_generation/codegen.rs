@@ -71,7 +71,7 @@ impl<'a> Codegen<'a> {
                 } => {
                     comment!(self, "Function call");
                     if args.len() > CALL_REGISTERS.len() {
-                        todo!("More function parameters")
+                        todo!("Passing arguments with stack.")
                     }
 
                     for (i, arg) in args.iter().enumerate() {

@@ -166,17 +166,6 @@ impl<'ast> Resolver<'ast> {
                 self.resolve_expression(value)?;
             }
             ExpressionKind::VariableAccess(read) => {
-                if let Some(value) = current_scope!(self).get(read.name)
-                    && value.state < VariableState::Defined
-                {
-                    // TODO: This is kinda unreachable
-                    return Err(ResolverError {
-                        loc: read.location.clone(),
-                        kind: ResolverErrorKind::ReadingFromInitializer {
-                            read: IdentifierBox::from_borrowed(read),
-                        },
-                    });
-                }
                 self.resolve_local_variable(expression, read)?;
             }
             ExpressionKind::FunctionCall { callee, arguments } => {

@@ -74,9 +74,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::JmpIfNot { label, condition } => {
             writeln!(f, "{tab}jmp_if_not {condition} -> .label{label}")?
         }
-        Opcode::Jmp { label } => { 
-            writeln!(f, "{tab}jmp -> {label}")? 
-        }
+        Opcode::Jmp { label } => writeln!(f, "{tab}jmp -> {label}")?,
     }
 
     Ok(())

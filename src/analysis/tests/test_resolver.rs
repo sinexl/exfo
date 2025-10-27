@@ -116,6 +116,5 @@ fn errors(src: &str) -> Vec<ResolverError> {
     assert!(errors.is_empty());
 
     let mut resolver = Resolver::new();
-    resolver
-        .resolve_statements(ast).to_vec()
+    resolver.resolve_statements(ast).to_vec()
 }

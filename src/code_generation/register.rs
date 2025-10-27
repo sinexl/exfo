@@ -40,7 +40,7 @@ reg_enum! {
 
 impl Register {
     pub fn prefix(&self) -> &'static str {
-        match self.size () {
+        match self.size() {
             8 => "q",
             1 => "b",
             _ => panic!("invalid register size"),

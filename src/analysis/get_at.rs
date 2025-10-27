@@ -14,14 +14,22 @@ where
     fn get_at(&self, key: &K, depth: usize) -> &V {
         let scope_index = self.len() - 1 - depth;
         let scope = &self[scope_index];
-        scope.get(key).unwrap_or_else(|| panic!("No key `{key}` in the scope. \
-        If you see this, it is probably compiler/typechecker and resolver out of sync."))
+        scope.get(key).unwrap_or_else(|| {
+            panic!(
+                "No key `{key}` in the scope. \
+        If you see this, it is probably compiler/typechecker and resolver out of sync."
+            )
+        })
     }
 
     fn get_at_mut(&mut self, key: &K, depth: usize) -> &mut V {
         let scope_index = self.len() - 1 - depth;
         let scope = &mut self[scope_index];
-        scope.get_mut(key).unwrap_or_else(|| panic!("No key `{key}` in the scope. \
-        If you see this, it is probably compiler/typechecker and resolver out of sync."))
+        scope.get_mut(key).unwrap_or_else(|| {
+            panic!(
+                "No key `{key}` in the scope. \
+        If you see this, it is probably compiler/typechecker and resolver out of sync."
+            )
+        })
     }
 }

@@ -1,6 +1,8 @@
 use crate::common::{CompilerError, SourceLocation};
 use crate::lexing::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
-use crate::lexing::lexer::LexerErrorKind::{UnexpectedCharacter, UnterminatedComment, UnterminatedString};
+use crate::lexing::lexer::LexerErrorKind::{
+    UnexpectedCharacter, UnterminatedComment, UnterminatedString,
+};
 use crate::lexing::token::{SINGLE_PUNCTS, Token, TokenType, is_punct};
 use std::fmt::{Display, Formatter};
 use std::fs;

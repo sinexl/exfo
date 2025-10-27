@@ -1,4 +1,3 @@
-use bumpalo::Bump;
 use crate::analysis::resolver::Resolver;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::common::CompilerError;
@@ -6,6 +5,7 @@ use crate::compiler_io::util::get_line;
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
+use bumpalo::Bump;
 
 pub fn dev_repl() {
     let mut exit = false;
@@ -48,5 +48,3 @@ pub fn dev_repl() {
         }
     }
 }
-
-

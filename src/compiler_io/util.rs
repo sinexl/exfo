@@ -1,8 +1,8 @@
-use std::{fs, io};
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::path::Path;
-use std::process::{exit, Command};
+use std::process::{Command, exit};
+use std::{fs, io};
 
 pub fn get_line(msg: &str) -> String {
     let mut res = String::new();
@@ -62,9 +62,8 @@ impl<'a> Display for DisplayCommand<'a> {
 #[macro_export]
 macro_rules! dprintln {
     ($out:expr, $($arg:tt)*) => {{
-        if $out.debug_compiler { 
+        if $out.debug_compiler {
             println!($($arg)*);
         }
     }};
 }
-

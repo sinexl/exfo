@@ -44,7 +44,7 @@ impl<'ast> Typechecker<'ast> {
                 self.typecheck_expression(right)?;
                 if left.ty != right.ty {
                     return Err(TypeError {
-                        kind: TypeErrorKind::Todo("coercion".to_owned()),
+                        kind: TypeErrorKind::Todo("coercion".to_owned()), // TODO.
                         loc: expression.loc.clone(),
                     });
                 }
@@ -62,7 +62,7 @@ impl<'ast> Typechecker<'ast> {
                 self.typecheck_expression(value)?;
                 if target.ty != value.ty {
                     return Err(TypeError {
-                        kind: TypeErrorKind::Todo("coercion".to_owned()),
+                        kind: TypeErrorKind::Todo("coercion".to_owned()), // TODO:
                         loc: expression.loc.clone(),
                     });
                 }
@@ -112,7 +112,7 @@ impl<'ast> Typechecker<'ast> {
                                     function_location: None,
                                     function_name: None, // TODO: Get function name and location
                                     expected_type: Box::from(expected.to_string().as_str()),
-                                    actual_type: Box::from(expected.to_string().as_str()),
+                                    actual_type: Box::from(got.to_string().as_str()),
                                 },
                             });
                         }
@@ -225,8 +225,8 @@ impl<'ast> Typechecker<'ast> {
                     variable_type.set(initializer_type);
                 } else if variable_type.get() != initializer_type {
                     return Err(TypeError {
-                        loc: Default::default(),
-                        kind: TypeErrorKind::Todo("Coercions are not implemented yet".to_owned()),
+                        loc: statement.loc.clone(),
+                        kind: TypeErrorKind::Todo("Coercions are not implemented yet".to_owned()), // TODO
                     });
                 }
                 self.locals
@@ -245,7 +245,9 @@ impl<'ast> Typechecker<'ast> {
                     let current_fn = if let Some(current_fn) = self.current_function_type {
                         current_fn
                     } else {
-                        unreachable!("Compiler bug: Top-level returns should be handled by Resolver.")
+                        unreachable!(
+                            "Compiler bug: Top-level returns should be handled by Resolver."
+                        )
                     };
 
                     let current_ty = unsafe { (*current_fn).get() };

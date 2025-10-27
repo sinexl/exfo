@@ -128,7 +128,6 @@ impl<'a> Parser<'a> {
         }
 
         // --- other: statement ---
-        dbg!(self.peek_token());
         self.parse_statement().map_err(|e| self.sync_and_return(e))
     }
 
