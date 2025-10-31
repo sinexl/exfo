@@ -49,6 +49,9 @@ fn main() -> io::Result<()> {
     // Static analysis
     let mut resolver = Resolver::new();
     let errors = resolver.resolve_statements(ast);
+    for w in resolver.warnings {
+        eprintln!("{}", w);
+    }
     push_errors!(static_errors, errors);
     let resolutions = resolver.resolutions;
 

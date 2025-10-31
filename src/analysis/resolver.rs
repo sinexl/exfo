@@ -1,7 +1,10 @@
+use crate::analysis::get_at::GetAt;
 use crate::ast::expression::{Expression, ExpressionKind};
 use crate::ast::statement::{ExternalFunction, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
-use crate::common::{CompilerError, Identifier, IdentifierBox, SourceLocation, Stack};
+use crate::common::{
+    CompilerError, CompilerWarning, Identifier, IdentifierBox, IntoBox, SourceLocation, Stack,
+};
 use std::collections::HashMap;
 
 type Scope<'ast> = HashMap<
@@ -18,6 +21,7 @@ pub struct Resolver<'ast> {
     in_function: bool,
 
     pub resolutions: Resolutions<'ast>,
+    pub warnings: Vec<Box<dyn CompilerWarning>>,
 }
 
 #[derive(Debug)]
@@ -29,6 +33,7 @@ struct Variable<'ast> {
 pub enum VariableState {
     Declared,
     Defined,
+    Read,
 }
 
 macro_rules! current_scope {
@@ -46,6 +51,7 @@ impl<'ast> Resolver<'ast> {
             current_initializer: None,
             locals: vec![HashMap::new()],
             in_function: false,
+            warnings: vec![],
         }
     }
 }
@@ -167,6 +173,12 @@ impl<'ast> Resolver<'ast> {
             }
             ExpressionKind::VariableAccess(read) => {
                 self.resolve_local_variable(expression, read)?;
+                let depth = self
+                    .resolutions
+                    .get(expression)
+                    .expect("COMPILER BUG: resolve_local_variable failed");
+                let var = self.locals.get_at_mut(&read.name, *depth);
+                var.state = VariableState::Read;
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
                 self.resolve_expression(callee)?;
@@ -180,10 +192,19 @@ impl<'ast> Resolver<'ast> {
     }
     fn declare(&mut self, name: &Identifier<'ast>) {
         let current_scope = current_scope!(self);
-        // Case 1: there are already variables with that name defined in the scope.
+        // Case 1 (Shadowing): there are already variables with that name defined in the scope.
         if let Some(declaration) = current_scope.get_mut(name.name) {
-            // TODO: Catch accidental variable shadows to improve UX of the language
-            //   By example, we could warn user if variable was shadowed but not read from.
+            if declaration.state < VariableState::Read {
+                self.warnings.push(
+                    ResolverWarning {
+                        loc: name.location.clone(),
+                        kind: ResolverWarningKind::AccidentalShadowing {
+                            variable_declaration: IdentifierBox::from_borrowed(&declaration.name),
+                        },
+                    }
+                    .into_box(),
+                );
+            }
             *declaration = Variable {
                 state: VariableState::Declared,
                 name: name.clone(),
@@ -277,6 +298,43 @@ pub struct ResolverError {
     pub loc: SourceLocation,
     pub kind: ResolverErrorKind,
 }
+pub struct ResolverWarning {
+    pub loc: SourceLocation,
+    pub kind: ResolverWarningKind,
+}
+pub enum ResolverWarningKind {
+    AccidentalShadowing { variable_declaration: IdentifierBox },
+}
+
+impl CompilerWarning for ResolverWarning {
+    fn location(&self) -> SourceLocation {
+        self.loc.clone()
+    }
+
+    fn message(&self) -> String {
+        match &self.kind {
+            ResolverWarningKind::AccidentalShadowing {
+                variable_declaration,
+            } => {
+                format!(
+                    "variable `{variable_declaration}` is being shadowing without being read. Did you mean to mutate it?"
+                )
+            }
+        }
+    }
+
+    fn note(&self) -> Option<String> {
+        match &self.kind {
+            ResolverWarningKind::AccidentalShadowing {
+                variable_declaration: decl,
+            } => Some(format!(
+                "`{}` is declared here: {}",
+                decl.name, decl.location
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ResolverErrorKind {
     UndeclaredIdentifier { usage: IdentifierBox },

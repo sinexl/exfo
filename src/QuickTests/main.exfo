@@ -3,11 +3,18 @@ func factorial(n: int): int {
     if n < 1 return 1;
     return n * factorial(n - 1);
 }
+func fibonacci(n: int): int {
+    if n == 0 return 0;
+    if n == 1 return 1;
 
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
 func main(): int {
-    a := 5;
-    result := factorial(a);
-    print_i64(factorial);
-    b := factorial + a;
-    print_i64(b);
+    a := 8;
+    a := 13;
+    b := 10;
+
+
+    print_i64(factorial(a));
+    print_i64(fibonacci(a));
 }
