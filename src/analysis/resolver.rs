@@ -317,7 +317,7 @@ impl CompilerWarning for ResolverWarning {
                 variable_declaration,
             } => {
                 format!(
-                    "variable `{variable_declaration}` is being shadowing without being read. Did you mean to mutate it?"
+                    "variable `{variable_declaration}` is being shadowed without being read. Did you mean to mutate it?"
                 )
             }
         }
