@@ -177,7 +177,7 @@ impl<'a> Codegen<'a> {
         let p = reg.prefix();
         match arg {
             Arg::Int64 { bits, signed } => {
-                assert!(signed); // TODO 
+                assert!(signed, "TODO: Unsigned."); // TODO
                 let value = i64::from_le_bytes(*bits);
                 asm!(self, "  mov{p} ${}, %{}", value, reg);
             }

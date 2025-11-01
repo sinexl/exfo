@@ -304,7 +304,7 @@ impl Lexer {
             loc: self.source_loc(self.token_start),
             integer: 0,
             double: 0f64,
-            string: Default::default(), // TODO: the character itself
+            string: Default::default(),
         }
     }
 }

@@ -138,6 +138,10 @@ impl<'ast> Resolver<'ast> {
                     self.resolve_statement(r#else)?;
                 }
             }
+            StatementKind::While { condition, body } => {
+                self.resolve_expression(condition).map_err(|e| vec![e])?;
+                self.resolve_statement(body)?;
+            }
         }
         Ok(())
     }

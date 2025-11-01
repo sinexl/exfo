@@ -353,6 +353,33 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     self.push_opcode(Opcode::Label { index: else_label })
                 }
             }
+            StatementKind::While { condition, body } => {
+                /*
+                Scheme of While loop in IR:
+                  start:
+                    condition;
+                    if !condition: jump exit;
+                    body1;
+                    bod2;
+                    jump start;
+                  exit:
+                    after1;
+                 */
+                let start = self.allocate_label();
+                self.push_opcode(Opcode::Label { index: start });
+                let stack_size = self.stack_size.count;
+                let condition = self.compile_expression(condition);
+                self.stack_size.count = stack_size;
+
+                let exit = self.allocate_label();
+                self.push_opcode(Opcode::JmpIfNot {
+                    label: exit,
+                    condition,
+                });
+                self.compile_statement(body);
+                self.push_opcode(Opcode::Jmp { label: start });
+                self.push_opcode(Opcode::Label { index: exit });
+            }
         }
     }
 

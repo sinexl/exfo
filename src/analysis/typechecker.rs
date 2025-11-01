@@ -235,9 +235,11 @@ impl<'ast> Typechecker<'ast> {
                     .insert(name.name, Variable { ty: ty.clone() });
             }
             StatementKind::Block(statements) => {
+                self.locals.push(HashMap::new());
                 for statement in *statements {
                     self.typecheck_statement(statement)?;
                 }
+                self.locals.pop();
             }
             StatementKind::Return(val) => {
                 if let Some(val) = val {
@@ -293,14 +295,24 @@ impl<'ast> Typechecker<'ast> {
                 self.typecheck_expression(condition)?;
                 if condition.ty.get() != Type::Bool {
                     return Err(TypeError {
-                        loc: statement.loc.clone(),
-                        kind: TypeErrorKind::MismatchedIfConditionType,
+                        loc: condition.loc.clone(),
+                        kind: TypeErrorKind::MismatchedConditionType("if"),
                     });
                 }
                 self.typecheck_statement(then)?;
                 if let Some(r#else) = r#else {
                     self.typecheck_statement(r#else)?;
                 }
+            }
+            StatementKind::While { condition, body } => {
+                self.typecheck_expression(condition)?;
+                if condition.ty.get() != Type::Bool {
+                    return Err(TypeError {
+                        loc: condition.loc.clone(),
+                        kind: TypeErrorKind::MismatchedConditionType("while"),
+                    });
+                }
+                self.typecheck_statement(body)?;
             }
         }
 
@@ -332,7 +344,7 @@ pub enum TypeErrorKind {
         actual_arguments: usize,
         function_name: Option<String>,
     },
-    MismatchedIfConditionType,
+    MismatchedConditionType(&'static str),
     CouldntInferFunctionReturnType,
     /// This error kind is needed to ignore malformed code that should be marked as erroneous by previous passes.
     /// For example, Top-level returns are handled by resolver, so, if we meet such in typechecker, we can skip it
@@ -378,8 +390,8 @@ impl CompilerError for TypeError {
                     "{s} arguments were provided. Function{function_name} expects {expected_arguments} arguments, but got {actual_arguments}"
                 )
             }
-            TypeErrorKind::MismatchedIfConditionType => {
-                "If condition should evaluate to `bool` type".to_string()
+            TypeErrorKind::MismatchedConditionType(name) => {
+                format!("{name} condition should evaluate to `bool` type")
             }
             TypeErrorKind::CouldntInferFunctionReturnType => {
                 "Could not infer function return type".to_string()
@@ -411,7 +423,7 @@ impl CompilerError for TypeError {
                 None
             }
             TypeErrorKind::InvalidArity { .. } => None,
-            TypeErrorKind::MismatchedIfConditionType => None,
+            TypeErrorKind::MismatchedConditionType(_) => None,
             TypeErrorKind::CouldntInferFunctionReturnType => None,
             TypeErrorKind::FromPrevious => None,
         }

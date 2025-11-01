@@ -85,6 +85,7 @@ pub(crate) enum TokenType {
     False,
     If,
     Else,
+    While,
 
     // Punctuation
     OpenParen,
@@ -127,7 +128,7 @@ impl TokenType {
 
     pub fn is_statement_beginning(&self) -> bool {
         match self {
-            Func | Extern | Return | If | Else => true,
+            Func | Extern | Return | If | Else | While => true,
 
             Eof | True | False | OpenParen | CloseParen | OpenBrace | CloseBrace | Dot | Comma
             | Semicolon | Colon | Equal | EqualEqual | Bang | BangEqual | Less | LessEqual

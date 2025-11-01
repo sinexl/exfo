@@ -23,6 +23,10 @@ pub enum StatementKind<'a> {
         then: &'a Statement<'a>,
         r#else: Option<&'a Statement<'a>>,
     },
+    While {
+        condition: &'a Expression<'a>,
+        body: &'a Statement<'a>,
+    }
 }
 
 #[derive(Debug)]

@@ -10,11 +10,9 @@ func fibonacci(n: int): int {
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
 func main(): int {
-    a := 8;
-    a := 13;
-    b := 10;
-
-
-    print_i64(factorial(a));
-    print_i64(fibonacci(a));
+    i := 0;
+    while i < 10 {
+      print_i64(factorial(i));
+      i = i + 1;
+    }
 }

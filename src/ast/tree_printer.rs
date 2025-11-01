@@ -124,6 +124,15 @@ pub fn print_statement(
                 write!(f, "else = \n{}", PrintStatement(r#else, indent + 1))?;
             }
         }
+        StatementKind::While { condition, body } => {
+            writeln!(f, "While")?;
+            write!(f, "{tab}condition = {condition}")?;
+            write!(
+                f,
+                "{tab}do = \n{then}",
+                then = PrintStatement(body, indent + 1)
+            )?;
+        }
     }
     Ok(())
 }

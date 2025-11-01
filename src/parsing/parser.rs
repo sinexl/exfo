@@ -21,8 +21,9 @@ use std::rc::Rc;
 /* Grammar:
     program             => decl* EOF ;
     decl                => funcDecl | varDecl | externDecl | statement ;
-    statement           => expressionStatement | blockStatement | returnStatement | ifStatement ;
+    statement           => expressionStatement | blockStatement | returnStatement | ifStatement | whileStatement ;
     ifStatement         => "if" expression statement ( "else" statement )? ;
+    whileStatement      => "while" expression statement ;
     expressionStatement => expression ";" ;
     blockStatement      => "{" (declaration*)? "}" ;
     varDecl             => IDENTIFIER ":" type? ("=" expression)? ";" ;
@@ -298,6 +299,9 @@ impl<'a> Parser<'a> {
         } else if self.consume(&[TokenType::If]).is_some() {
             self.restore_state(state);
             return self.parse_if_statement();
+        } else if self.consume(&[TokenType::While]).is_some() {
+            self.restore_state(state);
+            return self.parse_while_statement();
         }
         self.parse_expression_statement()
     }
@@ -319,6 +323,17 @@ impl<'a> Parser<'a> {
                 then,
                 r#else,
             },
+            loc,
+        }))
+    }
+    pub fn parse_while_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let loc = self
+            .expect(&[TokenType::While], "Expected while keyword")?
+            .loc;
+        let condition = self.parse_expression()?;
+        let body = self.parse_statement()?;
+        Ok(self.bump.alloc(Statement {
+            kind: StatementKind::While { condition, body },
             loc,
         }))
     }
