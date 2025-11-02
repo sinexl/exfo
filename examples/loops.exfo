@@ -1,0 +1,27 @@
+extern "C" func puts(char_ptr): void;
+extern "C" func print_i64(int): void;
+
+func main(): int {
+    // While Loop
+    i := 0;
+    while i < 10 {
+        i = i + 1;
+        if i == 3 continue;
+        if i == 8 break;
+        print_i64(i);
+    }
+
+    puts("---------");
+
+    // Nested loops with labels
+    i := 0;
+    outer: while i < 5 {
+        j := 0;
+        while j < 8 {
+            print_i64(j);
+            if j == 3 break outer; // break from outer while loop
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
