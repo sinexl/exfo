@@ -16,6 +16,7 @@ pub struct Compiler<'ir, 'ast> {
     ir_bump: &'ir Bump,
     ast_bump: &'ast Bump, // TODO: Compiler should not do any ast-related allocations.
     current_function: Option<BumpVec<'ir, Opcode<'ir>>>,
+    current_while: Option<While>,
     variables: Stack<HashMap<&'ast str, Variable<'ast>>>,
 
     resolutions: Resolutions<'ast>,
@@ -23,12 +24,19 @@ pub struct Compiler<'ir, 'ast> {
 
     stack_size: StackSize,
     label_count: usize,
+
 }
 
 #[derive(Debug, Copy, Clone)]
 struct Variable<'a> {
     ty: Type<'a>,
     stack_offset: usize,
+}
+
+#[derive(Copy, Clone)]
+struct While {
+    start: usize,
+    exit: usize,
 }
 
 struct StackSize {
@@ -57,6 +65,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             resolutions,
             variables: Stack::new(),
             label_count: 0,
+            current_while: None,
         }
     }
 }
@@ -376,9 +385,22 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     label: exit,
                     condition,
                 });
+                let saved_while = self.current_while;
+                self.current_while = Some(While {start, exit});
                 self.compile_statement(body);
+                self.current_while = saved_while;
                 self.push_opcode(Opcode::Jmp { label: start });
                 self.push_opcode(Opcode::Label { index: exit });
+            },
+            StatementKind::Break | StatementKind::Continue  => {
+                let current = self.current_while.expect("Compiler bug: This should be caught by resolver.");
+                self.push_opcode(Opcode::Jmp {
+                    label: match &statement.kind {
+                        StatementKind::Break => current.exit,
+                        StatementKind::Continue => current.start,
+                        _ => unreachable!(),
+                    },
+                })
             }
         }
     }

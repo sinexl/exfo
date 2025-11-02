@@ -17,6 +17,8 @@ pub enum StatementKind<'a> {
     VariableDeclaration(VariableDeclaration<'a>),
     Block(&'a [&'a Statement<'a>]),
     Return(Option<&'a Expression<'a>>),
+    Break,
+    Continue,
     Extern(ExternalFunction<'a>),
     If {
         condition: &'a Expression<'a>,
@@ -26,7 +28,7 @@ pub enum StatementKind<'a> {
     While {
         condition: &'a Expression<'a>,
         body: &'a Statement<'a>,
-    }
+    },
 }
 
 #[derive(Debug)]

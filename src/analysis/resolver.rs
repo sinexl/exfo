@@ -1,4 +1,5 @@
 use crate::analysis::get_at::GetAt;
+use crate::analysis::resolver::ResolverErrorKind::{BreakOutsideOfLoop, ContinueOutsideOfLoop};
 use crate::ast::expression::{Expression, ExpressionKind};
 use crate::ast::statement::{ExternalFunction, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
@@ -19,6 +20,7 @@ pub struct Resolver<'ast> {
     locals: Stack<Scope<'ast>>,
     current_initializer: Option<Identifier<'ast>>,
     in_function: bool,
+    in_loop: bool,
 
     pub resolutions: Resolutions<'ast>,
     pub warnings: Vec<Box<dyn CompilerWarning>>,
@@ -52,6 +54,7 @@ impl<'ast> Resolver<'ast> {
             locals: vec![HashMap::new()],
             in_function: false,
             warnings: vec![],
+            in_loop: false,
         }
     }
 }
@@ -140,7 +143,26 @@ impl<'ast> Resolver<'ast> {
             }
             StatementKind::While { condition, body } => {
                 self.resolve_expression(condition).map_err(|e| vec![e])?;
+                let in_while_prev = self.in_loop;
+                self.in_loop = true;
                 self.resolve_statement(body)?;
+                self.in_loop = false;
+            }
+            StatementKind::Break => {
+                if !self.in_loop {
+                    return Err(vec![ResolverError {
+                        kind: BreakOutsideOfLoop,
+                        loc: statement.loc.clone(),
+                    }]);
+                }
+            },
+            StatementKind::Continue => {
+                if !self.in_loop {
+                    return Err(vec![ResolverError {
+                        kind: ContinueOutsideOfLoop,
+                        loc: statement.loc.clone(),
+                    }]);
+                }
             }
         }
         Ok(())
@@ -344,6 +366,8 @@ pub enum ResolverErrorKind {
     UndeclaredIdentifier { usage: IdentifierBox },
     ReadingFromInitializer { read: IdentifierBox },
     TopLevelReturn,
+    BreakOutsideOfLoop,
+    ContinueOutsideOfLoop,
 }
 
 impl CompilerError for ResolverError {
@@ -361,6 +385,10 @@ impl CompilerError for ResolverError {
                 n = read.name
             ),
             ResolverErrorKind::TopLevelReturn => "could not return from top-level".into(),
+            ResolverErrorKind::BreakOutsideOfLoop => "'break' statement outside of loop".into(),
+            ResolverErrorKind::ContinueOutsideOfLoop => {
+                "'continue' statement outside of loop".into()
+            }
         }
     }
 
@@ -369,6 +397,8 @@ impl CompilerError for ResolverError {
             ResolverErrorKind::UndeclaredIdentifier { .. } => None,
             ResolverErrorKind::ReadingFromInitializer { .. } => None,
             ResolverErrorKind::TopLevelReturn => None,
+            ResolverErrorKind::BreakOutsideOfLoop => None,
+            ResolverErrorKind::ContinueOutsideOfLoop => None,
         }
     }
 }

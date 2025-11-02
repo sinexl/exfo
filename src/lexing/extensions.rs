@@ -45,6 +45,8 @@ impl StringExtensions for str {
             "if" => If,
             "else" => Else,
             "while" => While,
+            "break" => Break,
+            "continue" => Continue,
             _ => Id,
         }
     }

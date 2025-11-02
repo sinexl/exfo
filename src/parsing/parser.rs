@@ -21,9 +21,12 @@ use std::rc::Rc;
 /* Grammar:
     program             => decl* EOF ;
     decl                => funcDecl | varDecl | externDecl | statement ;
-    statement           => expressionStatement | blockStatement | returnStatement | ifStatement | whileStatement ;
+    statement           => expressionStatement | blockStatement | returnStatement
+                           | ifStatement | whileStatement | breakStatement | continueStatement ;
     ifStatement         => "if" expression statement ( "else" statement )? ;
     whileStatement      => "while" expression statement ;
+    breakStatement      => "break" ";" ;
+    continueStatement   => "continue" ";" ;
     expressionStatement => expression ";" ;
     blockStatement      => "{" (declaration*)? "}" ;
     varDecl             => IDENTIFIER ":" type? ("=" expression)? ";" ;
@@ -302,6 +305,21 @@ impl<'a> Parser<'a> {
         } else if self.consume(&[TokenType::While]).is_some() {
             self.restore_state(state);
             return self.parse_while_statement();
+        } else if let Some(flow) = self.consume(&[TokenType::Break, TokenType::Continue]) {
+            let (kind, name) = match flow.kind {
+                TokenType::Break => (StatementKind::Break, "break"),
+                TokenType::Continue => (StatementKind::Continue, "continue"),
+                _ => unreachable!(),
+            };
+            let statement = self.bump.alloc(Statement {
+                kind,
+                loc: flow.loc.clone(),
+            });
+            self.expect(
+                &[TokenType::Semicolon],
+                &format!("expected semicolon after {name} statement"),
+            )?;
+            return Ok(statement);
         }
         self.parse_expression_statement()
     }

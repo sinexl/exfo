@@ -115,11 +115,17 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
                 write!(f, "else: {r}", r = r#else)?;
             }
             writeln!(f, ")")?;
-        },
+        }
         StatementKind::While { condition, body } => {
             write!(f, "(while {condition}: {body}")?;
             writeln!(f, ")")?;
         }
+        StatementKind::Break => {
+            writeln!(f, "(break)")?;
+        }
+        StatementKind::Continue => {
+            writeln!(f, "(continue)")?;
+        },
     }
 
     Ok(())

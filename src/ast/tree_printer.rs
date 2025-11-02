@@ -133,6 +133,8 @@ pub fn print_statement(
                 then = PrintStatement(body, indent + 1)
             )?;
         }
+        StatementKind::Break => writeln!(f, "Break")?,
+        StatementKind::Continue => writeln!(f, "Continue")?,
     }
     Ok(())
 }

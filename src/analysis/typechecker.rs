@@ -314,6 +314,7 @@ impl<'ast> Typechecker<'ast> {
                 }
                 self.typecheck_statement(body)?;
             }
+            StatementKind::Break | StatementKind::Continue => {}
         }
 
         Ok(())

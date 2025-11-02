@@ -1,4 +1,5 @@
 extern "C" func print_i64(int): void;
+extern "C" func puts(char_ptr): void;
 func factorial(n: int): int {
     if n < 1 return 1;
     return n * factorial(n - 1);
@@ -10,9 +11,27 @@ func fibonacci(n: int): int {
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
 func main(): int {
-    i := 0;
-    while i < 10 {
-      print_i64(factorial(i));
-      i = i + 1;
-    }
+      i := 0;
+      while i < 10 {
+
+          puts("-----");
+          print_i64(i);
+          j := 0;
+          while j < 5 {
+             if i == 5 break;
+             print_i64(j);
+             j = j + 1;
+          }
+          i = i + 1;
+      }
+//    y := 0;
+//    while y < 3 {
+//        print_i64(y);
+//        x := 10;
+//        while x < 13 {
+//          print_i64(x);
+//          x = x + 1;
+//        }
+//        y = y + 1;
+//    }
 }
