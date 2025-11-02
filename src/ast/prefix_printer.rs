@@ -116,16 +116,36 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             }
             writeln!(f, ")")?;
         }
-        StatementKind::While { condition, body } => {
-            write!(f, "(while {condition}: {body}")?;
+        StatementKind::While {
+            condition,
+            body,
+            name,
+            id,
+        } => {
+            let name = if let Some(name) = name {
+                format!(", {name}")
+            } else {
+                "".to_string()
+            };
+            write!(f, "(({id}{name}): while {condition}: {body}", id = id.get())?;
             writeln!(f, ")")?;
         }
-        StatementKind::Break => {
-            writeln!(f, "(break)")?;
+        StatementKind::Break { name, id } => {
+            let name = if let Some(name) = name {
+                format!(", {name}")
+            } else {
+                "".to_string()
+            };
+            writeln!(f, "(break {id}{name})", id = id.get())?;
         }
-        StatementKind::Continue => {
-            writeln!(f, "(continue)")?;
-        },
+        StatementKind::Continue { name, id } => {
+            let name = if let Some(name) = name {
+                format!(", {name}")
+            } else {
+                "".to_string()
+            };
+            writeln!(f, "(continue {id}{name})", id = id.get())?;
+        }
     }
 
     Ok(())

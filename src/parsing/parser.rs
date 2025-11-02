@@ -9,7 +9,7 @@ use crate::ast::statement::{
     ExternKind, ExternalFunction, FunctionDeclaration, FunctionParameter, Statement, StatementKind,
     VariableDeclaration,
 };
-use crate::common::BumpVec;
+use crate::common::{BumpVec, IdentifierBox};
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParseErrorKind::{
@@ -24,7 +24,7 @@ use std::rc::Rc;
     statement           => expressionStatement | blockStatement | returnStatement
                            | ifStatement | whileStatement | breakStatement | continueStatement ;
     ifStatement         => "if" expression statement ( "else" statement )? ;
-    whileStatement      => "while" expression statement ;
+    whileStatement      => (IDENTIFIER ":" )? "while" expression statement ;
     breakStatement      => "break" ";" ;
     continueStatement   => "continue" ";" ;
     expressionStatement => expression ";" ;
@@ -112,13 +112,24 @@ impl<'a> Parser<'a> {
                 .map_err(|e| self.sync_and_return(e));
         }
 
-        // --- Variable declaration ---
+        // --- Variable declaration / Named while Loop ---
         if self.consume(&[TokenType::Id]).is_some() {
+            // Ambiguity #1. ID at the beginning can be either:
+            // Variable declaration (name: type? = ...) OR named while (name: while ... )
+            // OR: expression statement with identifier ( i. e a; or a(); )
             if self.consume(&[TokenType::Colon]).is_some() {
+                // Ambiguity #2. ID followed by a colon can be either:
+                // Variable declaration ( name: type? = ... )
+                // OR: named while ( name: while ... )
+                // This ambiguity is resolved by checking whether the colon is followed by "while" keyword.
+                let is_named_while = self.consume(&[TokenType::While]).is_some();
                 self.restore_state(state);
-                return self
-                    .parse_variable_declaration()
-                    .map_err(|e| self.sync_and_return(e));
+                return if is_named_while {
+                    self.parse_while_statement()
+                } else {
+                    self.parse_variable_declaration()
+                        .map_err(|e| self.sync_and_return(e))
+                };
             }
             self.restore_state(state);
         }
@@ -306,9 +317,13 @@ impl<'a> Parser<'a> {
             self.restore_state(state);
             return self.parse_while_statement();
         } else if let Some(flow) = self.consume(&[TokenType::Break, TokenType::Continue]) {
+            let id = 0.into(); // parser doesn't set any ids. it is done by resolver
+            let name = self
+                .consume(&[TokenType::Id])
+                .map(|e| Identifier::from_token(e, self.bump));
             let (kind, name) = match flow.kind {
-                TokenType::Break => (StatementKind::Break, "break"),
-                TokenType::Continue => (StatementKind::Continue, "continue"),
+                TokenType::Break => (StatementKind::Break { id, name }, "break"),
+                TokenType::Continue => (StatementKind::Continue {id, name}, "continue"),
                 _ => unreachable!(),
             };
             let statement = self.bump.alloc(Statement {
@@ -345,13 +360,24 @@ impl<'a> Parser<'a> {
         }))
     }
     pub fn parse_while_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+        let mut name: Option<Identifier<'a>> = None;
+        if let Some(id) = self.consume(&[TokenType::Id]) {
+            name = Some(Identifier::from_token(id, self.bump));
+            self.expect(&[TokenType::Colon], "Expected colon after 'while' label.")?;
+        }
         let loc = self
             .expect(&[TokenType::While], "Expected while keyword")?
             .loc;
+
         let condition = self.parse_expression()?;
         let body = self.parse_statement()?;
         Ok(self.bump.alloc(Statement {
-            kind: StatementKind::While { condition, body },
+            kind: StatementKind::While {
+                condition,
+                body,
+                name,
+                id: Cell::new(0),
+            },
             loc,
         }))
     }

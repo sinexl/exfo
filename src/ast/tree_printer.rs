@@ -124,8 +124,18 @@ pub fn print_statement(
                 write!(f, "else = \n{}", PrintStatement(r#else, indent + 1))?;
             }
         }
-        StatementKind::While { condition, body } => {
-            writeln!(f, "While")?;
+        StatementKind::While {
+            condition,
+            body,
+            name,
+            id,
+        } => {
+            let name = if let Some(name) = name {
+                format!(", {name}")
+            } else {
+                "".to_string()
+            };
+            writeln!(f, "While ({id}{name})", id = id.get())?;
             write!(f, "{tab}condition = {condition}")?;
             write!(
                 f,
@@ -133,8 +143,22 @@ pub fn print_statement(
                 then = PrintStatement(body, indent + 1)
             )?;
         }
-        StatementKind::Break => writeln!(f, "Break")?,
-        StatementKind::Continue => writeln!(f, "Continue")?,
+        StatementKind::Break { name, id } => {
+            let name = if let Some(name) = name {
+                format!(", {name}")
+            } else {
+                "".to_string()
+            };
+            writeln!(f, "Break ({id}{name})", id = id.get())?;
+        }
+        StatementKind::Continue { name, id } => {
+            let name = if let Some(name) = name {
+                format!(", {name}")
+            } else {
+                "".to_string()
+            };
+            writeln!(f, "Continue ({id}{name})", id = id.get())?
+        }
     }
     Ok(())
 }

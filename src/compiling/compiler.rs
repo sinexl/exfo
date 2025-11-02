@@ -16,15 +16,14 @@ pub struct Compiler<'ir, 'ast> {
     ir_bump: &'ir Bump,
     ast_bump: &'ast Bump, // TODO: Compiler should not do any ast-related allocations.
     current_function: Option<BumpVec<'ir, Opcode<'ir>>>,
-    current_while: Option<While>,
     variables: Stack<HashMap<&'ast str, Variable<'ast>>>,
+    loops: HashMap<usize, While>,
 
     resolutions: Resolutions<'ast>,
     pub ir: &'ir mut IntermediateRepresentation<'ir>,
 
     stack_size: StackSize,
     label_count: usize,
-
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -65,7 +64,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             resolutions,
             variables: Stack::new(),
             label_count: 0,
-            current_while: None,
+            loops: Default::default(),
         }
     }
 }
@@ -362,7 +361,12 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     self.push_opcode(Opcode::Label { index: else_label })
                 }
             }
-            StatementKind::While { condition, body } => {
+            StatementKind::While {
+                condition,
+                body,
+                name: _name,
+                id,
+            } => {
                 /*
                 Scheme of While loop in IR:
                   start:
@@ -381,23 +385,21 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 self.stack_size.count = stack_size;
 
                 let exit = self.allocate_label();
+                self.loops.insert(id.get(), While { start, exit });
                 self.push_opcode(Opcode::JmpIfNot {
                     label: exit,
                     condition,
                 });
-                let saved_while = self.current_while;
-                self.current_while = Some(While {start, exit});
                 self.compile_statement(body);
-                self.current_while = saved_while;
                 self.push_opcode(Opcode::Jmp { label: start });
                 self.push_opcode(Opcode::Label { index: exit });
-            },
-            StatementKind::Break | StatementKind::Continue  => {
-                let current = self.current_while.expect("Compiler bug: This should be caught by resolver.");
+            }
+            StatementKind::Break { .. } | StatementKind::Continue { .. } => {
+                const MSG: &str = "Compiler bug: loop label resolution failed";
                 self.push_opcode(Opcode::Jmp {
                     label: match &statement.kind {
-                        StatementKind::Break => current.exit,
-                        StatementKind::Continue => current.start,
+                        StatementKind::Break { id, .. } => self.loops.get(&id.get()).expect(MSG).exit,
+                        StatementKind::Continue { id, .. } => self.loops.get(&id.get()).expect(MSG).start,
                         _ => unreachable!(),
                     },
                 })

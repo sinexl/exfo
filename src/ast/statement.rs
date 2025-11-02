@@ -17,17 +17,30 @@ pub enum StatementKind<'a> {
     VariableDeclaration(VariableDeclaration<'a>),
     Block(&'a [&'a Statement<'a>]),
     Return(Option<&'a Expression<'a>>),
-    Break,
-    Continue,
     Extern(ExternalFunction<'a>),
     If {
         condition: &'a Expression<'a>,
         then: &'a Statement<'a>,
         r#else: Option<&'a Statement<'a>>,
     },
+
+    /// Fields of while, break and continue nodes:
+    /// name: label in syntax.
+    /// id: unique identifier.
+    /// Name is only needed for resolver. All later passes should use id.
     While {
         condition: &'a Expression<'a>,
         body: &'a Statement<'a>,
+        name: Option<Identifier<'a>>,
+        id: Cell<usize>,
+    },
+    Break {
+        name: Option<Identifier<'a>>,
+        id: Cell<usize>,
+    },
+    Continue {
+        name: Option<Identifier<'a>>,
+        id: Cell<usize>,
     },
 }
 

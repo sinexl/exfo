@@ -1,5 +1,4 @@
 use crate::analysis::get_at::GetAt;
-use crate::analysis::resolver::ResolverErrorKind::{BreakOutsideOfLoop, ContinueOutsideOfLoop};
 use crate::ast::expression::{Expression, ExpressionKind};
 use crate::ast::statement::{ExternalFunction, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
@@ -20,7 +19,8 @@ pub struct Resolver<'ast> {
     locals: Stack<Scope<'ast>>,
     current_initializer: Option<Identifier<'ast>>,
     in_function: bool,
-    in_loop: bool,
+    loop_stack: Stack<While<'ast>>,
+    loop_count: usize,
 
     pub resolutions: Resolutions<'ast>,
     pub warnings: Vec<Box<dyn CompilerWarning>>,
@@ -36,6 +36,11 @@ pub enum VariableState {
     Declared,
     Defined,
     Read,
+}
+
+struct While<'a> {
+    name: Option<Identifier<'a>>,
+    index: usize,
 }
 
 macro_rules! current_scope {
@@ -54,7 +59,8 @@ impl<'ast> Resolver<'ast> {
             locals: vec![HashMap::new()],
             in_function: false,
             warnings: vec![],
-            in_loop: false,
+            loop_stack: vec![],
+            loop_count: 0,
         }
     }
 }
@@ -141,28 +147,54 @@ impl<'ast> Resolver<'ast> {
                     self.resolve_statement(r#else)?;
                 }
             }
-            StatementKind::While { condition, body } => {
+            StatementKind::While {
+                condition,
+                body,
+                name,
+                id,
+            } => {
                 self.resolve_expression(condition).map_err(|e| vec![e])?;
-                let in_while_prev = self.in_loop;
-                self.in_loop = true;
+                if let Some(target) = name
+                    && let Some(original_name) = self
+                        .loop_stack
+                        .iter()
+                        .rev()
+                        .filter_map(|e| e.name.clone())
+                        .find(|n| n.name == target.name)
+                {
+                    return Err(vec![ResolverError {
+                        loc: statement.loc.clone(),
+                        kind: ResolverErrorKind::LoopLabelRedefinition {
+                            original_name: IdentifierBox::from_borrowed(&original_name),
+                        },
+                    }]);
+                }
+                let index = self.allocate_loop_index();
+                id.set(index);
+                self.loop_stack.push(While {
+                    name: name.clone(),
+                    index,
+                });
                 self.resolve_statement(body)?;
-                self.in_loop = false;
+                self.loop_stack.pop();
             }
-            StatementKind::Break => {
-                if !self.in_loop {
+            StatementKind::Break { name, id } => {
+                if self.loop_stack.is_empty() {
                     return Err(vec![ResolverError {
-                        kind: BreakOutsideOfLoop,
+                        kind: ResolverErrorKind::BreakOutsideOfLoop,
                         loc: statement.loc.clone(),
                     }]);
                 }
-            },
-            StatementKind::Continue => {
-                if !self.in_loop {
+                id.set(self.resolve_loop_label(name).map_err(|e| vec![e])?);
+            }
+            StatementKind::Continue { name, id } => {
+                if self.loop_stack.is_empty() {
                     return Err(vec![ResolverError {
-                        kind: ContinueOutsideOfLoop,
+                        kind: ResolverErrorKind::ContinueOutsideOfLoop,
                         loc: statement.loc.clone(),
                     }]);
                 }
+                id.set(self.resolve_loop_label(name).map_err(|e| vec![e])?);
             }
         }
         Ok(())
@@ -303,6 +335,38 @@ impl<'ast> Resolver<'ast> {
             },
         })
     }
+
+    fn resolve_loop_label(&self, name: &Option<Identifier<'ast>>) -> Result<usize, ResolverError> {
+        if let Some(name) = name {
+            if let Some((l, _)) = self
+                .loop_stack
+                .iter()
+                .rev()
+                .filter_map(|e| e.name.clone().map(|name| (e, name)))
+                .find(|(_, loop_name)| name.name == loop_name.name)
+            {
+                return Ok(l.index);
+            }
+            return Err(ResolverError {
+                loc: name.location.clone(),
+                kind: ResolverErrorKind::UndeclaredLoopLabel {
+                    name: IdentifierBox::from_borrowed(name),
+                },
+            });
+        }
+
+        Ok(self
+            .loop_stack
+            .last()
+            .expect("Compiler bug: resolve_loop_label should never be called outside of loop")
+            .index)
+    }
+
+    fn allocate_loop_index(&mut self) -> usize {
+        let index = self.loop_count;
+        self.loop_count += 1;
+        index
+    }
 }
 
 #[allow(dead_code)]
@@ -368,6 +432,8 @@ pub enum ResolverErrorKind {
     TopLevelReturn,
     BreakOutsideOfLoop,
     ContinueOutsideOfLoop,
+    LoopLabelRedefinition { original_name: IdentifierBox },
+    UndeclaredLoopLabel { name: IdentifierBox },
 }
 
 impl CompilerError for ResolverError {
@@ -389,6 +455,12 @@ impl CompilerError for ResolverError {
             ResolverErrorKind::ContinueOutsideOfLoop => {
                 "'continue' statement outside of loop".into()
             }
+            ResolverErrorKind::LoopLabelRedefinition { original_name } => {
+                format!("redefinition of loop label '{original_name}'")
+            }
+            ResolverErrorKind::UndeclaredLoopLabel { name } => {
+                format!("undeclared loop label '{name}'")
+            }
         }
     }
 
@@ -399,6 +471,11 @@ impl CompilerError for ResolverError {
             ResolverErrorKind::TopLevelReturn => None,
             ResolverErrorKind::BreakOutsideOfLoop => None,
             ResolverErrorKind::ContinueOutsideOfLoop => None,
+            ResolverErrorKind::LoopLabelRedefinition { original_name } => Some(format!(
+                "loop label {original_name} is first defined here: {}",
+                original_name.location
+            )),
+            ResolverErrorKind::UndeclaredLoopLabel { .. } => None,
         }
     }
 }

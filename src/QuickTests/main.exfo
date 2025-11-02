@@ -11,27 +11,13 @@ func fibonacci(n: int): int {
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
 func main(): int {
-      i := 0;
-      while i < 10 {
-
-          puts("-----");
-          print_i64(i);
-          j := 0;
-          while j < 5 {
-             if i == 5 break;
-             print_i64(j);
+     i := 0;
+     outer: while i < 10 {
+         j := 0;
+         inner: while j < 5 {
+             if j == 2 break outer;
              j = j + 1;
-          }
-          i = i + 1;
-      }
-//    y := 0;
-//    while y < 3 {
-//        print_i64(y);
-//        x := 10;
-//        while x < 13 {
-//          print_i64(x);
-//          x = x + 1;
-//        }
-//        y = y + 1;
-//    }
+         }
+         i = i + 1;
+     }
 }
