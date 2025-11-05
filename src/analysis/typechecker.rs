@@ -304,7 +304,12 @@ impl<'ast> Typechecker<'ast> {
                     self.typecheck_statement(r#else)?;
                 }
             }
-            StatementKind::While { condition, body, name: _, id: _ } => {
+            StatementKind::While {
+                condition,
+                body,
+                name: _,
+                id: _,
+            } => {
                 self.typecheck_expression(condition)?;
                 if condition.ty.get() != Type::Bool {
                     return Err(TypeError {

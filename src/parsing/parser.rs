@@ -122,14 +122,13 @@ impl<'a> Parser<'a> {
                 // Variable declaration ( name: type? = ... )
                 // OR: named while ( name: while ... )
                 // This ambiguity is resolved by checking whether the colon is followed by "while" keyword.
+                // While is parsed in parse_statement().
                 let is_named_while = self.consume(&[TokenType::While]).is_some();
                 self.restore_state(state);
-                return if is_named_while {
-                    self.parse_while_statement()
-                } else {
-                    self.parse_variable_declaration()
+                if !is_named_while {
+                    return self.parse_variable_declaration()
                         .map_err(|e| self.sync_and_return(e))
-                };
+                }
             }
             self.restore_state(state);
         }
@@ -316,6 +315,12 @@ impl<'a> Parser<'a> {
         } else if self.consume(&[TokenType::While]).is_some() {
             self.restore_state(state);
             return self.parse_while_statement();
+        } else if self.consume(&[TokenType::Id]).is_some() {
+            if self.consume(&[TokenType::Colon]).is_some() && self.consume(&[TokenType::While]).is_some() {
+                self.restore_state(state);
+                return self.parse_while_statement();
+            }
+            self.restore_state(state);
         } else if let Some(flow) = self.consume(&[TokenType::Break, TokenType::Continue]) {
             let id = 0.into(); // parser doesn't set any ids. it is done by resolver
             let name = self
@@ -323,7 +328,7 @@ impl<'a> Parser<'a> {
                 .map(|e| Identifier::from_token(e, self.bump));
             let (kind, name) = match flow.kind {
                 TokenType::Break => (StatementKind::Break { id, name }, "break"),
-                TokenType::Continue => (StatementKind::Continue {id, name}, "continue"),
+                TokenType::Continue => (StatementKind::Continue { id, name }, "continue"),
                 _ => unreachable!(),
             };
             let statement = self.bump.alloc(Statement {

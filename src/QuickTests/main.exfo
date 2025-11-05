@@ -1,4 +1,3 @@
 func main(): int {
-    name: while true  name2: while true 1 + 1; 
-
-} 
+    name: while true  name2: while true break name;
+}

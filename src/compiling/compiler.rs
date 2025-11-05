@@ -398,8 +398,12 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 const MSG: &str = "Compiler bug: loop label resolution failed";
                 self.push_opcode(Opcode::Jmp {
                     label: match &statement.kind {
-                        StatementKind::Break { id, .. } => self.loops.get(&id.get()).expect(MSG).exit,
-                        StatementKind::Continue { id, .. } => self.loops.get(&id.get()).expect(MSG).start,
+                        StatementKind::Break { id, .. } => {
+                            self.loops.get(&id.get()).expect(MSG).exit
+                        }
+                        StatementKind::Continue { id, .. } => {
+                            self.loops.get(&id.get()).expect(MSG).start
+                        }
                         _ => unreachable!(),
                     },
                 })
