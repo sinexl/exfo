@@ -1,3 +1,23 @@
+extern "C" func puts(char_ptr): void;
+extern "C" func print_i64(int): void;
+
+func f(_1: int, _2: int, _3: int, _4: int, _5: int, _6: int, _7: int, _8: int, _9: char_ptr, _10: int): int {
+
+    print_i64(_1);
+    print_i64(_2);
+    print_i64(_3);
+    print_i64(_4);
+    print_i64(_5);
+    print_i64(_6);
+    print_i64(_7);
+    print_i64(_8);
+    puts(_9);
+    print_i64(_10);
+    return 1;
+}
+
+
 func main(): int {
-    name: while true  name2: while true break name;
+    a := 12;
+    f(1, 2, 3, 4, 5, 6, 7, 8, "Hello, World!!", a);
 }

@@ -97,6 +97,7 @@ pub fn print_arg(arg: &Arg, f: &mut impl Write) -> std::fmt::Result {
             write!(f, "stack[{offset}]")?;
         }
         Arg::String { index } => write!(f, "string[{index}]")?,
+        Arg::Argument { index, size } => write!(f, "argument[{index}]")?
     }
 
     Ok(())

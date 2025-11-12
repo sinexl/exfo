@@ -29,7 +29,8 @@ pub struct Compiler<'ir, 'ast> {
 #[derive(Debug, Copy, Clone)]
 struct Variable<'a> {
     ty: Type<'a>,
-    stack_offset: usize,
+    stack_offset: usize, // TODO #2: variable location should not be strictly tied to stack offset.
+    param_index: Option<usize>
 }
 
 #[derive(Copy, Clone)]
@@ -158,9 +159,17 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 if let Type::Function(fn_type) = var.ty {
                     Arg::ExternalFunction(n.clone_into(self.ir_bump))
                 } else {
+                    let size = var.ty.size();
+                    if let Some(index) = var.param_index {
+                        assert_eq!(var.stack_offset, usize::MAX); // See TODO #2
+                        return Arg::Argument {
+                            index,
+                            size
+                        } ;
+                    }
                     Arg::StackOffset {
                         offset: var.stack_offset,
-                        size: var.ty.size(),
+                        size
                     }
                 }
             }
@@ -225,24 +234,36 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                         ty: Type::Function(FunctionType {
                             return_type,
                             parameters: parameters_types,
+
                         }),
                         stack_offset: 0,
+                        param_index: None,
                     },
                 );
 
-                let mut offsets = BumpVec::with_capacity_in(parameters.len(), self.ir_bump);
+                // Function argument allocation.
+                // Function argument loading convention:
+                // 1st argument <- stack[n_1];
+                // 2nd argument <- stack[n_1 + n_2];
+                // 3rd argument <- stack[n_1 + n_2 + n_3];
+                // ....
+                // mth argument <- stack[<sum of all previous arguments' sizes> + m_n];
+                // where:
+                // n_1 ... m_n => mth argument size,
+                //           m => amount of arguments
+                let mut sizes = BumpVec::with_capacity_in(parameters.len(), self.ir_bump);
                 self.variables.push(HashMap::new());
                 let function_scope = self.variables.len() - 1;
-                for param in *parameters {
-                    let stack_offset = self.allocate_on_stack(param.ty.size());
+                for (i, param) in parameters.iter().enumerate() {
                     self.variables[function_scope].insert(
                         param.name.name,
                         Variable {
                             ty: param.ty,
-                            stack_offset,
+                            stack_offset: usize::MAX,
+                            param_index: Some(i)
                         },
                     );
-                    offsets.push(stack_offset);
+                    sizes.push(param.ty.size());
                 }
 
                 for statement in *body {
@@ -256,7 +277,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                         name: name.clone_into(self.ir_bump),
                         code,
                         stack_size: self.stack_size.max,
-                        params: offsets.into_bump_slice(),
+                        params_: sizes.into_bump_slice(),
                     }),
                 );
 
@@ -277,6 +298,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                         parameters,
                     }),
                     stack_offset: 0,
+                    param_index: None,
                 };
                 self.variables
                     .last_mut()
@@ -312,6 +334,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 let var = Variable {
                     stack_offset,
                     ty: ty.get(),
+                    param_index: None,
                 };
                 self.variables
                     .last_mut()

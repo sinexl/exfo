@@ -163,7 +163,7 @@ impl<'ast> Resolver<'ast> {
                         .find(|n| n.name == target.name)
                 {
                     return Err(vec![ResolverError {
-                        loc: statement.loc.clone(),
+                        loc: target.location.clone(),
                         kind: ResolverErrorKind::LoopLabelRedefinition {
                             original_name: IdentifierBox::from_borrowed(&original_name),
                         },
@@ -383,7 +383,7 @@ fn debug_scope(scope: &Scope<'_>) {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ResolverError {
     pub loc: SourceLocation,
     pub kind: ResolverErrorKind,

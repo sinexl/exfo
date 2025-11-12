@@ -41,7 +41,9 @@ pub enum Arg<'a> {
     Int64 { bits: [u8; 8], signed: bool },
     String { index: usize }, // Index is in ir.strings
     ExternalFunction(Identifier<'a>),
-    StackOffset { offset: usize, size: usize },
+    StackOffset { offset: usize, size: usize }, // TODO: Utilize StackOffset::size and Argument::size
+    Argument { index: usize, size: usize }, // Stores argument number (counting from 0)
+                                        // and size of the argument
 }
 
 impl Arg<'_> {
@@ -52,6 +54,7 @@ impl Arg<'_> {
             Arg::String { .. } => 8,
             Arg::ExternalFunction(_) => 8,
             Arg::StackOffset { size, .. } => *size,
+            Arg::Argument { index: _, size } => *size,
         }
     }
 }
