@@ -8,6 +8,7 @@ use crate::common::{BumpVec, CompilerError, SourceLocation, Stack};
 use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
 use std::cell::Cell;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 pub struct Typechecker<'ast> {
@@ -91,17 +92,22 @@ impl<'ast> Typechecker<'ast> {
                 if let Type::Function(FunctionType {
                     return_type,
                     parameters,
+                    is_variadic,
                 }) = callee.ty.get()
                 {
-                    if parameters.len() != arguments.len() {
-                        return Err(TypeError {
-                            loc: expression.loc.clone(),
-                            kind: TypeErrorKind::InvalidArity {
-                                expected_arguments: parameters.len(),
-                                actual_arguments: arguments.len(),
-                                function_name: None, // TODO: Get function name.
-                            },
-                        });
+                    let arity_error = TypeError {
+                        loc: expression.loc.clone(),
+                        kind: TypeErrorKind::InvalidArity {
+                            expected_arguments: parameters.len(),
+                            actual_arguments: arguments.len(),
+                            function_name: None, // TODO: Get function name.
+                        },
+                    };
+                    if arguments.len() < parameters.len() {
+                        return Err(arity_error);
+                    }
+                    if !is_variadic && arguments.len() != parameters.len() {
+                        return Err(arity_error);
                     }
                     for (expected, arg) in parameters.iter().zip(arguments.iter()) {
                         let got = arg.ty.get();
@@ -169,6 +175,7 @@ impl<'ast> Typechecker<'ast> {
                         .map(|p| p.ty)
                         .collect_in::<BumpVec<_>>(b)
                         .into_bump_slice(),
+                    is_variadic: false,
                 };
                 self.locals
                     .last_mut()
@@ -273,6 +280,7 @@ impl<'ast> Typechecker<'ast> {
                 kind: _kind,
                 parameters,
                 return_type,
+                is_variadic,
             }) => {
                 self.locals
                     .last_mut()
@@ -283,6 +291,7 @@ impl<'ast> Typechecker<'ast> {
                             ty: Cell::new(Type::Function(FunctionType {
                                 return_type: self.bump.alloc(return_type.get()),
                                 parameters,
+                                is_variadic: *is_variadic,
                             })),
                         },
                     );

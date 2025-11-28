@@ -68,12 +68,14 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             kind,
             parameters,
             return_type,
+            is_variadic,
         }) => {
             write!(
                 f,
-                "(extern \"{kind:?}\" `{}` ({}): {}",
+                "(extern \"{kind:?}\" `{}` ({}{}): {}",
                 name.name,
                 Join(*parameters, ", "),
+                if *is_variadic { ", ..." } else { "" },
                 return_type.get()
             )?;
         }

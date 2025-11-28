@@ -21,6 +21,7 @@ pub enum Type<'ast> {
 pub struct FunctionType<'ast> {
     pub return_type: &'ast Type<'ast>,
     pub parameters: &'ast [Type<'ast>],
+    pub is_variadic: bool,
 }
 
 impl<'ast> Display for Type<'ast> {

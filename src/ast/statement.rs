@@ -58,6 +58,7 @@ pub struct ExternalFunction<'ast> {
     pub kind: ExternKind,
     pub parameters: &'ast [Type<'ast>],
     pub return_type: Cell<Type<'ast>>,
+    pub is_variadic: bool,
 }
 
 #[derive(Debug)]

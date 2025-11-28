@@ -33,7 +33,7 @@ use std::rc::Rc;
     returnStatement     => "return" expression? ";"
     funcDecl            => "func" IDENTIFIER function ;
     function            => "(" args ")" (":" type)? blockStatement ;
-    externDecl          => "extern" extern_kind  "func" IDENTIFIER "(" args ")" ":" type ";"
+    externDecl          => "extern" extern_kind  "func" IDENTIFIER "(" args (, ...)? ")" ":" type ";"
     externKind          => "C" ;
 
     expression          => assignment;
@@ -197,12 +197,28 @@ impl<'a> Parser<'a> {
 
         self.expect(&[TokenType::OpenParen], "Expected open parenthesis")?;
 
-        let mut parameters: &[Type<'a>] = &[];
         // TODO : On error, we should map error into UnbalancedParens
+        let mut is_variadic = false;
+
+        let mut res = BumpVec::new_in(self.bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
-            parameters = self.parse_comma_separated(|this| this.parse_type())?;
+
+            let expr = self.parse_type()?;
+            res.push(expr);
+
+            while self.consume(&[TokenType::Comma]).is_some() {
+                if let Some(td) = self.consume(&[TokenType::TripleDot]) {
+                    is_variadic = true;
+                    break;
+                }
+                res.push(self.parse_type()?);
+            }
         }
-        self.expect(&[TokenType::CloseParen], "Expected closing parenthesis")?;
+
+        let parameters: &[Type<'a>] = res.into_bump_slice();
+        let mut message = String::from("Expected closing parenthesis.");
+        if is_variadic { message += " Variadic parameters should be last in parameter list." }
+        self.expect(&[TokenType::CloseParen], message.as_str())?;
         self.expect(
             &[TokenType::Colon],
             "Expected colon after argument list. \
@@ -219,6 +235,7 @@ impl<'a> Parser<'a> {
             kind: StatementKind::Extern(ExternalFunction {
                 name: Identifier::from_token(name, self.bump),
                 kind,
+                is_variadic,
                 parameters,
                 return_type: Cell::from(return_type),
             }),

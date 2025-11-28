@@ -132,6 +132,7 @@ impl<'ast> Resolver<'ast> {
                 kind: _kind,
                 parameters: _parameters,
                 return_type: _return_type,
+                is_variadic: _variadic,
             }) => {
                 self.declare(name);
                 self.define(name);
@@ -198,6 +199,28 @@ impl<'ast> Resolver<'ast> {
             }
         }
         Ok(())
+    }
+
+    pub fn preresolve_globals(&mut self, statements: &'ast [&'ast Statement<'ast>]) {
+        for statement in statements {
+            match &statement.kind {
+                StatementKind::FunctionDeclaration(_) => {}
+                StatementKind::VariableDeclaration(VariableDeclaration {
+                    name,
+                    initializer,
+                    ty,
+                }) => {}
+                StatementKind::Extern(_) => {}
+                // Ignored.
+                StatementKind::Block(_)
+                | StatementKind::Break { .. }
+                | StatementKind::Continue { .. }
+                | StatementKind::Return(_)
+                | StatementKind::If { .. }
+                | StatementKind::ExpressionStatement(_)
+                | StatementKind::While { .. } => {}
+            }
+        }
     }
 
     pub fn resolve_statements(

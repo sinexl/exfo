@@ -29,7 +29,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::FunctionCall {
             callee,
             args,
-            result,
+            result, is_variadic,
         } => {
             let args_str = args
                 .iter()
@@ -38,9 +38,9 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
                 .join(", ");
             match callee {
                 Arg::ExternalFunction(id) => {
-                    write!(f, "{tab}stack[{result}] = call(\"{name}\"", name = id.name)?
+                    write!(f, "{tab}stack[{result}] = {var}call(\"{name}\"",  var = if *is_variadic {"var"} else {""}, name = id.name)?
                 }
-                arg => write!(f, "{tab}call({arg}")?,
+                arg => write!(f, "{tab}{}call({arg}", if *is_variadic { "var" } else {""} )?,
             }
             if !args.is_empty() {
                 write!(f, ", {args_str}")?;

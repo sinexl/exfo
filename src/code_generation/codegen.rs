@@ -52,19 +52,20 @@ impl<'a> Codegen<'a> {
         comment!(self, "Function Prologue");
         asm!(self, "  pushq %rbp");
         asm!(self, "  movq %rsp, %rbp");
-        let total_stack_size = function.stack_size + function.params_.iter().sum::<usize>();
+        let mut total_stack_size = function.stack_size + function.params.iter().sum::<usize>();
+        total_stack_size = total_stack_size.div_ceil(16)*16 ;
         if total_stack_size > 0 {
             asm!(self, "  subq ${total_stack_size}, %rsp");
         }
-        if !function.params_.is_empty() {
+        if !function.params.is_empty() {
             comment!(self, "Function Arguments");
         }
-        let mut function_args_offsets = Vec::with_capacity(function.params_.len());
+        let mut function_args_offsets = Vec::with_capacity(function.params.len());
         let mut stack_initializer_offset = 0;
-        let reg_arg_count = cmp::min(function.params_.len(), CALL_REGISTERS.len()); // Amount of registers passed by register.
+        let reg_arg_count = cmp::min(function.params.len(), CALL_REGISTERS.len()); // Amount of registers passed by register.
         #[allow(clippy::needless_range_loop)]
         for i in 0..reg_arg_count {
-            stack_initializer_offset += function.params_[i];
+            stack_initializer_offset += function.params[i];
             asm!(
                 self,
                 "  movq {}, -{}(%rbp)",
@@ -73,10 +74,7 @@ impl<'a> Codegen<'a> {
             );
             function_args_offsets.push(stack_initializer_offset);
         }
-        dbg!(&function.params_, &function.params_.len());
-        dbg!(&CALL_REGISTERS.len());
-        let stack_params = &function.params_[reg_arg_count..];
-        dbg!(stack_params);
+        let stack_params = &function.params[reg_arg_count..];
 
         // -16       -8         0         8         16
         //  | * * * * | * * * * | * * * * | * * * * | * * * * | * * * * ...
@@ -110,6 +108,7 @@ impl<'a> Codegen<'a> {
                 callee,
                 args,
                 result,
+                is_variadic
             } => {
                 comment!(self, "Function call");
                 let register_args = args.iter().take(CALL_REGISTERS.len());
@@ -123,6 +122,9 @@ impl<'a> Codegen<'a> {
                     self.push_arg(i);
                 }
 
+                if *is_variadic {
+                    asm!(self, "  movb $0, %al"); // SysV requires to put amount of floating point arguments into %al when calling variadic function
+                }
                 self.call_arg(callee);
                 asm!(self, "  movq %rax, -{}(%rbp)", result);
             }

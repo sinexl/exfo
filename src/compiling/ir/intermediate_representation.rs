@@ -23,5 +23,5 @@ pub struct Function<'a> {
     pub name: Identifier<'a>,
     pub code: &'a [Opcode<'a>],
     pub stack_size: usize,
-    pub params_: &'a [usize], // Stores parameters' sizes. Number of a parameter is the index in the array
+    pub params: &'a [usize], // Stores parameters' sizes. Number of a parameter is the index in the array
 }

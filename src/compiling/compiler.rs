@@ -30,7 +30,7 @@ pub struct Compiler<'ir, 'ast> {
 struct Variable<'a> {
     ty: Type<'a>,
     stack_offset: usize, // TODO #2: variable location should not be strictly tied to stack offset.
-    param_index: Option<usize>
+    param_index: Option<usize>,
 }
 
 #[derive(Copy, Clone)]
@@ -162,18 +162,21 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     let size = var.ty.size();
                     if let Some(index) = var.param_index {
                         assert_eq!(var.stack_offset, usize::MAX); // See TODO #2
-                        return Arg::Argument {
-                            index,
-                            size
-                        } ;
+                        return Arg::Argument { index, size };
                     }
                     Arg::StackOffset {
                         offset: var.stack_offset,
-                        size
+                        size,
                     }
                 }
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
+                let is_variadic =
+                    if let Type::Function(FunctionType { is_variadic, .. }) = callee.ty.get() {
+                        is_variadic
+                    } else {
+                        false
+                    };
                 let callee = self.compile_expression(callee);
                 let b = self.ir_bump;
                 let args = arguments
@@ -182,10 +185,12 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     .collect_in::<BumpVec<_>>(b)
                     .into_bump_slice();
                 let result = self.allocate_on_stack(8); // TODO: Return value size
+
                 self.push_opcode(Opcode::FunctionCall {
                     callee,
                     args,
                     result,
+                    is_variadic
                 });
                 Arg::StackOffset {
                     offset: result,
@@ -234,7 +239,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                         ty: Type::Function(FunctionType {
                             return_type,
                             parameters: parameters_types,
-
+                            is_variadic: false,
                         }),
                         stack_offset: 0,
                         param_index: None,
@@ -260,7 +265,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                         Variable {
                             ty: param.ty,
                             stack_offset: usize::MAX,
-                            param_index: Some(i)
+                            param_index: Some(i),
                         },
                     );
                     sizes.push(param.ty.size());
@@ -277,7 +282,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                         name: name.clone_into(self.ir_bump),
                         code,
                         stack_size: self.stack_size.max,
-                        params_: sizes.into_bump_slice(),
+                        params: sizes.into_bump_slice(),
                     }),
                 );
 
@@ -291,13 +296,15 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 kind: _kind,
                 parameters,
                 return_type,
+                is_variadic,
             }) => {
                 let var = Variable {
                     ty: Type::Function(FunctionType {
                         return_type: self.ast_bump.alloc(return_type.get()),
                         parameters,
+                        is_variadic: *is_variadic
                     }),
-                    stack_offset: 0,
+                    stack_offset: usize::MAX,
                     param_index: None,
                 };
                 self.variables

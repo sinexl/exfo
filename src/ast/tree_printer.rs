@@ -76,12 +76,14 @@ pub fn print_statement(
             kind,
             parameters,
             return_type,
+            is_variadic,
         }) => {
             writeln!(
                 f,
-                "Extern \"{kind:?}\" `{}` ({}): {}",
+                "Extern \"{kind:?}\" `{}` ({}{}): {}",
                 name.name,
                 Join(*parameters, ", "),
+                if *is_variadic { ", ..." } else { "" },
                 return_type.get()
             )?;
         }

@@ -98,6 +98,7 @@ pub(crate) enum TokenType {
     Comma,
     Semicolon,
     Colon,
+    TripleDot,
 
     // Logical operators
     Equal,
@@ -136,6 +137,7 @@ impl TokenType {
             | Semicolon | Colon | Equal | EqualEqual | Bang | BangEqual | Less | LessEqual
             | Greater | GreaterEqual | Plus | Minus | Star | Slash | Id | Integer | Double
             | String => false,
+            TripleDot => false,
         }
     }
 }
@@ -148,6 +150,7 @@ thread_local! {
         ("{", OpenBrace),
         ("}", CloseBrace),
         (".", Dot),
+        ("...", TripleDot),
         (";", Semicolon),
         (":", Colon),
         ("+", Plus),

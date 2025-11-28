@@ -66,6 +66,21 @@ impl Lexer {
             '=' => self.create_punct_with_equal(EqualEqual, Equal),
             '>' => self.create_punct_with_equal(GreaterEqual, Greater),
             '<' => self.create_punct_with_equal(LessEqual, Less),
+            '.' => {
+                let state = self.save();
+                let n1 = self.next_char();
+                let n2 = self.next_char();
+
+                match (n1, n2) {
+                    (Some(dot), Some(dot2)) if (dot, dot2) == ('.', '.') => {
+                        return Ok(self.create_punct(TripleDot));
+                    }
+                    _ => {
+                        self.restore(state);
+                        self.create_punct(Dot)
+                    }
+                }
+            }
             punct if is_punct(punct) => {
                 let kind = SINGLE_PUNCTS.with(|c| c[&punct]);
                 self.create_punct(kind)
