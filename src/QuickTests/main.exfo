@@ -1,14 +1,19 @@
-extern "C" func malloc(int): char_ptr;
-extern "C" func scanf(char_ptr, ...): void;
 extern "C" func printf(char_ptr, ...): void;
-extern "C" func free(char_ptr): void;
+extern "C" func print_i64(int): void;
+func side_effect(): bool {
+    printf("Side effect!%c", 10);
+}
 
 func main(): void {
-    name := malloc(35);
-    printf("Whats your name?: "); 
-    scanf("%34s", name);
-
-    printf("Hello, %s! %c", name, 10);
-    free(name);
+    extern "C" func print_bool(bool): void;
+    f := 10;
+    s := 15;
+    a: bool = false;
+    a = f == s; print_bool(a);
+    a = f != s; print_bool(a);
+    a = f > s;  print_bool(a);
+    a = f >= s; print_bool(a);
+    a = f < s;  print_bool(a);
+    a = f <= s; print_bool(a);
 }
 

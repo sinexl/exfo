@@ -56,7 +56,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             f,
             "{tab}stack[{}] = {left} {op} {right}",
             result,
-            op = kind.operator()
+            op = kind.to_ast_binop().operator()
         )?,
         Opcode::Negate { result, item } => writeln!(f, "{tab}stack[{result}] = -{item}")?,
 

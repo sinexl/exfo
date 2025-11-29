@@ -1,15 +1,16 @@
 use crate::analysis::get_at::GetAt;
-use crate::analysis::resolver::Resolutions;
 use crate::analysis::r#type::{FunctionType, Type};
+use crate::analysis::resolver::Resolutions;
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
     ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
 };
 use crate::common::{BumpVec, Stack};
+use crate::compiling::ir::binop;
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
-use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
+use bumpalo::Bump;
 use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'ast> {
@@ -89,10 +90,8 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
     pub fn compile_expression(&mut self, expression: &Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind } => {
-                let size = match kind.is_logical() {
-                    true => Type::Bool.size(),
-                    false => left.ty.get().size(),
-                };
+                let size = expression.ty.get().size();
+                let ty = left.ty.get();
                 let left = self.compile_expression(left);
                 let right = self.compile_expression(right);
                 let offset = self.allocate_on_stack(size);
@@ -100,7 +99,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     left,
                     right,
                     result: offset,
-                    kind: *kind,
+                    kind: binop::Binop::from_ast_binop(*kind, &ty),
                 });
                 Arg::StackOffset { offset, size }
             }
@@ -190,7 +189,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     callee,
                     args,
                     result,
-                    is_variadic
+                    is_variadic,
                 });
                 Arg::StackOffset {
                     offset: result,
@@ -302,7 +301,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     ty: Type::Function(FunctionType {
                         return_type: self.ast_bump.alloc(return_type.get()),
                         parameters,
-                        is_variadic: *is_variadic
+                        is_variadic: *is_variadic,
                     }),
                     stack_offset: usize::MAX,
                     param_index: None,

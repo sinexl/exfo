@@ -1,5 +1,5 @@
-use crate::ast::binop::BinopKind;
 use crate::common::Identifier;
+use crate::compiling::ir::binop::Binop;
 
 #[derive(Clone, Debug)]
 pub enum Opcode<'a> {
@@ -13,7 +13,7 @@ pub enum Opcode<'a> {
         left: Arg<'a>,
         right: Arg<'a>,
         result: usize,
-        kind: BinopKind,
+        kind: Binop,
     },
     Negate {
         result: usize,
@@ -40,11 +40,11 @@ pub enum Opcode<'a> {
 pub enum Arg<'a> {
     Bool(bool),
     Int64 { bits: [u8; 8], signed: bool },
-    String { index: usize }, // Index is in ir.strings
-    ExternalFunction(Identifier<'a>), // Bool: is variadic
+    String { index: usize },                    // Index is in ir.strings
+    ExternalFunction(Identifier<'a>),           // Bool: is variadic
     StackOffset { offset: usize, size: usize }, // TODO: Utilize StackOffset::size and Argument::size
-    Argument { index: usize, size: usize }, // Stores argument number (counting from 0)
-                                        // and size of the argument
+    Argument { index: usize, size: usize },     // Stores argument number (counting from 0)
+                                                // and size of the argument
 }
 
 impl Arg<'_> {

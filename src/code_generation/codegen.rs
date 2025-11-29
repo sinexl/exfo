@@ -1,6 +1,7 @@
-use crate::ast::binop::BinopKind;
 use crate::code_generation::register::Register;
 use crate::code_generation::register::Register::*;
+use crate::compiling::ir::binop::{IntegerBinop, OrderingKind};
+use crate::compiling::ir::binop::{ArithmeticKind, Binop, BinopKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use std::cmp;
@@ -53,7 +54,7 @@ impl<'a> Codegen<'a> {
         asm!(self, "  pushq %rbp");
         asm!(self, "  movq %rsp, %rbp");
         let mut total_stack_size = function.stack_size + function.params.iter().sum::<usize>();
-        total_stack_size = total_stack_size.div_ceil(16)*16 ;
+        total_stack_size = total_stack_size.div_ceil(16) * 16;
         if total_stack_size > 0 {
             asm!(self, "  subq ${total_stack_size}, %rsp");
         }
@@ -108,7 +109,7 @@ impl<'a> Codegen<'a> {
                 callee,
                 args,
                 result,
-                is_variadic
+                is_variadic,
             } => {
                 comment!(self, "Function call");
                 let register_args = args.iter().take(CALL_REGISTERS.len());
@@ -134,45 +135,42 @@ impl<'a> Codegen<'a> {
                 result,
                 kind,
             } => {
-                comment!(self, "Binop ({})", kind.operator());
+                comment!(self, "Binop ({})", kind.to_ast_binop().operator());
                 self.load_arg_to_reg(left, Rax);
                 self.load_arg_to_reg(right, Rcx);
-                match (kind, kind.is_logical()) {
-                    (kind, false) => {
-                        match kind {
-                            BinopKind::Addition => asm!(self, "  addq %rcx, %rax"),
-                            BinopKind::Subtraction => asm!(self, "  subq %rcx, %rax"),
-                            BinopKind::Multiplication => asm!(self, "  imulq %rcx, %rax"),
-                            BinopKind::Division => {
+                let Binop::IntegerBinop(IntegerBinop { signed, size, kind }) = kind;
+
+
+                match kind {
+                    BinopKind::Arithmetic(c) => {
+                        use ArithmeticKind::*;
+                        match c {
+                            Addition => asm!(self, "  addq %rcx, %rax"),
+                            Subtraction => asm!(self, "  subq %rcx, %rax"),
+                            Multiplication => asm!(self, "  imulq %rcx, %rax"),
+                            Division => {
                                 asm!(self, "  cqto");
                                 asm!(self, "  idivq %rcx");
                             }
-                            _ => unreachable!("is_logical() should be updated."),
                         }
                         asm!(self, "  movq %rax, -{result}(%rbp)");
                     }
-
-                    (kind, true) => {
+                    BinopKind::Ordering(c) => {
                         asm!(self, "  cmpq %rcx, %rax");
-                        match kind {
-                            BinopKind::Equality => asm!(self, "  sete %al"),
-                            BinopKind::Inequality => asm!(self, "  setne %al"),
-                            BinopKind::GreaterThan => asm!(self, "  setg %al"),
-                            BinopKind::GreaterEq => asm!(self, "  setge %al"),
-                            BinopKind::LessThan => asm!(self, "  setl %al"),
-                            BinopKind::LessEq => asm!(self, "  setle %al"),
-
-                            BinopKind::Addition
-                            | BinopKind::Subtraction
-                            | BinopKind::Multiplication
-                            | BinopKind::Division => {
-                                unreachable!("is_logical() should be updated")
-                            }
+                        use OrderingKind::*;
+                        match c {
+                            Equality => asm!(self, "  sete %al"),
+                            Inequality => asm!(self, "  setne %al"),
+                            GreaterThan => asm!(self, "  setg %al"),
+                            GreaterEq => asm!(self, "  setge %al"),
+                            LessThan => asm!(self, "  setl %al"),
+                            LessEq => asm!(self, "  setle %al"),
                         }
                         asm!(self, "  movb %al, -{result}(%rbp)");
                     }
                 }
             }
+
             Opcode::Negate { result, item } => {
                 comment!(self, "Negate");
                 self.load_arg_to_reg(item, Rax);
