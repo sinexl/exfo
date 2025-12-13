@@ -53,10 +53,15 @@ impl<'a> Codegen<'a> {
         comment!(self, "Function Prologue");
         asm!(self, "  pushq %rbp");
         asm!(self, "  movq %rsp, %rbp");
-        let mut total_stack_size = function.stack_size + function.params.iter().sum::<usize>();
-        total_stack_size = total_stack_size.div_ceil(16) * 16;
+        let total_stack_size = function.stack_size + function.params.iter().sum::<usize>();
+        let final_stack_size = (total_stack_size.div_ceil(16) * 16) + 8;
         if total_stack_size > 0 {
-            asm!(self, "  subq ${total_stack_size}, %rsp");
+            comment!(
+                self,
+                "Stack size: {total_stack_size}. Padding: {}",
+                final_stack_size - total_stack_size
+            );
+            asm!(self, "  subq ${final_stack_size}, %rsp");
         }
         if !function.params.is_empty() {
             comment!(self, "Function Arguments");
@@ -66,11 +71,13 @@ impl<'a> Codegen<'a> {
         let reg_arg_count = cmp::min(function.params.len(), CALL_REGISTERS.len()); // Amount of registers passed by register.
         #[allow(clippy::needless_range_loop)]
         for i in 0..reg_arg_count {
-            stack_initializer_offset += function.params[i];
+            let arg_size = function.params[i];
+            let p = Register::prefix_from_size(arg_size);
+            stack_initializer_offset += arg_size;
             asm!(
                 self,
-                "  movq {}, -{}(%rbp)",
-                CALL_REGISTERS[i],
+                "  mov{p} {}, -{}(%rbp)",
+                CALL_REGISTERS[i].lower_bytes_register(arg_size),
                 stack_initializer_offset
             );
             function_args_offsets.push(stack_initializer_offset);
@@ -201,8 +208,14 @@ impl<'a> Codegen<'a> {
             }
             Opcode::JmpIfNot { label, condition } => {
                 comment!(self, "JmpIfNot");
-                self.load_arg_to_reg(condition, Register::Al);
-                asm!(self, "  test %rax, %rax");
+                let reg = match condition.size() {
+                    8 => Rax,
+                    1 => Al,
+                    _ => unreachable!("unsupported size of operation"),
+                };
+                let p = reg.prefix();
+                self.load_arg_to_reg(condition, reg);
+                asm!(self, "  test{p} {reg}, {reg}");
                 asm!(self, "  jz .label_{label}")
             }
             Opcode::Jmp { label } => {

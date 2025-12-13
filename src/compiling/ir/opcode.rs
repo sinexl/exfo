@@ -41,7 +41,7 @@ pub enum Arg<'a> {
     Bool(bool),
     Int64 { bits: [u8; 8], signed: bool },
     String { index: usize },                    // Index is in ir.strings
-    ExternalFunction(Identifier<'a>),           // Bool: is variadic
+    ExternalFunction(Identifier<'a>),
     StackOffset { offset: usize, size: usize }, // TODO: Utilize StackOffset::size and Argument::size
     Argument { index: usize, size: usize },     // Stores argument number (counting from 0)
                                                 // and size of the argument
