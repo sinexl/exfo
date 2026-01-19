@@ -1,7 +1,7 @@
 use crate::code_generation::register::Register;
 use crate::code_generation::register::Register::*;
+use crate::compiling::ir::binop::{ArithmeticKind, Binop, BinopKind, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::binop::{IntegerBinop, OrderingKind};
-use crate::compiling::ir::binop::{ArithmeticKind, Binop, BinopKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
 use std::cmp;
@@ -143,37 +143,56 @@ impl<'a> Codegen<'a> {
                 kind,
             } => {
                 comment!(self, "Binop ({})", kind.to_ast_binop().operator());
-                self.load_arg_to_reg(left, Rax);
-                self.load_arg_to_reg(right, Rcx);
-                let Binop::IntegerBinop(IntegerBinop { signed, size, kind }) = kind;
-
 
                 match kind {
-                    BinopKind::Arithmetic(c) => {
-                        use ArithmeticKind::*;
-                        match c {
-                            Addition => asm!(self, "  addq %rcx, %rax"),
-                            Subtraction => asm!(self, "  subq %rcx, %rax"),
-                            Multiplication => asm!(self, "  imulq %rcx, %rax"),
-                            Division => {
-                                asm!(self, "  cqto");
-                                asm!(self, "  idivq %rcx");
+                    Binop::Integer(IntegerBinop { signed, size, kind }) => {
+                        self.load_arg_to_reg(left, Rax);
+                        self.load_arg_to_reg(right, Rcx);
+                        match kind {
+                            BinopKind::Arithmetic(c) => {
+                                use ArithmeticKind::*;
+                                match c {
+                                    Addition => asm!(self, "  addq %rcx, %rax"),
+                                    Subtraction => asm!(self, "  subq %rcx, %rax"),
+                                    Multiplication => asm!(self, "  imulq %rcx, %rax"),
+                                    Division => {
+                                        asm!(self, "  cqto");
+                                        asm!(self, "  idivq %rcx");
+                                    }
+                                }
+                                asm!(self, "  movq %rax, -{result}(%rbp)");
+                            }
+                            BinopKind::Ordering(c) => {
+                                asm!(self, "  cmpq %rcx, %rax");
+                                use OrderingKind::*;
+                                match c {
+                                    Equality => asm!(self, "  sete %al"),
+                                    Inequality => asm!(self, "  setne %al"),
+                                    GreaterThan => asm!(self, "  setg %al"),
+                                    GreaterEq => asm!(self, "  setge %al"),
+                                    LessThan => asm!(self, "  setl %al"),
+                                    LessEq => asm!(self, "  setle %al"),
+                                }
+                                asm!(self, "  movb %al, -{result}(%rbp)");
                             }
                         }
-                        asm!(self, "  movq %rax, -{result}(%rbp)");
                     }
-                    BinopKind::Ordering(c) => {
-                        asm!(self, "  cmpq %rcx, %rax");
-                        use OrderingKind::*;
-                        match c {
-                            Equality => asm!(self, "  sete %al"),
-                            Inequality => asm!(self, "  setne %al"),
-                            GreaterThan => asm!(self, "  setg %al"),
-                            GreaterEq => asm!(self, "  setge %al"),
-                            LessThan => asm!(self, "  setl %al"),
-                            LessEq => asm!(self, "  setle %al"),
+                    Binop::Bitwise(BitwiseBinop {
+                        kind,
+                        is_logical_with_short_circuit,
+                    }) => {
+                        if !is_logical_with_short_circuit {
+                            self.load_arg_to_reg(left, Al);
                         }
-                        asm!(self, "  movb %al, -{result}(%rbp)");
+                        self.load_arg_to_reg(right, Bl);
+                        let p = Register::prefix_from_size(left.size());
+                        match kind {
+                            BitwiseKind::Or =>
+                                asm!(self, "  or{p} {Al}, {Bl}"),
+                            BitwiseKind::And =>
+                                asm!(self, "  and{p} {Al}, {Bl}")
+                        }
+                        asm!(self, "mov{p} {Bl}, -{result}(%rbp)");
                     }
                 }
             }
@@ -187,7 +206,7 @@ impl<'a> Codegen<'a> {
             Opcode::Assign { result, arg: item } => {
                 comment!(self, "Assign");
                 let register = match item.size() {
-                    8 => Rax,
+                    8 => Rax, // TODO: introduce function for this.
                     1 => Al,
                     _ => unreachable!("unsupported size of operation"),
                 };
@@ -299,8 +318,7 @@ impl<'a> Codegen<'a> {
             }
             Arg::Argument { index, size } => {
                 let offset = self.current_function_args_offsets.as_ref().unwrap()[*index];
-                asm!(self, "  mov{p} -{offset}(%rbp), {Rax}");
-                asm!(self, "  mov{p} {Rax}, {reg}");
+                asm!(self, "  mov{p} -{offset}(%rbp), {reg}");
             }
         }
     }

@@ -66,6 +66,16 @@ impl Lexer {
             '=' => self.create_punct_with_equal(EqualEqual, Equal),
             '>' => self.create_punct_with_equal(GreaterEqual, Greater),
             '<' => self.create_punct_with_equal(LessEqual, Less),
+            '&' | '|' => {
+                let (single, double) = match c {
+                    '&' => (Ampersand, DoubleAmpersand),
+                    '|' => (Bar, DoubleBar),
+                    _ => unreachable!(),
+                };
+                let ty = self.match_type(c, double, single);
+                self.create_punct(ty)
+            }
+
             '.' => {
                 let state = self.save();
                 let n1 = self.next_char();

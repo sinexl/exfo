@@ -1,6 +1,7 @@
 use crate::analysis::get_at::GetAt;
-use crate::analysis::r#type::{FunctionType, Type};
 use crate::analysis::resolver::Resolutions;
+use crate::analysis::r#type::{FunctionType, Type};
+use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
     ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
@@ -9,9 +10,11 @@ use crate::common::{BumpVec, Stack};
 use crate::compiling::ir::binop;
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Opcode};
-use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
+use bumpalo::collections::CollectIn;
 use std::collections::HashMap;
+use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
+use crate::compiling::ir::opcode::Opcode::{Jmp, JmpIfNot};
 
 pub struct Compiler<'ir, 'ast> {
     ir_bump: &'ir Bump,
@@ -40,9 +43,16 @@ struct While {
     exit: usize,
 }
 
+#[derive(Copy, Clone)]
 struct StackSize {
     count: usize,
     max: usize,
+}
+
+#[derive(Copy, Clone)]
+struct ControlFlowLabels {
+    enter_label: usize,
+    exit_label: usize,
 }
 
 impl StackSize {
@@ -89,9 +99,95 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
 
     pub fn compile_expression(&mut self, expression: &Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
+            ExpressionKind::Binop { left, right, kind }
+                if kind.family() == BinopFamily::Logical =>
+            {
+                let size = expression.ty.get().size();
+                assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
+                let left = self.compile_expression(left);
+                let offset = self.allocate_on_stack(size);
+                match kind {
+                    BinopKind::And => {
+                        /*
+                        Scheme of AND in IR: res = a && b; after;
+                          a.
+                          if !a jump FALSE:
+                             b;
+                             res = a && b;
+                             jump out
+                          FALSE:
+                             res = false
+                          out:
+                            after;
+                        */
+                        let short_circuit = self.allocate_label();
+                        // Cases: if lhs is false, jump to do_check.
+                        self.push_opcode(JmpIfNot { label: short_circuit, condition: left.clone() });
+
+                        // Case 1: `a` is true, so b should be evaluated.
+                        let right = self.compile_expression(right);
+                        self.push_opcode(Opcode::Binop {
+                            left,
+                            right ,
+                            result: offset,
+                            kind: Binop::Bitwise(BitwiseBinop{ kind: BitwiseKind::And, is_logical_with_short_circuit: true }),
+                        });
+                        let out_label = self.allocate_label() ;
+                        self.push_opcode(Jmp {label: out_label});
+
+                        // Case 2: `a` is false, so && is false.
+                        self.push_opcode(Opcode::Label { index: short_circuit });
+                        self.push_opcode(Opcode::Assign {
+                            result: offset,
+                            arg: Arg::Bool(false),
+                        });
+                        self.push_opcode(Opcode::Label { index: out_label });
+
+                        Arg::StackOffset { offset, size }
+                    }
+                    BinopKind::Or => {
+                        /*
+                        Scheme of OR in IR: res = a || b; after;
+                          a.
+                          if !a jump check
+                             res = true
+                             jump out
+                          check:
+                             b;
+                             res = a || b;
+                          out:
+                            after;
+                        */
+                        let do_check = self.allocate_label();
+                        // Cases: if lhs is false, jump to do_check.
+                        self.push_opcode(JmpIfNot { label: do_check, condition: left.clone() });
+                        // Case one: The lhs is true, so entire || is true.
+                        self.push_opcode(Opcode::Assign {
+                            result: offset,
+                            arg: Arg::Bool(true),
+                        });
+                        let out_label = self.allocate_label() ;
+                        self.push_opcode(Jmp {label: out_label});
+
+                        // Case two: The lhs is false, so rhs should be also evaluated to complete ||.
+                        self.push_opcode(Opcode::Label { index: do_check });
+                        let right = self.compile_expression(right);
+                        self.push_opcode(Opcode::Binop {
+                            left,
+                            right ,
+                            result: offset,
+                            kind: Binop::Bitwise(BitwiseBinop{ kind: BitwiseKind::Or, is_logical_with_short_circuit: true }),
+                        });
+
+                        self.push_opcode(Opcode::Label { index: out_label });
+                        Arg::StackOffset { offset, size }
+                    },
+                    _ => unreachable!("Unknown binary operation"),
+                }
+            }
+
             ExpressionKind::Binop { left, right, kind } => {
                 let size = expression.ty.get().size();
-                let ty = left.ty.get();
                 let left = self.compile_expression(left);
                 let right = self.compile_expression(right);
                 let offset = self.allocate_on_stack(size);
@@ -99,10 +195,17 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     left,
                     right,
                     result: offset,
-                    kind: binop::Binop::from_ast_binop(*kind, &ty),
+                    kind: match kind.family() {
+                        BinopFamily::Arithmetic | BinopFamily::Ordering => {
+                            //                         TODO: Unsigned
+                            binop::IntegerBinop::from_ast(true, size, *kind)
+                        }
+                        BinopFamily::Logical => unreachable!("This should be handled by another match arm"),
+                    },
                 });
                 Arg::StackOffset { offset, size }
             }
+
             ExpressionKind::Unary { item, operator } => {
                 let size = item.ty.get().size();
                 let item = self.compile_expression(item);
@@ -369,11 +472,12 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                     stmt2 // code after if-else block.
                 */
 
+                let else_label = self.allocate_label();
+
                 let stack_size = self.stack_size.count;
                 let condition = self.compile_expression(condition);
                 self.stack_size.count = stack_size;
 
-                let else_label = self.allocate_label();
                 self.push_opcode(Opcode::JmpIfNot {
                     label: else_label,
                     condition,

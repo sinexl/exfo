@@ -1,4 +1,9 @@
-extern "C" func print_bool(bool): void; 
+extern "C" func printf(char_ptr, ...): void; 
+func print_bool(a: bool): void { 
+    if a printf("true"); 
+    else printf("false"); 
+    printf("%c", 10);
+} 
 func main(): void { 
     f := 10; 
     s := 15;

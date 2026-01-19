@@ -1,6 +1,8 @@
 use crate::analysis::get_at::GetAt;
 use crate::analysis::resolver::Resolutions;
 use crate::analysis::r#type::{FunctionType, Type};
+use crate::ast;
+use crate::ast::binop::BinopFamily;
 use crate::ast::expression::{Expression, ExpressionKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
@@ -8,7 +10,6 @@ use crate::common::{BumpVec, CompilerError, SourceLocation, Stack};
 use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
 use std::cell::Cell;
-use std::cmp::Ordering;
 use std::collections::HashMap;
 
 pub struct Typechecker<'ast> {
@@ -43,16 +44,48 @@ impl<'ast> Typechecker<'ast> {
             ExpressionKind::Binop { left, right, kind } => {
                 self.typecheck_expression(left)?;
                 self.typecheck_expression(right)?;
-                if left.ty != right.ty {
-                    return Err(TypeError {
-                        kind: TypeErrorKind::Todo("coercion".to_owned()), // TODO.
-                        loc: expression.loc.clone(),
-                    });
-                }
-                expression.ty.set(match kind.is_logical() {
-                    true => Type::Bool,
-                    false => left.ty.get(),
+                let left = left.ty.get();
+                let right = right.ty.get();
+                let error = Err(TypeError {
+                    loc: expression.loc.clone(),
+                    kind: TypeErrorKind::InvalidOperands(
+                        *kind,
+                        left.to_string().into_boxed_str(),
+                        right.to_string().into_boxed_str(),
+                    ),
                 });
+                if (left == Type::Bool || right == Type::Bool)
+                    && kind.family() != BinopFamily::Logical
+                {
+                    return error;
+                }
+                let ty = match kind.family() {
+                    BinopFamily::Arithmetic => {
+                        if left != right {
+                            return Err(TypeError {
+                                kind: TypeErrorKind::Todo("coercion".to_owned()), // TODO.
+                                loc: expression.loc.clone(),
+                            });
+                        }
+                        left
+                    }
+                    BinopFamily::Logical => {
+                        if left != Type::Bool || (left != right) {
+                            return error;
+                        }
+                        left
+                    }
+                    BinopFamily::Ordering => {
+                        if left != right {
+                            return Err(TypeError {
+                                kind: TypeErrorKind::Todo("coercion".to_owned()), // TODO.
+                                loc: expression.loc.clone(),
+                            });
+                        }
+                        Type::Bool
+                    }
+                };
+                expression.ty.set(ty);
             }
             ExpressionKind::Unary { item, .. } => {
                 self.typecheck_expression(item)?;
@@ -364,6 +397,7 @@ pub enum TypeErrorKind {
     /// This error kind is needed to ignore malformed code that should be marked as erroneous by previous passes.
     /// For example, Top-level returns are handled by resolver, so, if we meet such in typechecker, we can skip it
     FromPrevious,
+    InvalidOperands(ast::binop::BinopKind, Box<str>, Box<str>),
 }
 impl CompilerError for TypeError {
     fn location(&self) -> SourceLocation {
@@ -412,6 +446,10 @@ impl CompilerError for TypeError {
                 "Could not infer function return type".to_string()
             }
             TypeErrorKind::FromPrevious => "".to_string(),
+            TypeErrorKind::InvalidOperands(op, a, b) => format!(
+                "Invalid operands to '{op}' operation ({a}, {b})",
+                op = op.operator()
+            ),
         }
     }
 
@@ -441,6 +479,7 @@ impl CompilerError for TypeError {
             TypeErrorKind::MismatchedConditionType(_) => None,
             TypeErrorKind::CouldntInferFunctionReturnType => None,
             TypeErrorKind::FromPrevious => None,
+            TypeErrorKind::InvalidOperands(_, _, _) => None,
         }
     }
 }

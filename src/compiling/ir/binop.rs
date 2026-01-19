@@ -1,9 +1,9 @@
-use crate::analysis::r#type::Type;
 use crate::ast::binop as ast;
 
 #[derive(Copy, Clone, Debug)]
 pub enum Binop {
-    IntegerBinop(IntegerBinop),
+    Integer(IntegerBinop),
+    Bitwise(BitwiseBinop),
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -11,6 +11,18 @@ pub struct IntegerBinop {
     pub signed: bool,
     pub size: usize,
     pub kind: BinopKind,
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct BitwiseBinop {
+    pub kind: BitwiseKind,
+    pub is_logical_with_short_circuit: bool, // Needed for codegen. If the binop is logical, it means that left argument of operation is already loaded
+}
+
+#[derive(Clone, Debug, Copy)]
+pub enum BitwiseKind {
+    Or,
+    And,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -25,7 +37,6 @@ pub enum ArithmeticKind {
     Subtraction,
     Multiplication,
     Division,
-    // Comparison
 }
 #[derive(Clone, Debug, Copy)]
 pub enum OrderingKind {
@@ -37,12 +48,8 @@ pub enum OrderingKind {
     LessEq,
 }
 
-impl Binop {
-    pub fn from_ast_binop(kind: ast::BinopKind, ty: &Type) -> Self {
-        if *ty != Type::Int64 {
-            todo!("Floating point operations");
-        }
-        let size = ty.size();
+impl IntegerBinop {
+    pub fn from_ast(signed: bool, size: usize, kind: ast::BinopKind) -> Binop {
         use ArithmeticKind::*;
         use OrderingKind::*;
         let kind: BinopKind = match kind {
@@ -56,28 +63,43 @@ impl Binop {
             ast::BinopKind::GreaterEq => BinopKind::Ordering(GreaterEq),
             ast::BinopKind::LessThan => BinopKind::Ordering(LessThan),
             ast::BinopKind::LessEq => BinopKind::Ordering(LessEq),
+            ast::BinopKind::And | ast::BinopKind::Or => {
+                panic!("Compiler bug: IntegerBinop::from_ast should never be on logical operators")
+            }
         };
-        Self::IntegerBinop(IntegerBinop { signed: true, size, kind } )
+
+        Binop::Integer(Self { size, signed, kind })
     }
+}
 
+impl Binop {
     pub fn to_ast_binop(self) -> ast::BinopKind {
-        let Binop::IntegerBinop(IntegerBinop { kind, .. }) = self;
-
-        match kind {
-            BinopKind::Arithmetic(c) => match c {
-                ArithmeticKind::Addition =>  ast::BinopKind::Addition,
-                ArithmeticKind::Subtraction => ast::BinopKind::Subtraction,
-                ArithmeticKind::Multiplication => ast::BinopKind::Multiplication,
-                ArithmeticKind::Division => ast::BinopKind::Division,
-            }
-            BinopKind::Ordering(ord) => match ord {
-                OrderingKind::Equality => ast::BinopKind::Equality,
-                OrderingKind::Inequality => ast::BinopKind::Inequality,
-                OrderingKind::GreaterThan => ast::BinopKind::GreaterThan,
-                OrderingKind::GreaterEq => ast::BinopKind::GreaterEq,
-                OrderingKind::LessThan => ast::BinopKind::LessThan,
-                OrderingKind::LessEq => ast::BinopKind::LessEq,
-            }
+        match self {
+            Binop::Integer(IntegerBinop { kind, .. }) => match kind {
+                BinopKind::Arithmetic(c) => match c {
+                    ArithmeticKind::Addition => ast::BinopKind::Addition,
+                    ArithmeticKind::Subtraction => ast::BinopKind::Subtraction,
+                    ArithmeticKind::Multiplication => ast::BinopKind::Multiplication,
+                    ArithmeticKind::Division => ast::BinopKind::Division,
+                },
+                BinopKind::Ordering(ord) => match ord {
+                    OrderingKind::Equality => ast::BinopKind::Equality,
+                    OrderingKind::Inequality => ast::BinopKind::Inequality,
+                    OrderingKind::GreaterThan => ast::BinopKind::GreaterThan,
+                    OrderingKind::GreaterEq => ast::BinopKind::GreaterEq,
+                    OrderingKind::LessThan => ast::BinopKind::LessThan,
+                    OrderingKind::LessEq => ast::BinopKind::LessEq,
+                },
+            },
+            Binop::Bitwise(BitwiseBinop { kind, is_logical_with_short_circuit }) => {
+                if !is_logical_with_short_circuit {
+                    todo!("Bitwise operators")
+                }
+                match kind {
+                    BitwiseKind::Or => ast::BinopKind::Or,
+                    BitwiseKind::And => ast::BinopKind::And,
+                }
+            } ,
         }
     }
 }

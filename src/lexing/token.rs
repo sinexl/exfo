@@ -100,7 +100,7 @@ pub(crate) enum TokenType {
     Colon,
     TripleDot,
 
-    // Logical operators
+    // Ordering operators
     Equal,
     EqualEqual,
     Bang,
@@ -109,6 +109,15 @@ pub(crate) enum TokenType {
     LessEqual,
     Greater,
     GreaterEqual,
+    
+    // Logical Operators
+    DoubleAmpersand,
+    DoubleBar,
+
+    // Binary Operators
+    Ampersand,
+    Bar,
+
 
     // Other operators
     Plus,
@@ -136,8 +145,9 @@ impl TokenType {
             Eof | True | False | OpenParen | CloseParen | OpenBrace | CloseBrace | Dot | Comma
             | Semicolon | Colon | Equal | EqualEqual | Bang | BangEqual | Less | LessEqual
             | Greater | GreaterEqual | Plus | Minus | Star | Slash | Id | Integer | Double
-            | String => false,
+            | String | DoubleAmpersand | DoubleBar | Ampersand | Bar => false,
             TripleDot => false,
+
         }
     }
 }
@@ -161,6 +171,7 @@ thread_local! {
         ("<", Less), ("<=", LessEqual),
         ("=", Equal), ("==", EqualEqual),
         ("!", Bang), ("!=", BangEqual),
+        ("||", DoubleBar), ("&&", DoubleAmpersand)
     ]);
 
     pub static SINGLE_PUNCTS: HashMap<char, TokenType> = HashMap::from([
@@ -180,6 +191,8 @@ thread_local! {
         ('<', Less),
         ('=', Equal),
         ('!', Bang),
+        ('|', Bar),
+        ('&', Ampersand),
     ]);
 }
 pub fn is_punct(p: char) -> bool {

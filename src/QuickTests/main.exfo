@@ -1,19 +1,18 @@
 extern "C" func printf(char_ptr, ...): void;
 extern "C" func print_i64(int): void;
-func side_effect(): bool {
-    printf("Side effect!%c", 10);
+extern "C" func print_bool(bool): void;
+extern "C" func puts(char_ptr): void;
+func side_true(): bool {
+    printf("Side true!%c", 10);
+    return true;
+}
+
+func side_false(): bool {
+    printf("Side false!%c", 10);
+    return false;
 }
 
 func main(): void {
-    extern "C" func print_bool(bool): void;
-    f := 10;
-    s := 15;
-    a: bool = false;
-    a = f == s; print_bool(a);
-    a = f != s; print_bool(a);
-    a = f > s;  print_bool(a);
-    a = f >= s; print_bool(a);
-    a = f < s;  print_bool(a);
-    a = f <= s; print_bool(a);
+    if false || side_true() puts("Hello");
 }
 

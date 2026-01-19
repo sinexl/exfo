@@ -40,10 +40,14 @@ binop_enum! {
         GreaterEq      => GreaterEqual,
         LessThan       => Less,
         LessEq         => LessEqual,
+        And            => DoubleAmpersand,
+        Or             => DoubleBar
     }
 }
 /// higher index = higher precedence/binding power
 pub const PRECEDENCE: &[&[BinopKind]] = &[
+    &[BinopKind::Or],
+    &[BinopKind::And],
     &[BinopKind::Equality, BinopKind::Inequality],
     &[
         BinopKind::LessThan,
@@ -57,6 +61,12 @@ pub const PRECEDENCE: &[&[BinopKind]] = &[
 
 pub const MAX_PRECEDENCE: i32 = PRECEDENCE.len() as i32;
 
+#[derive(PartialEq, Hash)]
+pub enum BinopFamily {
+    Arithmetic,
+    Logical,
+    Ordering,
+}
 impl BinopKind {
     pub fn precedence(&self) -> i32 {
         // level = precedence level
@@ -73,19 +83,23 @@ impl BinopKind {
         )
     }
 
-    pub fn is_logical(self) -> bool {
+    pub fn family(self) -> BinopFamily {
+        use BinopFamily::*;
         match self {
-            BinopKind::Addition
-            | BinopKind::Subtraction
-            | BinopKind::Multiplication
-            | BinopKind::Division => false,
-
-            BinopKind::Equality
-            | BinopKind::Inequality
-            | BinopKind::GreaterThan
-            | BinopKind::GreaterEq
-            | BinopKind::LessThan
-            | BinopKind::LessEq => true,
+            BinopKind::Addition => Arithmetic,
+            BinopKind::Subtraction => Arithmetic,
+            BinopKind::Multiplication => Arithmetic,
+            BinopKind::Division => Arithmetic,
+            // Ordering
+            BinopKind::Equality => Ordering,
+            BinopKind::Inequality => Ordering,
+            BinopKind::GreaterThan => Ordering,
+            BinopKind::GreaterEq => Ordering,
+            BinopKind::LessThan => Ordering,
+            BinopKind::LessEq => Ordering,
+            // Logical
+            BinopKind::And => Logical,
+            BinopKind::Or => Logical,
         }
     }
     pub fn operator(self) -> &'static str {
@@ -100,6 +114,8 @@ impl BinopKind {
             BinopKind::GreaterEq => ">=",
             BinopKind::LessThan => "<",
             BinopKind::LessEq => "<=",
+            BinopKind::And => "&&",
+            BinopKind::Or => "||",
         }
     }
 }
