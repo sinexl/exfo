@@ -9,7 +9,6 @@ use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
-use clap::Parser as ClapParser;
 use std::path::Path;
 use std::process::{Command, Stdio, exit};
 use std::{fs, io};
@@ -24,7 +23,8 @@ pub mod lexing;
 mod parsing;
 
 fn main() -> io::Result<()> {
-    let args = CompilerArguments::parse();
+    let args = std::env::args();
+    let args = CompilerArguments::parse(args);
     if args.repl {
         dev_repl();
         return Ok(());
