@@ -29,13 +29,13 @@ pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> st
             writeln!(f, "{}", operator.name())?;
             write!(f, "{tab}item = {}", Print(item, indent + 1))
         }
-        &ExpressionKind::FunctionCall { callee, arguments } => {
+        ExpressionKind::FunctionCall { callee, arguments } => {
             writeln!(f, "Call")?;
             write!(f, "{tab}callee = {}", Print(callee, indent + 1))?;
             writeln!(f, "{tab}arguments = ")?;
             let tab = " ".repeat((indent + 2) * 2);
-            for arg in arguments {
-                write!(f, "{tab}{}", Print(arg, indent + 2))?;
+            for arg in *arguments {
+                write!(f, "{tab}{}", Print(unsafe {arg.as_ref().expect("FunctionCall: null argument") }, indent + 2))?;
             }
             Ok(())
         }

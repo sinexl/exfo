@@ -129,6 +129,8 @@ fn main() -> io::Result<()> {
         .stderr(Stdio::inherit());
     if args.pic() {
         cc.arg("-fPIC");
+    } else {
+        cc.arg("-no-pie");
     }
 
     println!("Running cc:\n{cc}", cc = DisplayCommand(&cc));

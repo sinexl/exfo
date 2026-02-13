@@ -459,7 +459,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    pub fn parse_expression(&mut self) -> Result<&'a Expression<'a>, ParseError> {
+    pub fn parse_expression(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
         self.parse_assignment()
     }
 
@@ -478,7 +478,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_assignment(&mut self) -> Result<&'a Expression<'a>, ParseError> {
+    fn parse_assignment(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
         let target = self.parse_binop(0)?;
         if let Some(tk) = self.consume(&[TokenType::Equal]) {
             let value = self.parse_assignment()?;
@@ -502,7 +502,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_binop(
         &mut self,
         precedence: i32,
-    ) -> Result<&'a Expression<'a>, ParseError> {
+    ) -> Result<&'a mut Expression<'a>, ParseError> {
         if precedence >= binop::MAX_PRECEDENCE {
             return self.parse_unary();
         }
@@ -530,7 +530,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_unary(&mut self) -> Result<&'a Expression<'a>, ParseError> {
+    fn parse_unary(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
         if let Some(tok) = self.consume(&[TokenType::Minus]) {
             let item = self.parse_unary()?;
 
@@ -547,7 +547,7 @@ impl<'a> Parser<'a> {
         self.parse_call()
     }
 
-    fn parse_call(&mut self) -> Result<&'a Expression<'a>, ParseError> {
+    fn parse_call(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
         let mut left = self.parse_primary()?;
         while let Some(tk) = self.consume(&[TokenType::OpenParen]) {
             left = self.bump.alloc(Expression {
@@ -570,15 +570,18 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_args(&mut self) -> Result<&'a [&'a Expression<'a>], ParseError> {
-        let mut args = BumpVec::new_in(self.bump);
+    fn parse_args(&mut self) -> Result<&'a [*mut Expression<'a>], ParseError> {
+        let mut args = BumpVec::<*mut Expression<'a>>::new_in(self.bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
-            args.extend(self.parse_comma_separated(|this| this.parse_expression())?);
+            let comma_separated= self.parse_comma_separated::<*mut Expression<'a>>(|this|
+                 this.parse_expression().map(|e| e as *mut _)
+            )?;
+            args.extend(comma_separated);
         }
         Ok(args.into_bump_slice())
     }
 
-    fn parse_primary(&mut self) -> Result<&'a Expression<'a>, ParseError> {
+    fn parse_primary(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
         use TokenType::*;
         let token = self.peek_token()?;
 
@@ -663,7 +666,7 @@ impl<'a> Parser<'a> {
         loc: SourceLocation,
         id: usize,
         ty: Type<'a>,
-    ) -> &'a Expression<'a> {
+    ) -> &'a mut Expression<'a> {
         self.bump.alloc(Expression {
             loc,
             kind: Literal(value),
@@ -674,12 +677,12 @@ impl<'a> Parser<'a> {
 
     pub fn reconstruct_binop(
         &self,
-        left: &'a Expression<'a>,
-        right: &'a Expression<'a>,
+        left: &'a mut Expression<'a>,
+        right: &'a mut Expression<'a>,
         kind: BinopKind,
         loc: SourceLocation,
         id: usize,
-    ) -> &'a Expression<'a> {
+    ) -> &'a mut Expression<'a> {
         self.bump.alloc(Expression {
             kind: Binop { left, right, kind },
             loc,

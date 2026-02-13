@@ -120,7 +120,7 @@ impl<'ast> Typechecker<'ast> {
             ExpressionKind::FunctionCall { callee, arguments } => {
                 self.typecheck_expression(callee)?;
                 for arg in *arguments {
-                    self.typecheck_expression(arg)?;
+                    self.typecheck_expression(unsafe { arg.as_ref().expect("Expression::FunctionCall: null argument") })?;
                 }
                 if let Type::Function(FunctionType {
                     return_type,
@@ -143,6 +143,7 @@ impl<'ast> Typechecker<'ast> {
                         return Err(arity_error);
                     }
                     for (expected, arg) in parameters.iter().zip(arguments.iter()) {
+                        let arg =  unsafe {arg.as_ref().expect("FunctionCall: null argument")};
                         let got = arg.ty.get();
                         if *expected != got {
                             return Err(TypeError {

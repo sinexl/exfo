@@ -22,23 +22,23 @@ impl<'a> Hash for Expression<'a> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum ExpressionKind<'ast> {
     Binop {
-        left: &'ast Expression<'ast>,
-        right: &'ast Expression<'ast>,
+        left: &'ast mut Expression<'ast>,
+        right: &'ast mut Expression<'ast>,
         kind: BinopKind,
     },
     Unary {
-        item: &'ast Expression<'ast>,
+        item: &'ast mut Expression<'ast>,
         operator: UnaryKind,
     },
     Assignment {
-        target: &'ast Expression<'ast>,
-        value: &'ast Expression<'ast>,
+        target: &'ast mut Expression<'ast>,
+        value: &'ast mut Expression<'ast>,
     },
     Literal(AstLiteral<'ast>),
     VariableAccess(Identifier<'ast>),
     FunctionCall {
-        callee: &'ast Expression<'ast>,
-        arguments: &'ast [&'ast Expression<'ast>],
+        callee: &'ast mut Expression<'ast>,
+        arguments: &'ast [*mut Expression<'ast>],
     },
 }
 

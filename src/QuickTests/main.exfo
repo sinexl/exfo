@@ -15,4 +15,3 @@ func side_false(): bool {
 func main(): void {
     if false || side_true() puts("Hello");
 }
-

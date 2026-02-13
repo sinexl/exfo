@@ -23,11 +23,10 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
         ExpressionKind::Literal(lit) => write!(f, "{}", lit),
         ExpressionKind::VariableAccess(name) => write!(f, "{}", name.name),
         ExpressionKind::FunctionCall { callee, arguments } => {
-            let mut temp = Vec::new();
+            let mut temp: Vec<&Expression> = Vec::with_capacity(arguments.len() + 1);
             temp.push(*callee);
-            temp.reserve(arguments.len());
-            for arg in *arguments {
-                temp.push(arg);
+            for arg in arguments.iter() {
+                temp.push(unsafe {arg.as_ref().expect("FunctionCall: null argument") } );
             }
             parenthesize(f, "call", temp.as_slice())
         }

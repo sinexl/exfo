@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{PathBuf};
 
 pub struct CompilerArguments {
     pub input: PathBuf,
@@ -99,8 +99,14 @@ impl CompilerArguments {
                         std::process::exit(-1);
                     }
 
-                    found_input = true;
+
                     result.input = PathBuf::from(input);
+                    if !result.input.exists() {
+                        eprintln!("error: file not found.");
+
+                    } else {
+                        found_input = true;
+                    }
                 }
             }
         }

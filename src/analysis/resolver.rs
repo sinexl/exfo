@@ -264,7 +264,7 @@ impl<'ast> Resolver<'ast> {
             ExpressionKind::FunctionCall { callee, arguments } => {
                 self.resolve_expression(callee)?;
                 for arg in *arguments {
-                    self.resolve_expression(arg)?;
+                    self.resolve_expression(unsafe { arg.as_ref().expect("Expression::FunctionCall: null argument") })?;
                 }
             }
             ExpressionKind::Literal(_) => { /* nothing */ }

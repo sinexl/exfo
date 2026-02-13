@@ -283,7 +283,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 let b = self.ir_bump;
                 let args = arguments
                     .iter()
-                    .map(|a| self.compile_expression(a))
+                    .map(|a| self.compile_expression(unsafe { a.as_ref().expect("FunctionCall: Null argument") } ))
                     .collect_in::<BumpVec<_>>(b)
                     .into_bump_slice();
                 let result = self.allocate_on_stack(8); // TODO: Return value size
