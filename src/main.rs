@@ -12,6 +12,7 @@ use bumpalo::Bump;
 use std::path::Path;
 use std::process::{Command, Stdio, exit};
 use std::{fs, io};
+use crate::analysis::r#type::TypeCtx;
 
 mod analysis;
 mod ast;
@@ -37,12 +38,14 @@ fn main() -> io::Result<()> {
     // Compilation process.
     let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
     let ast_allocator = Bump::new();
+    let type_allocator = Bump::new();
+    let types = TypeCtx::new(&type_allocator);
     let ir_allocator = Bump::new();
     // Lexing.
     let (tokens, errors) = Lexer::new(&file, input.to_str().unwrap()).accumulate();
     push_errors!(static_errors, errors);
     // Parsing
-    let mut parser = Parser::new(tokens.into(), &ast_allocator);
+    let mut parser = Parser::new(tokens.into(), &ast_allocator, &type_allocator);
     let (ast, errors) = parser.parse_program();
     push_errors!(static_errors, errors);
 
@@ -65,7 +68,8 @@ fn main() -> io::Result<()> {
         }
         exit(1);
     }
-    let mut type_checker = Typechecker::new(&ast_allocator, resolutions);
+
+    let mut type_checker = Typechecker::new(&types, resolutions);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {
         push_errors!(static_errors, r);
@@ -80,7 +84,7 @@ fn main() -> io::Result<()> {
     }
 
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator, &ast_allocator, type_checker.resolutions);
+    let mut compiler = Compiler::new(&ir_allocator, &types, type_checker.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
     dprintln!(args, "{ir}");

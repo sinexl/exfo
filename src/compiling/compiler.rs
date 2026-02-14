@@ -1,6 +1,6 @@
 use crate::analysis::get_at::GetAt;
 use crate::analysis::resolver::Resolutions;
-use crate::analysis::r#type::{FunctionType, Type};
+use crate::analysis::r#type::{FunctionType, Type, TypeCtx, TypeId};
 use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
@@ -16,23 +16,29 @@ use std::collections::HashMap;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::opcode::Opcode::{Jmp, JmpIfNot};
 
-pub struct Compiler<'ir, 'ast> {
+pub struct Compiler<'ir, 'ast, 'types> {
+    // allocators
     ir_bump: &'ir Bump,
-    ast_bump: &'ast Bump, // TODO: Compiler should not do any ast-related allocations.
+    types: &'types TypeCtx<'types>,
+
+    // Compiler state
     current_function: Option<BumpVec<'ir, Opcode<'ir>>>,
-    variables: Stack<HashMap<&'ast str, Variable<'ast>>>,
+    variables: Stack<HashMap<&'ast str, Variable>>,
     loops: HashMap<usize, While>,
-
-    resolutions: Resolutions<'ast>,
-    pub ir: &'ir mut IntermediateRepresentation<'ir>,
-
     stack_size: StackSize,
     label_count: usize,
+
+
+    // Compiler output
+    pub ir: &'ir mut IntermediateRepresentation<'ir>,
+
+
+    resolutions: Resolutions<'ast>,
 }
 
 #[derive(Debug, Copy, Clone)]
-struct Variable<'a> {
-    ty: Type<'a>,
+struct Variable {
+    ty: TypeId,
     stack_offset: usize, // TODO #2: variable location should not be strictly tied to stack offset.
     param_index: Option<usize>,
 }
@@ -61,15 +67,15 @@ impl StackSize {
     }
 }
 
-impl<'ir, 'ast> Compiler<'ir, 'ast> {
+impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
     pub fn new(
         ir_bump: &'ir Bump,
-        ast_bump: &'ast Bump,
+        types: &'types TypeCtx<'types>,
         resolutions: Resolutions<'ast>,
-    ) -> Compiler<'ir, 'ast> {
+    ) -> Compiler<'ir, 'ast, 'types> {
         Self {
             ir_bump,
-            ast_bump,
+            types,
             ir: ir_bump.alloc(IntermediateRepresentation::new(ir_bump)),
             current_function: None,
             stack_size: StackSize::zero(),
@@ -81,7 +87,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
     }
 }
 
-impl<'ir, 'ast> Compiler<'ir, 'ast> {
+impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
     pub fn allocate_on_stack(&mut self, size: usize) -> usize {
         self.stack_size.count += size;
         if self.stack_size.count >= self.stack_size.max {
@@ -102,7 +108,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             ExpressionKind::Binop { left, right, kind }
                 if kind.family() == BinopFamily::Logical =>
             {
-                let size = expression.ty.get().size();
+                let size = expression.ty.get(self.types).size();
                 assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
                 let left = self.compile_expression(left);
                 let offset = self.allocate_on_stack(size);
@@ -187,7 +193,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             }
 
             ExpressionKind::Binop { left, right, kind } => {
-                let size = expression.ty.get().size();
+                let size = expression.ty.get(self.types).size();
                 let left = self.compile_expression(left);
                 let right = self.compile_expression(right);
                 let offset = self.allocate_on_stack(size);
@@ -207,7 +213,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             }
 
             ExpressionKind::Unary { item, operator } => {
-                let size = item.ty.get().size();
+                let size = item.ty.get(self.types).size();
                 let item = self.compile_expression(item);
                 match operator {
                     UnaryKind::Negation => {
@@ -257,11 +263,11 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             ExpressionKind::VariableAccess(n) => {
                 let depth = *self.resolutions.get(expression).expect("Analysis failed");
                 let var = self.variables.get_at(&n.name, depth);
-
-                if let Type::Function(fn_type) = var.ty {
+                let var_type = var.ty.get(self.types);
+                if let Type::Function(fn_type) = var_type {
                     Arg::ExternalFunction(n.clone_into(self.ir_bump))
                 } else {
-                    let size = var.ty.size();
+                    let size = var_type.size();
                     if let Some(index) = var.param_index {
                         assert_eq!(var.stack_offset, usize::MAX); // See TODO #2
                         return Arg::Argument { index, size };
@@ -274,8 +280,8 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
                 let is_variadic =
-                    if let Type::Function(FunctionType { is_variadic, .. }) = callee.ty.get() {
-                        is_variadic
+                    if let Type::Function(FunctionType { is_variadic, .. }) = callee.ty.get(self.types) {
+                        *is_variadic
                     } else {
                         false
                     };
@@ -310,7 +316,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
         todo!("Top-level statements are not supported yet")
     }
 
-    pub fn compile_statement(&mut self, statement: &'ast Statement<'ast>) {
+    pub fn compile_statement(&mut self, statement: &'ast Statement<'ast, 'types>) {
         match &statement.kind {
             StatementKind::ExpressionStatement(expr) => {
                 // The result of compile_expression is always temporary unless we actually assign it.
@@ -332,17 +338,16 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 let parameters_types = parameters
                     .iter()
                     .map(|p| p.ty)
-                    .collect_in::<BumpVec<_>>(self.ast_bump)
+                    .collect_in::<BumpVec<_>>(self.types.bump())
                     .into_bump_slice();
-                let return_type = self.ast_bump.alloc(return_type.get());
                 self.variables[parent_scope].insert(
                     name.name,
                     Variable {
-                        ty: Type::Function(FunctionType {
-                            return_type,
+                        ty: self.types.allocate(Type::Function(FunctionType {
+                            return_type: *return_type,
                             parameters: parameters_types,
                             is_variadic: false,
-                        }),
+                        })),
                         stack_offset: 0,
                         param_index: None,
                     },
@@ -370,7 +375,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                             param_index: Some(i),
                         },
                     );
-                    sizes.push(param.ty.size());
+                    sizes.push(param.ty.get(self.types).size());
                 }
 
                 for statement in *body {
@@ -401,11 +406,11 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 is_variadic,
             }) => {
                 let var = Variable {
-                    ty: Type::Function(FunctionType {
-                        return_type: self.ast_bump.alloc(return_type.get()),
+                    ty: self.types.allocate(Type::Function(FunctionType {
+                        return_type: *return_type,
                         parameters,
                         is_variadic: *is_variadic,
-                    }),
+                    })),
                     stack_offset: usize::MAX,
                     param_index: None,
                 };
@@ -428,7 +433,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 initializer,
                 ty,
             }) => {
-                let stack_offset = self.allocate_on_stack(ty.get().size());
+                let stack_offset = self.allocate_on_stack(ty.get(self.types).size());
                 // Since shadowing is allowed, initializers are compiled before variable is inserted in the compiler tables.
                 // i. e
                 // a := 10;
@@ -442,7 +447,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
                 }
                 let var = Variable {
                     stack_offset,
-                    ty: ty.get(),
+                    ty: *ty,
                     param_index: None,
                 };
                 self.variables
@@ -544,7 +549,7 @@ impl<'ir, 'ast> Compiler<'ir, 'ast> {
         }
     }
 
-    pub fn compile_statements(&mut self, statements: &[&'ast Statement<'ast>]) {
+    pub fn compile_statements(&mut self, statements: &[&'ast Statement<'ast, 'types>]) {
         self.variables.push(HashMap::new());
         for statement in statements {
             self.compile_statement(statement);

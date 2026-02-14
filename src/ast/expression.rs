@@ -1,7 +1,6 @@
-use crate::analysis::r#type::Type;
+use crate::analysis::r#type::{TypeId};
 use crate::ast::binop::BinopKind;
 use crate::common::{Identifier, SourceLocation};
-use std::cell::Cell;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
@@ -10,7 +9,7 @@ pub struct Expression<'ast> {
     pub kind: ExpressionKind<'ast>,
     pub loc: SourceLocation,
     pub id: usize,
-    pub ty: Cell<Type<'ast>>,
+    pub ty: TypeId,
 }
 
 impl<'a> Hash for Expression<'a> {

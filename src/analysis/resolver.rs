@@ -64,11 +64,11 @@ impl<'ast> Resolver<'ast> {
         }
     }
 }
-impl<'ast> Resolver<'ast> {
+impl<'ast, 'types> Resolver<'ast> {
     // Resolving
     pub fn resolve_statement(
         &mut self,
-        statement: &'ast Statement<'ast>,
+        statement: &'ast Statement<'ast, 'types>,
     ) -> Result<(), Vec<ResolverError>> {
         match &statement.kind {
             StatementKind::ExpressionStatement(expression) => {
@@ -201,7 +201,7 @@ impl<'ast> Resolver<'ast> {
         Ok(())
     }
 
-    pub fn preresolve_globals(&mut self, statements: &'ast [&'ast Statement<'ast>]) {
+    pub fn preresolve_globals(&mut self, statements: &'ast [&'ast Statement<'ast, 'types>]) {
         for statement in statements {
             match &statement.kind {
                 StatementKind::FunctionDeclaration(_) => {}
@@ -225,7 +225,7 @@ impl<'ast> Resolver<'ast> {
 
     pub fn resolve_statements(
         &mut self,
-        statements: &[&'ast Statement<'ast>],
+        statements: &[&'ast Statement<'ast, 'types>],
     ) -> Vec<ResolverError> {
         let mut resolution_errors = Vec::new();
         for statement in statements {

@@ -180,8 +180,9 @@ pub fn proper_label_resolution() {
     let (tokens, errors) = Lexer::new(src, PATH).accumulate();
     assert!(errors.is_empty());
     let ast_alloc = Bump::new();
+    let type_alloc = Bump::new();
 
-    let mut parser = Parser::new(tokens.into(), &ast_alloc);
+    let mut parser = Parser::new(tokens.into(), &ast_alloc, &type_alloc);
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
@@ -194,8 +195,8 @@ pub fn proper_label_resolution() {
     for stmt in ast.iter().copied() {
         if let StatementKind::While { body, .. } = &stmt.kind {
             let while_loc = (stmt.loc.line, stmt.loc.offset);
-            fn collect<'a>(
-                stmt: &'a Statement<'a>,
+            fn collect<'ast, 'types>(
+                stmt: &'ast Statement<'ast, 'types>,
                 parent_loc: (usize, usize),
                 map: &mut HashMap<(usize, usize), (usize, usize)>,
             ) {
@@ -234,8 +235,9 @@ fn success(src: &str) -> HashMap<(usize, usize), usize> {
     let (tokens, errors) = Lexer::new(src, PATH).accumulate();
     assert!(errors.is_empty());
     let ast_alloc = Bump::new();
+    let type_alloc =  Bump::new();
 
-    let mut parser = Parser::new(tokens.into(), &ast_alloc);
+    let mut parser = Parser::new(tokens.into(), &ast_alloc, &type_alloc);
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
@@ -259,8 +261,9 @@ fn errors(src: &str) -> Vec<ResolverError> {
     let (tokens, errors) = Lexer::new(src, PATH).accumulate();
     assert!(errors.is_empty());
     let ast_alloc = Bump::new();
+    let type_alloc = Bump::new();
 
-    let mut parser = Parser::new(tokens.into(), &ast_alloc);
+    let mut parser = Parser::new(tokens.into(), &ast_alloc, &type_alloc);
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
