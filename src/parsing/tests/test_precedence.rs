@@ -131,10 +131,11 @@ pub fn success(expr: &str) -> String {
     let (tokens, errors) = Lexer::new(expr, PATH).accumulate();
     assert_eq!(errors.len(), 0);
     let test_alloc = Bump::new();
-    let v = Parser::new(tokens.into(), &test_alloc)
+    let type_alloc = Bump::new();
+    let v = Parser::new(tokens.into(), &test_alloc, &type_alloc)
         .parse_expression()
         .unwrap();
-    println!("{}", v);
+    println!("{}", PrefixPrint(v));
     format!("{}", PrefixPrint(v))
 }
 
@@ -142,7 +143,7 @@ pub fn fail(expr: &str) -> ParseError {
     let (tokens, errors) = Lexer::new(expr, PATH).accumulate();
     assert_eq!(errors.len(), 0);
     let test_alloc = Bump::new();
-    Parser::new(tokens.into(), &test_alloc)
+    Parser::new(tokens.into(), &test_alloc, &test_alloc)
         .parse_expression()
         .expect_err("should fail")
 }
