@@ -1,6 +1,6 @@
 use crate::analysis::get_at::GetAt;
+use crate::analysis::r#type::{BasicType, DisplayType, FunctionType, Type, TypeCtx, TypeId, TypeIdCell};
 use crate::analysis::resolver::Resolutions;
-use crate::analysis::r#type::{FunctionType, BasicType, Type, TypeCtx, DisplayType, TypeId};
 use crate::ast;
 use crate::ast::binop::BinopFamily;
 use crate::ast::expression::{Expression, ExpressionKind};
@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 pub struct Typechecker<'ast, 'types> {
     current_function_type: Option<TypeId>,
-    types: &'types TypeCtx<'types>,
+    types: *mut TypeCtx<'types>,
 
     pub resolutions: Resolutions<'ast>,
     locals: Stack<HashMap<&'ast str, Variable>>,
@@ -23,7 +23,7 @@ struct Variable {
 }
 
 impl<'ast, 'types> Typechecker<'ast, 'types> {
-    pub fn new(types: &'types TypeCtx<'types>, resolutions: Resolutions<'ast>) -> Self {
+    pub fn new(types: *mut TypeCtx<'types>, resolutions: Resolutions<'ast>) -> Self {
         Self {
             current_function_type: None,
             types,
@@ -34,6 +34,9 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
 }
 
 impl<'ast, 'types> Typechecker<'ast, 'types> {
+    pub fn types(&self) -> &'types TypeCtx<'types> {
+        unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") }
+    }
     pub fn typecheck_expression(
         &mut self,
         expression: &'ast Expression<'ast>,
@@ -47,18 +50,21 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     loc: expression.loc.clone(),
                     kind: TypeErrorKind::InvalidOperands(
                         kind,
-                        DisplayType(left.ty, self.types).to_string().into_boxed_str(),
-                        DisplayType(right.ty, self.types).to_string().into_boxed_str(),
+                        DisplayType(left.ty.inner(), self.types())
+                            .to_string()
+                            .into_boxed_str(),
+                        DisplayType(right.ty.inner(), self.types())
+                            .to_string()
+                            .into_boxed_str(),
                     ),
                 });
 
-                let left_id = left.ty;
-                let right_id = right.ty;
-                let left = left_id.get(self.types);
-                let right = right_id.get(self.types);
+                let left_id = left.ty.clone();
+                let right_id = right.ty.clone();
+                let left = left_id.get(self.types());
+                let right = right_id.get(self.types());
 
-                if (left.is_bool() || right.is_bool())
-                    && kind.family() != BinopFamily::Logical {
+                if (left.is_bool() || right.is_bool()) && kind.family() != BinopFamily::Logical {
                     return error;
                 }
                 let ty: TypeId = match kind.family() {
@@ -69,13 +75,13 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                                 loc: expression.loc.clone(),
                             });
                         }
-                        left_id
+                        left_id.inner()
                     }
                     BinopFamily::Logical => {
                         if !left.is_bool() || (left != right) {
                             return error;
                         }
-                        left_id
+                        left_id.inner()
                     }
                     BinopFamily::Ordering => {
                         if left != right {
@@ -91,7 +97,7 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
             }
             ExpressionKind::Unary { item, .. } => {
                 self.typecheck_expression(*item)?;
-                expression.ty.set(item.ty);
+                expression.ty.set(item.ty.inner());
             }
             ExpressionKind::Assignment { target, value } => {
                 self.typecheck_expression(*target)?;
@@ -102,11 +108,11 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                         loc: expression.loc.clone(),
                     });
                 }
-                expression.ty.set(target.ty);
+                expression.ty.set(target.ty.inner());
             }
             ExpressionKind::Literal(_) => {
                 assert_ne!(
-                    expression.ty,
+                    expression.ty.inner(),
                     TypeId::Unknown,
                     "Compiler bug: literals should always have a type."
                 );
@@ -122,13 +128,16 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
             ExpressionKind::FunctionCall { callee, arguments } => {
                 self.typecheck_expression(*callee)?;
                 for arg in *arguments {
-                    self.typecheck_expression(unsafe { arg.as_mut().expect("Expression::FunctionCall: null argument") })?;
+                    self.typecheck_expression(unsafe {
+                        arg.as_mut()
+                            .expect("Expression::FunctionCall: null argument")
+                    })?;
                 }
                 if let Type::Function(FunctionType {
-                                          return_type,
-                                          parameters,
-                                          is_variadic,
-                                      }) = callee.ty.get(self.types)
+                    return_type,
+                    parameters,
+                    is_variadic,
+                }) = callee.ty.get(self.types())
                 {
                     let arity_error = TypeError {
                         loc: expression.loc.clone(),
@@ -148,21 +157,26 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                         let arg = unsafe { arg.as_ref().expect("FunctionCall: null argument") };
                         // TODO: for now, we are comparing TypeIds themselves. Maybe its worth comparing Types themselves, because there would be less
                         //  restrictions for implementing type coercion, but not sure.
-                        let got = arg.ty; // .get();
-                        let expected = *expected;
-                        if expected != got {
+                        let got = arg.ty.clone(); // .get();
+                        let expected = expected.clone();
+                        if expected.inner() != got.clone().inner() {
                             return Err(TypeError {
                                 loc: arg.loc.clone(),
                                 kind: TypeErrorKind::MismatchedArgumentType {
                                     function_location: None,
                                     function_name: None, // TODO: Get function name and location
-                                    expected_type: Box::from(DisplayType(expected, self.types).to_string().as_str()),
-                                    actual_type: Box::from(DisplayType(got, self.types).to_string().as_str()),
+                                    expected_type: Box::from(
+                                        DisplayType(expected.inner(), self.types()).to_string().as_str(),
+                                    ),
+                                    actual_type: Box::from(
+                                        DisplayType(got.inner(), self.types()).to_string().as_str(),
+                                    ),
                                 },
                             });
                         }
                     }
-                    expression.ty.set(*return_type);
+                    let return_type = return_type.clone();
+                    expression.ty.set(return_type.inner());
                 } else {
                     todo!("Proper error handling")
                 }
@@ -197,35 +211,30 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
             }
 
             StatementKind::FunctionDeclaration(FunctionDeclaration {
-                                                   name,
-                                                   parameters,
-                                                   body,
-                                                   return_type,
-                                               }) => {
+                name,
+                parameters,
+                body,
+                return_type,
+            }) => {
                 // if return_type.get() == Type::Unknown {
                 //     let actual = self.try_infer_type(body)?;
                 //     return_type.set(actual);
                 // }
-                let b = self.types.bump();
+                let b = self.types().bump();
                 let fn_type = FunctionType {
-                    return_type: *return_type,
+                    return_type: return_type.clone(),
                     parameters: parameters
                         .iter()
-                        .map(|p| p.ty)
+                        .map(|p| p.ty.clone())
                         .collect_in::<BumpVec<_>>(b)
                         .into_bump_slice(),
                     is_variadic: false,
                 };
-                let ty = self.types.allocate(Type::Function(fn_type));
+                let ty = unsafe { (*self.types).allocate(Type::Function(fn_type)) };
                 self.locals
                     .last_mut()
                     .expect("Compiler bug: there should be at least a global scope")
-                    .insert(
-                        name.name,
-                        Variable {
-                            ty
-                        },
-                    );
+                    .insert(name.name, Variable { ty });
                 self.current_function_type =
                     Some(self.locals.last().unwrap().get(name.name).unwrap().ty);
                 self.locals.push(HashMap::new());
@@ -233,7 +242,7 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     self.locals.last_mut().unwrap().insert(
                         param.name.name,
                         Variable {
-                            ty: param.ty.into(),
+                            ty: param.ty.inner(),
                         },
                     );
                 }
@@ -250,10 +259,10 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 // TODO: If there are no return in function and no return type is specified, treat it as returning void
             }
             StatementKind::VariableDeclaration(VariableDeclaration {
-                                                   name,
-                                                   initializer,
-                                                   ty,
-                                               }) => {
+                name,
+                initializer,
+                ty,
+            }) => {
                 // let return_type = self.bump.alloc(decl.return_type.get());
                 // let b = self.bump;
                 // let fn_type = FunctionType {
@@ -269,12 +278,12 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 let mut initializer_type = TypeId::Unknown;
                 if let Some(init) = initializer {
                     self.typecheck_expression(init)?;
-                    initializer_type = init.ty;
+                    initializer_type = init.ty.inner();
                 }
 
-                if *variable_type == TypeId::Unknown {
+                if variable_type.inner() != TypeId::Unknown {
                     variable_type.set(initializer_type);
-                } else if *variable_type != initializer_type {
+                } else if variable_type.inner() != initializer_type {
                     return Err(TypeError {
                         loc: statement.loc.clone(),
                         kind: TypeErrorKind::Todo("Coercions are not implemented yet".to_owned()), // TODO
@@ -283,7 +292,7 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 self.locals
                     .last_mut()
                     .expect("Compiler bug: there should be at least a global scope")
-                    .insert(name.name, Variable { ty: ty.clone() });
+                    .insert(name.name, Variable { ty: ty.inner() });
             }
             StatementKind::Block(statements) => {
                 self.locals.push(HashMap::new());
@@ -303,9 +312,9 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                         )
                     };
 
-                    if let Type::Function(fn_type) = current_fn.get_mut(self.types) {
-                        if let TypeId::Unknown = fn_type.return_type {
-                            fn_type.return_type.set(val.ty);
+                    if let Type::Function(fn_type) = current_fn.get_mut(self.types()) {
+                        if let TypeId::Unknown = fn_type.return_type.inner() {
+                            fn_type.return_type.set(val.ty.inner());
                         } else if fn_type.return_type != val.ty {
                             todo!("TODO: Proper error handling")
                         }
@@ -315,23 +324,25 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 }
             }
             StatementKind::Extern(ExternalFunction {
-                                      name,
-                                      kind: _kind,
-                                      parameters,
-                                      return_type,
-                                      is_variadic,
-                                  }) => {
+                name,
+                kind: _kind,
+                parameters,
+                return_type,
+                is_variadic,
+            }) => {
                 self.locals
                     .last_mut()
                     .expect("Compiler bug: there should be at least a global scope.")
                     .insert(
                         name.name,
                         Variable {
-                            ty: self.types.allocate(Type::Function(FunctionType {
-                                return_type: *return_type,
-                                parameters,
-                                is_variadic: *is_variadic,
-                            })),
+                            ty: unsafe {
+                                (*self.types).allocate(Type::Function(FunctionType {
+                                    return_type: return_type.clone(),
+                                    parameters,
+                                    is_variadic: *is_variadic,
+                                }))
+                            },
                         },
                     );
             }
@@ -341,7 +352,7 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 r#else,
             } => {
                 self.typecheck_expression(condition)?;
-                if condition.ty != TypeId::from_basic(BasicType::Bool) {
+                if condition.ty != TypeIdCell::from_basic(BasicType::Bool) {
                     return Err(TypeError {
                         loc: condition.loc.clone(),
                         kind: TypeErrorKind::MismatchedConditionType("if"),
@@ -359,7 +370,7 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 id: _,
             } => {
                 self.typecheck_expression(condition)?;
-                if condition.ty != TypeId::from_basic(BasicType::Bool) {
+                if condition.ty != TypeIdCell::from_basic(BasicType::Bool) {
                     return Err(TypeError {
                         loc: condition.loc.clone(),
                         kind: TypeErrorKind::MismatchedConditionType("while"),

@@ -1,6 +1,6 @@
 use crate::analysis::get_at::GetAt;
-use crate::analysis::resolver::Resolutions;
 use crate::analysis::r#type::{FunctionType, Type, TypeCtx, TypeId};
+use crate::analysis::resolver::Resolutions;
 use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
@@ -8,18 +8,18 @@ use crate::ast::statement::{
 };
 use crate::common::{BumpVec, Stack};
 use crate::compiling::ir::binop;
-use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
-use crate::compiling::ir::opcode::{Arg, Opcode};
-use bumpalo::Bump;
-use bumpalo::collections::CollectIn;
-use std::collections::HashMap;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
+use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::Opcode::{Jmp, JmpIfNot};
+use crate::compiling::ir::opcode::{Arg, Opcode};
+use bumpalo::collections::CollectIn;
+use bumpalo::Bump;
+use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'ast, 'types> {
     // allocators
     ir_bump: &'ir Bump,
-    types: &'types TypeCtx<'types>,
+    types: *mut TypeCtx<'types>,
 
     // Compiler state
     current_function: Option<BumpVec<'ir, Opcode<'ir>>>,
@@ -28,10 +28,8 @@ pub struct Compiler<'ir, 'ast, 'types> {
     stack_size: StackSize,
     label_count: usize,
 
-
     // Compiler output
     pub ir: &'ir mut IntermediateRepresentation<'ir>,
-
 
     resolutions: Resolutions<'ast>,
 }
@@ -70,7 +68,7 @@ impl StackSize {
 impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
     pub fn new(
         ir_bump: &'ir Bump,
-        types: &'types TypeCtx<'types>,
+        types: *mut TypeCtx<'types>,
         resolutions: Resolutions<'ast>,
     ) -> Compiler<'ir, 'ast, 'types> {
         Self {
@@ -84,6 +82,9 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
             label_count: 0,
             loops: Default::default(),
         }
+    }
+    pub fn types(&self) -> &'types TypeCtx<'types> {
+        unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") }
     }
 }
 
@@ -108,7 +109,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
             ExpressionKind::Binop { left, right, kind }
                 if kind.family() == BinopFamily::Logical =>
             {
-                let size = expression.ty.get(self.types).size();
+                let size = expression.ty.get(self.types()).size();
                 assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
                 let left = self.compile_expression(left);
                 let offset = self.allocate_on_stack(size);
@@ -128,21 +129,29 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         */
                         let short_circuit = self.allocate_label();
                         // Cases: if lhs is false, jump to do_check.
-                        self.push_opcode(JmpIfNot { label: short_circuit, condition: left.clone() });
+                        self.push_opcode(JmpIfNot {
+                            label: short_circuit,
+                            condition: left.clone(),
+                        });
 
                         // Case 1: `a` is true, so b should be evaluated.
                         let right = self.compile_expression(right);
                         self.push_opcode(Opcode::Binop {
                             left,
-                            right ,
+                            right,
                             result: offset,
-                            kind: Binop::Bitwise(BitwiseBinop{ kind: BitwiseKind::And, is_logical_with_short_circuit: true }),
+                            kind: Binop::Bitwise(BitwiseBinop {
+                                kind: BitwiseKind::And,
+                                is_logical_with_short_circuit: true,
+                            }),
                         });
-                        let out_label = self.allocate_label() ;
-                        self.push_opcode(Jmp {label: out_label});
+                        let out_label = self.allocate_label();
+                        self.push_opcode(Jmp { label: out_label });
 
                         // Case 2: `a` is false, so && is false.
-                        self.push_opcode(Opcode::Label { index: short_circuit });
+                        self.push_opcode(Opcode::Label {
+                            index: short_circuit,
+                        });
                         self.push_opcode(Opcode::Assign {
                             result: offset,
                             arg: Arg::Bool(false),
@@ -166,34 +175,40 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         */
                         let do_check = self.allocate_label();
                         // Cases: if lhs is false, jump to do_check.
-                        self.push_opcode(JmpIfNot { label: do_check, condition: left.clone() });
+                        self.push_opcode(JmpIfNot {
+                            label: do_check,
+                            condition: left.clone(),
+                        });
                         // Case one: The lhs is true, so entire || is true.
                         self.push_opcode(Opcode::Assign {
                             result: offset,
                             arg: Arg::Bool(true),
                         });
-                        let out_label = self.allocate_label() ;
-                        self.push_opcode(Jmp {label: out_label});
+                        let out_label = self.allocate_label();
+                        self.push_opcode(Jmp { label: out_label });
 
                         // Case two: The lhs is false, so rhs should be also evaluated to complete ||.
                         self.push_opcode(Opcode::Label { index: do_check });
                         let right = self.compile_expression(right);
                         self.push_opcode(Opcode::Binop {
                             left,
-                            right ,
+                            right,
                             result: offset,
-                            kind: Binop::Bitwise(BitwiseBinop{ kind: BitwiseKind::Or, is_logical_with_short_circuit: true }),
+                            kind: Binop::Bitwise(BitwiseBinop {
+                                kind: BitwiseKind::Or,
+                                is_logical_with_short_circuit: true,
+                            }),
                         });
 
                         self.push_opcode(Opcode::Label { index: out_label });
                         Arg::StackOffset { offset, size }
-                    },
+                    }
                     _ => unreachable!("Unknown binary operation"),
                 }
             }
 
             ExpressionKind::Binop { left, right, kind } => {
-                let size = expression.ty.get(self.types).size();
+                let size = expression.ty.get(self.types()).size();
                 let left = self.compile_expression(left);
                 let right = self.compile_expression(right);
                 let offset = self.allocate_on_stack(size);
@@ -206,14 +221,16 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                             //                         TODO: Unsigned
                             binop::IntegerBinop::from_ast(true, size, *kind)
                         }
-                        BinopFamily::Logical => unreachable!("This should be handled by another match arm"),
+                        BinopFamily::Logical => {
+                            unreachable!("This should be handled by another match arm")
+                        }
                     },
                 });
                 Arg::StackOffset { offset, size }
             }
 
             ExpressionKind::Unary { item, operator } => {
-                let size = item.ty.get(self.types).size();
+                let size = item.ty.get(self.types()).size();
                 let item = self.compile_expression(item);
                 match operator {
                     UnaryKind::Negation => {
@@ -263,7 +280,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
             ExpressionKind::VariableAccess(n) => {
                 let depth = *self.resolutions.get(expression).expect("Analysis failed");
                 let var = self.variables.get_at(&n.name, depth);
-                let var_type = var.ty.get(self.types);
+                let var_type = var.ty.get(self.types());
                 if let Type::Function(fn_type) = var_type {
                     Arg::ExternalFunction(n.clone_into(self.ir_bump))
                 } else {
@@ -279,17 +296,22 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 }
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
-                let is_variadic =
-                    if let Type::Function(FunctionType { is_variadic, .. }) = callee.ty.get(self.types) {
-                        *is_variadic
-                    } else {
-                        false
-                    };
+                let is_variadic = if let Type::Function(FunctionType { is_variadic, .. }) =
+                    callee.ty.get(self.types())
+                {
+                    *is_variadic
+                } else {
+                    false
+                };
                 let callee = self.compile_expression(callee);
                 let b = self.ir_bump;
                 let args = arguments
                     .iter()
-                    .map(|a| self.compile_expression(unsafe { a.as_ref().expect("FunctionCall: Null argument") } ))
+                    .map(|a| {
+                        self.compile_expression(unsafe {
+                            a.as_ref().expect("FunctionCall: Null argument")
+                        })
+                    })
                     .collect_in::<BumpVec<_>>(b)
                     .into_bump_slice();
                 let result = self.allocate_on_stack(8); // TODO: Return value size
@@ -337,17 +359,19 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
 
                 let parameters_types = parameters
                     .iter()
-                    .map(|p| p.ty)
-                    .collect_in::<BumpVec<_>>(self.types.bump())
+                    .map(|p| p.ty.clone())
+                    .collect_in::<BumpVec<_>>(self.types().bump())
                     .into_bump_slice();
                 self.variables[parent_scope].insert(
                     name.name,
                     Variable {
-                        ty: self.types.allocate(Type::Function(FunctionType {
-                            return_type: *return_type,
-                            parameters: parameters_types,
-                            is_variadic: false,
-                        })),
+                        ty: unsafe {
+                            (*self.types).allocate(Type::Function(FunctionType {
+                                return_type: return_type.clone(),
+                                parameters: parameters_types,
+                                is_variadic: false,
+                            }))
+                        },
                         stack_offset: 0,
                         param_index: None,
                     },
@@ -370,12 +394,12 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     self.variables[function_scope].insert(
                         param.name.name,
                         Variable {
-                            ty: param.ty,
+                            ty: param.ty.inner(),
                             stack_offset: usize::MAX,
                             param_index: Some(i),
                         },
                     );
-                    sizes.push(param.ty.get(self.types).size());
+                    sizes.push(param.ty.get(self.types()).size());
                 }
 
                 for statement in *body {
@@ -406,11 +430,13 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 is_variadic,
             }) => {
                 let var = Variable {
-                    ty: self.types.allocate(Type::Function(FunctionType {
-                        return_type: *return_type,
-                        parameters,
-                        is_variadic: *is_variadic,
-                    })),
+                    ty: unsafe {
+                        (*self.types).allocate(Type::Function(FunctionType {
+                            return_type: return_type.clone(),
+                            parameters,
+                            is_variadic: *is_variadic,
+                        }))
+                    },
                     stack_offset: usize::MAX,
                     param_index: None,
                 };
@@ -433,7 +459,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 initializer,
                 ty,
             }) => {
-                let stack_offset = self.allocate_on_stack(ty.get(self.types).size());
+                let stack_offset = self.allocate_on_stack(ty.get(self.types()).size());
                 // Since shadowing is allowed, initializers are compiled before variable is inserted in the compiler tables.
                 // i. e
                 // a := 10;
@@ -447,7 +473,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 }
                 let var = Variable {
                     stack_offset,
-                    ty: *ty,
+                    ty: ty.inner(),
                     param_index: None,
                 };
                 self.variables

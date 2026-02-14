@@ -1,4 +1,4 @@
-use crate::analysis::r#type::{TypeId};
+use crate::analysis::r#type::TypeIdCell;
 use crate::ast::binop::BinopKind;
 use crate::common::{Identifier, SourceLocation};
 use std::fmt::Display;
@@ -9,7 +9,7 @@ pub struct Expression<'ast> {
     pub kind: ExpressionKind<'ast>,
     pub loc: SourceLocation,
     pub id: usize,
-    pub ty: TypeId,
+    pub ty: TypeIdCell,
 }
 
 impl<'a> Hash for Expression<'a> {

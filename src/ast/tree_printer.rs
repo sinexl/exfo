@@ -14,7 +14,7 @@ pub fn print_ast<'ast, 'types>(
     indent: usize,
 ) -> std::fmt::Result {
     let tab = " ".repeat((indent + 1) * 2);
-    write!(f, "<{}> ", DisplayType(expr.ty, types))?;
+    write!(f, "<{}> ", DisplayType(expr.ty.inner(), types))?;
     match &expr.kind {
         ExpressionKind::Literal(value) => writeln!(f, "Literal({})", value),
         ExpressionKind::VariableAccess(identifier) => {
@@ -86,7 +86,7 @@ pub fn print_statement<'ast, 'types>(
                         .map(|e| DisplayFunctionParameter(e, types)),
                     ", "
                 ),
-                DisplayType(*return_type, types)
+                DisplayType(return_type.inner(), types)
             )?;
             for statement in *body {
                 write!(f, "{tab}{}", PrintStatement(statement, types, indent + 1))?;
@@ -104,9 +104,9 @@ pub fn print_statement<'ast, 'types>(
                 f,
                 "Extern \"{kind:?}\" `{}` ({}{}): {}",
                 name.name,
-                Join(parameters.iter().map(|e| DisplayType(*e, types)), ", "),
+                Join(parameters.iter().map(|e| DisplayType(e.inner(), types)), ", "),
                 if *is_variadic { ", ..." } else { "" },
-                DisplayType(*return_type, types)
+                DisplayType(return_type.inner(), types)
             )?;
         }
         StatementKind::Block(statements) => {
@@ -120,7 +120,7 @@ pub fn print_statement<'ast, 'types>(
             initializer,
             ty,
         }) => {
-            writeln!(f, "Variable `{}`: {}", name.name, DisplayType(*ty, types))?;
+            writeln!(f, "Variable `{}`: {}", name.name, DisplayType(ty.inner(), types))?;
             if let Some(init) = initializer {
                 write!(f, "{tab}Initializer = {init}", init = TreePrintExpression(init, types))?;
             }

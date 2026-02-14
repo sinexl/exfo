@@ -1,4 +1,4 @@
-use crate::analysis::r#type::{Type, TypeCtx, DisplayType, TypeId};
+use crate::analysis::r#type::{DisplayType, TypeCtx, TypeIdCell};
 use crate::ast::expression::Expression;
 use crate::common::{Identifier, SourceLocation};
 use std::cell::Cell;
@@ -49,15 +49,15 @@ pub struct FunctionDeclaration<'ast, 'types> {
     pub name: Identifier<'ast>,
     pub parameters: &'ast [FunctionParameter<'ast>],
     pub body: &'ast [&'ast Statement<'ast, 'types>],
-    pub return_type: TypeId
+    pub return_type: TypeIdCell
 }
 
 #[derive(Debug)]
 pub struct ExternalFunction<'ast, 'types> {
     pub name: Identifier<'ast>,
     pub kind: ExternKind,
-    pub parameters: &'types [TypeId],
-    pub return_type: TypeId,
+    pub parameters: &'types [TypeIdCell],
+    pub return_type: TypeIdCell,
     pub is_variadic: bool,
 }
 
@@ -70,13 +70,13 @@ pub enum ExternKind {
 pub struct VariableDeclaration<'a> {
     pub name: Identifier<'a>,
     pub initializer: Option<&'a Expression<'a>>,
-    pub ty: TypeId,
+    pub ty: TypeIdCell,
 }
 
 #[derive(Debug)]
 pub struct FunctionParameter<'ast> {
     pub name: Identifier<'ast>,
-    pub ty: TypeId,
+    pub ty: TypeIdCell,
 }
 
 pub struct DisplayFunctionParameter<'ast, 'types>(pub &'ast FunctionParameter<'ast>, pub &'types  TypeCtx<'types>);
@@ -84,6 +84,6 @@ pub struct DisplayFunctionParameter<'ast, 'types>(pub &'ast FunctionParameter<'a
 impl<'ast, 'types> Display for DisplayFunctionParameter<'ast, 'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Self (param, types) = self;
-        write!(f, "{}: {}", param.name.name, DisplayType(param.ty, types))
+        write!(f, "{}: {}", param.name.name, DisplayType(param.ty.clone().inner(), types))
     }
 }

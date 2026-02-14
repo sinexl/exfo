@@ -1,13 +1,14 @@
+use crate::analysis::r#type::TypeCtx;
 use crate::analysis::resolver::Resolver;
 use crate::ast::prefix_printer::PrefixPrintStatement;
+use crate::ast::tree_printer::DisplayStatement;
 use crate::common::CompilerError;
 use crate::compiler_io::util::get_line;
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
-use crate::analysis::r#type::TypeCtx;
-use crate::ast::tree_printer::DisplayStatement;
+use std::ptr::addr_of_mut;
 
 pub fn dev_repl() {
     let mut exit = false;
@@ -18,7 +19,7 @@ pub fn dev_repl() {
         let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
         let input = get_line("> ");
 
-        let types = TypeCtx::new(&type_alloc);
+        let mut types = TypeCtx::new(&type_alloc);
 
         if input == ":quit" {
             exit = true;
@@ -34,6 +35,7 @@ pub fn dev_repl() {
         let mut resolver = Resolver::new();
         let errors = resolver.resolve_statements(statements);
         crate::push_errors!(static_errors, errors);
+        let types_ptr = addr_of_mut!(types);
 
         for statement in statements {
             println!("{}", DisplayStatement(statement, &types));
@@ -43,7 +45,7 @@ pub fn dev_repl() {
         }
 
         if static_errors.is_empty() {
-            let mut comp = Compiler::new(&ir_alloc, &types, resolver.resolutions);
+            let mut comp = Compiler::new(&ir_alloc, types_ptr, resolver.resolutions);
             comp.compile_statements(statements);
             println!("{ir}", ir = comp.ir);
         } else {

@@ -1,7 +1,8 @@
-use std::cell::Cell;
 use crate::common::{BumpVec, Join};
 use bumpalo::Bump;
+use std::cell::Cell;
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 use std::ops::{Index, IndexMut};
 
 #[derive(PartialEq)]
@@ -20,6 +21,19 @@ pub enum Type<'types> {
 pub enum TypeId {
     Unknown,
     Index(usize),
+}
+
+impl From<TypeId> for TypeIdCell {
+    fn from(value: TypeId) -> Self {
+        Self {
+            inner: Cell::new(value),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TypeIdCell {
+    inner: Cell<TypeId>,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
@@ -50,28 +64,29 @@ impl<'types> UserType<'types> {
     }
 }
 
-pub struct TypeCtx<'types>(BumpVec<'types, Type<'types>>);
+pub struct TypeCtx<'types> {
+    types: BumpVec<'types, Type<'types>>,
+}
 
 impl<'types> TypeCtx<'types> {
     pub fn new(types: &'types Bump) -> Self {
-        let mut result = Self(BumpVec::with_capacity_in(BASIC_TYPES.len(), types));
+        let mut result = Self {
+            types: BumpVec::with_capacity_in(BASIC_TYPES.len(), types),
+        };
         for basic_type in BASIC_TYPES {
-            result.0.push(Type::Basic(*basic_type));
+            result.types.push(Type::Basic(*basic_type));
         }
         result
     }
 
-    pub fn allocate(&self, item: Type<'types>) -> TypeId {
-        let len = self.0.len();
-        unsafe {
-            let p = self as *const Self as *mut Self;
-            (*p).0.push(item);
-        }
+    pub fn allocate(&mut self, item: Type<'types>) -> TypeId {
+        let len = self.types.len();
+        self.types.push(item);
         TypeId::Index(len)
     }
 
     pub fn bump(&self) -> &'types Bump {
-        self.0.bump()
+        self.types.bump()
     }
 }
 
@@ -79,17 +94,18 @@ impl<'types> Index<usize> for TypeCtx<'types> {
     type Output = Type<'types>;
 
     fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
+        &self.types[index]
     }
 }
 
 impl<'types> IndexMut<usize> for TypeCtx<'types> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.0[index]
+        &mut self.types[index]
     }
 }
 
 impl TypeId {
+
     pub fn get<'types>(self, arena: &'types TypeCtx<'types>) -> &'types Type<'types> {
         match self {
             TypeId::Unknown => panic!("Cannot get unknown type"),
@@ -97,6 +113,7 @@ impl TypeId {
         }
     }
 
+    // todo: get rid of this method, or change it to work with pointers.
     pub fn get_mut<'types>(self, arena: &'types TypeCtx<'types>) -> &'types mut Type<'types> {
         match self {
             TypeId::Unknown => panic!("Cannot get unknown type"),
@@ -117,20 +134,38 @@ impl TypeId {
         }
         unreachable!("COMPILER BUG: BASIC_TYPES do not contain all of hte basic types defined")
     }
+}
 
+
+impl TypeIdCell {
+    pub fn inner(&self) -> TypeId {
+        self.inner.get()
+    }
+    pub fn get<'types>(&self, arena: &'types TypeCtx<'types>) -> &'types Type<'types> {
+        self.inner.get().get(arena)
+    }
+
+
+    pub fn get_mut<'types>(self, arena: &'types TypeCtx<'types>) -> &'types mut Type<'types> {
+        self.inner.get().get_mut(arena)
+    }
+
+    pub fn from_basic(basic: BasicType) -> Self {
+        Self {
+            inner: Cell::from(TypeId::from_basic(basic)),
+        }
+    }
 
     pub fn set(&self, value: TypeId) {
-        unsafe {
-            let cell_ptr = self as *const Self as *const Cell<Self>;
-            (&*cell_ptr).set(value);
-        }
+        self.inner.set(value);
     }
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct FunctionType<'types> {
-    pub return_type: TypeId,
-    pub parameters: &'types [TypeId],
+    pub return_type: TypeIdCell,
+    pub parameters: &'types [TypeIdCell],
     pub is_variadic: bool,
 }
 
@@ -154,8 +189,8 @@ impl<'ast> Display for DisplayType<'ast> {
                         write!(
                             f,
                             "func({}): {}",
-                            Join(fun.parameters.iter().map(|e| DisplayType(*e, types)), ", "),
-                            DisplayType(fun.return_type, types)
+                            Join(fun.parameters.iter().map(|e| DisplayType(e.inner(), types)), ", "),
+                            DisplayType(fun.return_type.inner(), types)
                         )?;
                     }
                     Type::UserDefined(user_type) => {

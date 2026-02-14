@@ -1,4 +1,4 @@
-use crate::analysis::r#type::{BasicType, TypeId};
+use crate::analysis::r#type::{BasicType, TypeId, TypeIdCell};
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::ExpressionKind::{
@@ -9,7 +9,7 @@ use crate::ast::statement::{
     ExternKind, ExternalFunction, FunctionDeclaration, FunctionParameter, Statement, StatementKind,
     VariableDeclaration,
 };
-use crate::common::{BumpVec, IdentifierBox};
+use crate::common::BumpVec;
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParseErrorKind::{
@@ -171,7 +171,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             kind: StatementKind::VariableDeclaration(VariableDeclaration {
                 name: Identifier::from_token(name, self.ast_bump),
                 initializer,
-                ty: variable_type
+                ty: variable_type.into()
             }),
             loc: colon.loc,
         }))
@@ -202,22 +202,22 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         // TODO : On error, we should map error into UnbalancedParens
         let mut is_variadic = false;
 
-        let mut res = BumpVec::new_in(self.type_bump);
+        let mut res: BumpVec<TypeIdCell> = BumpVec::new_in(self.type_bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
 
             let expr = self.parse_type()?;
-            res.push(expr);
+            res.push(expr.into());
 
             while self.consume(&[TokenType::Comma]).is_some() {
                 if let Some(td) = self.consume(&[TokenType::TripleDot]) {
                     is_variadic = true;
                     break;
                 }
-                res.push(self.parse_type()?);
+                res.push(self.parse_type()?.into());
             }
         }
 
-        let parameters: &[TypeId] = res.into_bump_slice();
+        let parameters: &[TypeIdCell] = res.into_bump_slice();
         let mut message = String::from("Expected closing parenthesis.");
         if is_variadic { message += " Variadic parameters should be last in parameter list." }
         self.expect(&[TokenType::CloseParen], message.as_str())?;
@@ -239,7 +239,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 kind,
                 is_variadic,
                 parameters,
-                return_type,
+                return_type: return_type.into(),
             }),
             loc: keyword.loc,
         }))
@@ -257,7 +257,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 name: Identifier::from_token(name, self.ast_bump),
                 body,
                 parameters,
-                return_type: return_type
+                return_type: return_type.into(),
             }),
             loc: func_keyword.loc,
         }))
@@ -294,7 +294,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                     let ty = this.parse_type()?;
                     Ok(FunctionParameter {
                         name: Identifier::from_token(id, this.ast_bump),
-                        ty,
+                        ty: ty.into(),
                     })
                 })
                 .map_err(|mut e| {
@@ -495,7 +495,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 loc: tk.loc,
                 id: self.id(),
                 kind: Assignment { target, value },
-                ty: TypeId::Unknown
+                ty: TypeId::Unknown.into()
             }));
         }
         Ok(target)
@@ -543,7 +543,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 },
                 loc: tok.loc,
                 id: self.id(),
-                ty: TypeId::Unknown
+                ty: TypeId::Unknown.into()
             }));
         }
         self.parse_call()
@@ -559,7 +559,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 },
                 loc: tk.clone().loc,
                 id: self.id(),
-                ty: TypeId::Unknown
+                ty: TypeId::Unknown.into()
             });
             if self.consume(&[TokenType::CloseParen]).is_none() {
                 return Err(ParseError {
@@ -593,7 +593,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 loc,
                 kind: VariableAccess(Identifier::from_token(id, self.ast_bump)),
                 id: self.id(),
-                ty: TypeId::Unknown
+                ty: TypeId::Unknown.into()
             }));
         }
 
@@ -673,7 +673,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             loc,
             kind: Literal(value),
             id,
-            ty,
+            ty: ty.into(),
         })
     }
 
@@ -689,7 +689,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             kind: Binop { left, right, kind },
             loc,
             id,
-            ty: TypeId::Unknown
+            ty: TypeId::Unknown.into()
         })
     }
 

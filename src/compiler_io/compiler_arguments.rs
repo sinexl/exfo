@@ -1,4 +1,4 @@
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 pub struct CompilerArguments {
     pub input: PathBuf,

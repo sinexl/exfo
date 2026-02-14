@@ -1,18 +1,19 @@
+use crate::analysis::r#type::TypeCtx;
 use crate::analysis::resolver::Resolver;
 use crate::analysis::typechecker::Typechecker;
 use crate::code_generation::codegen::Codegen;
 use crate::common::CompilerError;
 use crate::compiler_io::compiler_arguments::CompilerArguments;
 use crate::compiler_io::dev_repl::dev_repl;
-use crate::compiler_io::util::{DisplayCommand, create_dir_if_not_exists, run_command};
+use crate::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
 use std::path::Path;
-use std::process::{Command, Stdio, exit};
+use std::process::{exit, Command, Stdio};
+use std::ptr::addr_of_mut;
 use std::{fs, io};
-use crate::analysis::r#type::TypeCtx;
 
 mod analysis;
 mod ast;
@@ -39,7 +40,7 @@ fn main() -> io::Result<()> {
     let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
     let ast_allocator = Bump::new();
     let type_allocator = Bump::new();
-    let types = TypeCtx::new(&type_allocator);
+    let mut types = TypeCtx::new(&type_allocator);
     let ir_allocator = Bump::new();
     // Lexing.
     let (tokens, errors) = Lexer::new(&file, input.to_str().unwrap()).accumulate();
@@ -69,7 +70,8 @@ fn main() -> io::Result<()> {
         exit(1);
     }
 
-    let mut type_checker = Typechecker::new(&types, resolutions);
+    let types_ptr = addr_of_mut!(types);
+    let mut type_checker = Typechecker::new(types_ptr, resolutions);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {
         push_errors!(static_errors, r);
@@ -84,7 +86,7 @@ fn main() -> io::Result<()> {
     }
 
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator, &types, type_checker.resolutions);
+    let mut compiler = Compiler::new(&ir_allocator, types_ptr, type_checker.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
     dprintln!(args, "{ir}");

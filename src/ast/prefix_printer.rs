@@ -62,7 +62,7 @@ pub fn prefix_print_statement<'ast, 'types>(
                         .map(|e| DisplayFunctionParameter(e, types)),
                     ", "
                 ),
-                DisplayType(*return_type, types)
+                DisplayType(return_type.inner(), types)
             )?;
             if !body.is_empty() {
                 writeln!(f)?;
@@ -84,9 +84,9 @@ pub fn prefix_print_statement<'ast, 'types>(
                 f,
                 "(extern \"{kind:?}\" `{}` ({}{}): {}",
                 name.name,
-                Join(parameters.iter().map(|e| DisplayType(*e, types)), ", "),
+                Join(parameters.iter().map(|e| DisplayType(e.inner(), types)), ", "),
                 if *is_variadic { ", ..." } else { "" },
-                DisplayType(*return_type, types)
+                DisplayType(return_type.inner(), types)
             )?;
         }
         StatementKind::Block(body) => {
@@ -104,7 +104,7 @@ pub fn prefix_print_statement<'ast, 'types>(
             initializer,
             ty,
         }) => {
-            write!(f, "(`{}`: {} ", name.name, DisplayType(*ty, types))?;
+            write!(f, "(`{}`: {} ", name.name, DisplayType(ty.inner(), types))?;
             if let Some(initializer) = initializer {
                 write!(f, "= {}", PrefixPrint(initializer))?;
             }
