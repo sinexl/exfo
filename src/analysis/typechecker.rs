@@ -281,7 +281,7 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     initializer_type = init.ty.inner();
                 }
 
-                if variable_type.inner() != TypeId::Unknown {
+                if variable_type.inner() == TypeId::Unknown {
                     variable_type.set(initializer_type);
                 } else if variable_type.inner() != initializer_type {
                     return Err(TypeError {
