@@ -101,6 +101,12 @@ fn main() -> io::Result<()> {
     let object_path = format!("{BUILD_DIR}/{file_name}.o");
     let object_path = object_path.as_str();
 
+
+    if let Some(parent) = output.parent() {
+        println!("Creating directory {parent}", parent = parent.display());
+        fs::create_dir_all(parent).expect("failed to create output directory");
+    }
+
     let mut gas = Command::new("as");
     if args.debug_compiler {
         gas.arg("-g");
@@ -122,7 +128,6 @@ fn main() -> io::Result<()> {
     println!();
     let mut cc = Command::new("cc");
     cc.arg(object_path)
-        .arg(&args.helper)
         .arg("-o")
         .arg(output)
         .stdout(Stdio::inherit())

@@ -1,5 +1,9 @@
 extern "C" func puts(char_ptr): void; 
-extern "C" func print_bool(bool): void;
+func print_bool(a: bool): void {
+    if a puts("true");
+    else puts("false");
+}
+
 func main(): void { 
    a := 15; 
    b := 15; 

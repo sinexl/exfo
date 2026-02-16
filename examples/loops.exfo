@@ -1,5 +1,9 @@
 extern "C" func puts(char_ptr): void;
-extern "C" func print_i64(int): void;
+extern "C" func printf(char_ptr): void;
+
+func print_i64(a: int): void {
+    printf("%d%c", a, 10);
+}
 
 func main(): int {
     // While Loop

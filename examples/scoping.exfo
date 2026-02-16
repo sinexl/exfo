@@ -1,5 +1,14 @@
-extern "C" func print_bool(bool): void; 
-extern "C" func print_i64(int): void; 
+extern "C" func printf(char_ptr): void;
+
+func print_i64(a: int): void {
+    printf("%d%c", a, 10);
+}
+
+func print_bool(a: bool): void {
+    if a printf("true");
+    else printf("false");
+    printf("%c", 10);
+}
 
 func main(): int { 
     a := 1; 
@@ -17,7 +26,7 @@ func main(): int {
     a = a + 1; // Mutation. Update add "1" to the memory pointed by "a" 
     print_i64(a);
     
-    b := 10 
+    b := 10;
     print_i64(b); 
     { 
         b = b + 1; 
