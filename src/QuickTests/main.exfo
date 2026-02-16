@@ -1,17 +1,14 @@
 extern "C" func printf(char_ptr, ...): void;
-extern "C" func print_i64(int): void;
-extern "C" func print_bool(bool): void;
-extern "C" func puts(char_ptr): void;
-func side_true(): bool {
-    printf("Side true!%c", 10);
-    return true;
+func swap(f: int*, g: int*): void  {
+    c := *f;
+    *f = *g;
+    *g = c;
 }
 
-func side_false(): bool {
-    printf("Side false!%c", 10);
-    return false;
-}
-
-func main(): void {
-    if false || side_true() puts("Hello");
-}
+// func main(): void {
+//     a := 10;
+//     b := 15;
+//     printf("a: %d, b: %d%c", a, b, 10);
+//     //swap(&a, &b);
+//     printf("a: %d, b: %d%c", a, b, 10);
+// }

@@ -241,6 +241,8 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                             size,
                         }
                     }
+                    UnaryKind::Dereferencing=> todo!("Compile dereferencing"),
+                    UnaryKind::AddressOf => todo!("Compile address-of"),
                 }
             }
             ExpressionKind::Assignment { target, value } => {

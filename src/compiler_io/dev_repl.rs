@@ -20,6 +20,7 @@ pub fn dev_repl() {
         let input = get_line("> ");
 
         let mut types = TypeCtx::new(&type_alloc);
+        let types_ptr = addr_of_mut!(types);
 
         if input == ":quit" {
             exit = true;
@@ -28,14 +29,13 @@ pub fn dev_repl() {
         let (tokens, errors) = Lexer::new(&input, "<REPL>").accumulate();
         crate::push_errors!(static_errors, errors);
 
-        let mut parser = Parser::new(tokens.into(), &type_alloc, &ast_alloc);
+        let mut parser = Parser::new(tokens.into(), &ast_alloc, types_ptr);
         let (statements, errors) = parser.parse_program();
         crate::push_errors!(static_errors, errors);
 
         let mut resolver = Resolver::new();
         let errors = resolver.resolve_statements(statements);
         crate::push_errors!(static_errors, errors);
-        let types_ptr = addr_of_mut!(types);
 
         for statement in statements {
             println!("{}", DisplayStatement(statement, &types));

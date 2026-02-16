@@ -392,19 +392,6 @@ impl<'ast, 'types> Resolver<'ast> {
     }
 }
 
-#[allow(dead_code)]
-fn debug_scopes(scopes: &Stack<Scope<'_>>) {
-    for (index, scope) in scopes.iter().rev().enumerate() {
-        println!("---- Scope {index} ----");
-        debug_scope(scope);
-    }
-}
-#[allow(dead_code)]
-fn debug_scope(scope: &Scope<'_>) {
-    for (name, resolutions) in scope {
-        println!("{name} = {resolutions:?}");
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolverError {

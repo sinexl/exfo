@@ -18,6 +18,8 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
         ExpressionKind::Unary { item, operator } => {
             let op = match operator {
                 UnaryKind::Negation => "-",
+                UnaryKind::Dereferencing => "*",
+                UnaryKind::AddressOf => "&",
             };
             parenthesize(f, op, &[item])
         }

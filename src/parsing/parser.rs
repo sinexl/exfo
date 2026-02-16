@@ -1,4 +1,4 @@
-use crate::analysis::r#type::{BasicType, TypeId, TypeIdCell};
+use crate::analysis::r#type::{BasicType, PointerType, Type, TypeCtx, TypeId, TypeIdCell};
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::ExpressionKind::{
@@ -42,7 +42,7 @@ use std::rc::Rc;
     unary               => "-" unary | functionCall;
     functionCall        => primary ( "( args ")" )*
     primary             => NUMBER | STRING | BOOLEAN | IDENTIFIER | "(" expression ")" ;
-    type                => IDENTIFIER
+    type                => IDENTIFIER ("*")?
 
 
  * - For Binary Operator Precedence, visit ./src/ast/binop.rs
@@ -56,16 +56,16 @@ pub struct Parser<'ast, 'types> {
     current: usize,
     tokens: Rc<[Token]>,
     ast_bump: &'ast Bump,
-    type_bump: &'types Bump,
+    types:  *mut TypeCtx<'types>,
     nodes_amount: usize,
 }
 
 impl<'ast, 'types> Parser<'ast, 'types> {
-    pub fn new(tokens: Rc<[Token]>, ast_bump: &'ast Bump, type_bump: &'types Bump) -> Parser<'ast, 'types> {
+    pub fn new(tokens: Rc<[Token]>, ast_bump: &'ast Bump, type_ctx: *mut TypeCtx<'types>) -> Parser<'ast, 'types> {
         Self {
             current: 0,
             ast_bump,
-            type_bump,
+            types: type_ctx,
             tokens,
             nodes_amount: 0,
         }
@@ -202,7 +202,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         // TODO : On error, we should map error into UnbalancedParens
         let mut is_variadic = false;
 
-        let mut res: BumpVec<TypeIdCell> = BumpVec::new_in(self.type_bump);
+        let mut res: BumpVec<TypeIdCell> = BumpVec::new_in(self.types().bump());
         if self.peek_token()?.kind != TokenType::CloseParen {
 
             let expr = self.parse_type()?;
@@ -468,7 +468,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     pub fn parse_type(&mut self) -> Result<TypeId, ParseError> {
         let name = self.expect(&[TokenType::Id], "Expected type name")?;
 
-        match name.string.as_ref() {
+        let ty = match name.string.as_ref() {
             "int" => Ok(TypeId::from_basic(BasicType::Int64)),
             "void" => Ok(TypeId::from_basic(BasicType::Void)),
             "bool" => Ok(TypeId::from_basic(BasicType::Bool)),
@@ -477,7 +477,12 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 kind: UnknownType(String::from(name.string.as_ref())),
                 location: name.loc.clone(),
             }),
+        }?;
+        if self.consume(&[TokenType::Star]).is_some() { // TODO: Parse double and higher dim pointers
+            let id = unsafe { (*self.types).monomorph_or_get_pointer(ty) };
+            return Ok(id);
         }
+        Ok(ty)
     }
 
     fn parse_assignment(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
@@ -533,19 +538,25 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     }
 
     fn parse_unary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
-        if let Some(tok) = self.consume(&[TokenType::Minus]) {
+        if let Some(tok) = self.consume(&[TokenType::Minus, TokenType::Star, TokenType::Ampersand]) {
             let item = self.parse_unary()?;
 
             return Ok(self.ast_bump.alloc(Expression {
                 kind: ExpressionKind::Unary {
                     item,
-                    operator: UnaryKind::Negation,
+                    operator: match tok.kind {
+                        TokenType::Star => UnaryKind::Dereferencing,
+                        TokenType::Minus => UnaryKind::Negation,
+                        TokenType::Ampersand => UnaryKind::AddressOf,
+                        _ => unreachable!()
+                    },
                 },
                 loc: tok.loc,
                 id: self.id(),
                 ty: TypeId::Unknown.into()
             }));
         }
+
         self.parse_call()
     }
 
@@ -813,6 +824,10 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         } else {
             true
         }
+    }
+
+    pub fn types(&self) -> &'types TypeCtx<'types> {
+        unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") }
     }
 }
 

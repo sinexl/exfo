@@ -164,3 +164,21 @@ macro_rules! push_errors {
         }
     }};
 }
+#[macro_export]
+macro_rules! debug_scopes {
+    ($scopes: expr) => {{
+        for (index, scope) in $scopes.iter().rev().enumerate() {
+            println!("---- Scope {index} ----");
+            debug_scope!(scope);
+        }
+    }}
+}
+
+#[macro_export]
+macro_rules! debug_scope {
+    ($scope: expr) => {{
+        for (name, resolutions) in $scope {
+            println!("{name} = {resolutions:?}");
+        }
+    }}
+}

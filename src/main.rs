@@ -41,12 +41,13 @@ fn main() -> io::Result<()> {
     let ast_allocator = Bump::new();
     let type_allocator = Bump::new();
     let mut types = TypeCtx::new(&type_allocator);
+    let types_ptr = addr_of_mut!(types);
     let ir_allocator = Bump::new();
     // Lexing.
     let (tokens, errors) = Lexer::new(&file, input.to_str().unwrap()).accumulate();
     push_errors!(static_errors, errors);
     // Parsing
-    let mut parser = Parser::new(tokens.into(), &ast_allocator, &type_allocator);
+    let mut parser = Parser::new(tokens.into(), &ast_allocator, types_ptr);
     let (ast, errors) = parser.parse_program();
     push_errors!(static_errors, errors);
 
@@ -70,7 +71,6 @@ fn main() -> io::Result<()> {
         exit(1);
     }
 
-    let types_ptr = addr_of_mut!(types);
     let mut type_checker = Typechecker::new(types_ptr, resolutions);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {

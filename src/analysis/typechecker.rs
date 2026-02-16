@@ -1,9 +1,12 @@
+use crate::debug_scope;
 use crate::analysis::get_at::GetAt;
-use crate::analysis::r#type::{BasicType, DisplayType, FunctionType, Type, TypeCtx, TypeId, TypeIdCell};
 use crate::analysis::resolver::Resolutions;
-use crate::ast;
+use crate::analysis::r#type::{
+    BasicType, DisplayType, FunctionType, PointerType, Type, TypeCtx, TypeId, TypeIdCell,
+};
+use crate::{ast, debug_scopes};
 use crate::ast::binop::BinopFamily;
-use crate::ast::expression::{Expression, ExpressionKind};
+use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{BumpVec, CompilerError, SourceLocation, Stack};
@@ -18,6 +21,7 @@ pub struct Typechecker<'ast, 'types> {
     locals: Stack<HashMap<&'ast str, Variable>>,
 }
 
+#[derive(Debug)]
 struct Variable {
     ty: TypeId,
 }
@@ -43,9 +47,9 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
     ) -> Result<(), TypeError> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind } => {
-                let kind = kind.clone();
-                self.typecheck_expression(*left)?;
-                self.typecheck_expression(*right)?;
+                let kind = *kind;
+                self.typecheck_expression(left)?;
+                self.typecheck_expression(right)?;
                 let error = Err(TypeError {
                     loc: expression.loc.clone(),
                     kind: TypeErrorKind::InvalidOperands(
@@ -95,13 +99,37 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 };
                 expression.ty.set(ty);
             }
-            ExpressionKind::Unary { item, .. } => {
-                self.typecheck_expression(*item)?;
-                expression.ty.set(item.ty.inner());
+            ExpressionKind::Unary { item, operator } => {
+                self.typecheck_expression(item)?;
+                let ty = match operator {
+                    UnaryKind::Negation => item.ty.inner(),
+                    UnaryKind::Dereferencing => {
+                        use Type::*;
+
+                        let underlying = item.ty.get(self.types());
+                        match underlying {
+                            Basic(_) | Function(_) | UserDefined(_) => {
+                                return Err(TypeError {
+                                    loc: expression.loc.clone(),
+                                    kind: TypeErrorKind::DereferencingNonPointer {
+                                        actual_type: DisplayType(item.ty.inner(), self.types())
+                                            .to_string()
+                                            .into_boxed_str(),
+                                    },
+                                });
+                            }
+                            Pointer(PointerType { inner }) => *inner,
+                        }
+                    }
+                    UnaryKind::AddressOf => {
+                        unsafe { (*self.types).monomorph_or_get_pointer(item.ty.inner()) }
+                    }
+                };
+                expression.ty.set(ty);
             }
             ExpressionKind::Assignment { target, value } => {
-                self.typecheck_expression(*target)?;
-                self.typecheck_expression(*value)?;
+                self.typecheck_expression(target)?;
+                self.typecheck_expression(value)?;
                 if target.ty != value.ty {
                     return Err(TypeError {
                         kind: TypeErrorKind::Todo("coercion".to_owned()), // TODO:
@@ -122,11 +150,14 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     .resolutions
                     .get(expression)
                     .expect("Compiler bug: resolution failed");
+                debug_scopes!(&self.locals);
                 let var = self.locals.get_at(&n.name, *depth);
+
+                
                 expression.ty.set(var.ty);
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
-                self.typecheck_expression(*callee)?;
+                self.typecheck_expression(callee)?;
                 for arg in *arguments {
                     self.typecheck_expression(unsafe {
                         arg.as_mut()
@@ -166,7 +197,9 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                                     function_location: None,
                                     function_name: None, // TODO: Get function name and location
                                     expected_type: Box::from(
-                                        DisplayType(expected.inner(), self.types()).to_string().as_str(),
+                                        DisplayType(expected.inner(), self.types())
+                                            .to_string()
+                                            .as_str(),
                                     ),
                                     actual_type: Box::from(
                                         DisplayType(got.inner(), self.types()).to_string().as_str(),
@@ -415,6 +448,9 @@ pub enum TypeErrorKind {
     /// For example, Top-level returns are handled by resolver, so, if we meet such in typechecker, we can skip it
     FromPrevious,
     InvalidOperands(ast::binop::BinopKind, Box<str>, Box<str>),
+    DereferencingNonPointer {
+        actual_type: Box<str>,
+    },
 }
 impl CompilerError for TypeError {
     fn location(&self) -> SourceLocation {
@@ -467,6 +503,9 @@ impl CompilerError for TypeError {
                 "Invalid operands to '{op}' operation ({a}, {b})",
                 op = op.operator()
             ),
+            TypeErrorKind::DereferencingNonPointer { actual_type } => {
+                format!("Could not dereference `{}`", actual_type)
+            }
         }
     }
 
@@ -497,6 +536,15 @@ impl CompilerError for TypeError {
             TypeErrorKind::CouldntInferFunctionReturnType => None,
             TypeErrorKind::FromPrevious => None,
             TypeErrorKind::InvalidOperands(_, _, _) => None,
+            TypeErrorKind::DereferencingNonPointer { .. } => None,
         }
     }
+}
+
+#[allow(dead_code)]
+fn print_type<'types>(item: TypeId, types: &'types TypeCtx<'types>)  {
+    let ty = item.get(types);
+    dbg!(&ty);
+
+
 }

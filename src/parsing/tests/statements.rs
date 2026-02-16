@@ -1,3 +1,4 @@
+use std::ptr::addr_of_mut;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
@@ -16,7 +17,8 @@ pub fn single(input: &str) -> String {
 
     let ast_bump = Bump::new();
     let type_bump = Bump::new();
-    let mut p = Parser::new(t.into(), &ast_bump, &type_bump);
+    let mut type_ctx = TypeCtx::new(&type_bump);
+    let mut p = Parser::new(t.into(), &ast_bump,  addr_of_mut!(type_ctx));
     let (expr, e) = p.parse_program();
     assert_eq!(e.len(), 0);
     assert_eq!(expr.len(), 1);

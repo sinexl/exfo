@@ -47,7 +47,11 @@ impl ExpressionKind<'_> {
             ExpressionKind::Assignment { .. } => true,
             ExpressionKind::VariableAccess(_) => true,
             ExpressionKind::Binop { .. } => false,
-            ExpressionKind::Unary { .. } => false,
+            ExpressionKind::Unary { operator, ..} =>
+                match operator {
+                    UnaryKind::Negation | UnaryKind::AddressOf => false,
+                    UnaryKind::Dereferencing => true,
+                },
             ExpressionKind::Literal(_) => false,
             ExpressionKind::FunctionCall { .. } => false,
         }
@@ -67,12 +71,16 @@ impl ExpressionKind<'_> {
 #[derive(Hash, Debug, Eq, PartialEq)]
 pub enum UnaryKind {
     Negation,
+    Dereferencing,
+    AddressOf,
 }
 
 impl UnaryKind {
     pub(crate) fn name(&self) -> &'static str {
         match self {
             UnaryKind::Negation => "Negation",
+            UnaryKind::Dereferencing => "Dereferencing",
+            UnaryKind::AddressOf => "AddressOf"
         }
     }
 }

@@ -1,11 +1,13 @@
 use crate::common::{BumpVec, Join};
 use bumpalo::Bump;
 use std::cell::Cell;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::ops::{Index, IndexMut};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum Type<'types> {
     // Primitive Types
     // Naming convention:
@@ -14,6 +16,7 @@ pub enum Type<'types> {
     //      basic type share the same TypeId (see BasicType for details).
     Basic(BasicType),
     Function(FunctionType<'types>),
+    Pointer(PointerType),
     // UserDefined Types
     UserDefined(UserType<'types>),
 }
@@ -52,7 +55,7 @@ const BASIC_TYPES: &[BasicType] = &[
     BasicType::CharPtr,
 ];
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct UserType<'types> {
     name: &'types str,
     size: usize,
@@ -64,14 +67,18 @@ impl<'types> UserType<'types> {
     }
 }
 
+#[derive(Debug)]
 pub struct TypeCtx<'types> {
     types: BumpVec<'types, Type<'types>>,
+    // T -> T*
+    pointer_monomorphisms: HashMap<usize, usize>,
 }
 
 impl<'types> TypeCtx<'types> {
     pub fn new(types: &'types Bump) -> Self {
         let mut result = Self {
             types: BumpVec::with_capacity_in(BASIC_TYPES.len(), types),
+            pointer_monomorphisms: HashMap::new(),
         };
         for basic_type in BASIC_TYPES {
             result.types.push(Type::Basic(*basic_type));
@@ -83,6 +90,24 @@ impl<'types> TypeCtx<'types> {
         let len = self.types.len();
         self.types.push(item);
         TypeId::Index(len)
+    }
+
+    pub fn monomorph_or_get_pointer(&mut self, id: TypeId) -> TypeId {
+        let TypeId::Index(id) = id else {
+            panic!("COMPILER BUG: Could not monomorph `Unknown` type")
+        };
+        let result = if self.pointer_monomorphisms.contains_key(&id) {
+            *self.pointer_monomorphisms.get(&id).unwrap()
+        } else {
+            let TypeId::Index(pointer_id) = self.allocate(Type::Pointer(PointerType {
+                inner: TypeId::Index(id),
+            })) else { unreachable!("COMPILER BUG: TypeCtx::allocate returned `Unknown` Type") };
+            self.pointer_monomorphisms.insert(id, pointer_id);
+            id
+        };
+
+
+        TypeId::Index(result)
     }
 
     pub fn bump(&self) -> &'types Bump {
@@ -105,7 +130,6 @@ impl<'types> IndexMut<usize> for TypeCtx<'types> {
 }
 
 impl TypeId {
-
     pub fn get<'types>(self, arena: &'types TypeCtx<'types>) -> &'types Type<'types> {
         match self {
             TypeId::Unknown => panic!("Cannot get unknown type"),
@@ -136,7 +160,6 @@ impl TypeId {
     }
 }
 
-
 impl TypeIdCell {
     pub fn inner(&self) -> TypeId {
         self.inner.get()
@@ -144,7 +167,6 @@ impl TypeIdCell {
     pub fn get<'types>(&self, arena: &'types TypeCtx<'types>) -> &'types Type<'types> {
         self.inner.get().get(arena)
     }
-
 
     pub fn get_mut<'types>(self, arena: &'types TypeCtx<'types>) -> &'types mut Type<'types> {
         self.inner.get().get_mut(arena)
@@ -161,12 +183,16 @@ impl TypeIdCell {
     }
 }
 
-
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct FunctionType<'types> {
     pub return_type: TypeIdCell,
     pub parameters: &'types [TypeIdCell],
     pub is_variadic: bool,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct PointerType {
+    pub inner: TypeId,
 }
 
 pub struct DisplayType<'types>(pub TypeId, pub &'types TypeCtx<'types>);
@@ -189,12 +215,18 @@ impl<'ast> Display for DisplayType<'ast> {
                         write!(
                             f,
                             "func({}): {}",
-                            Join(fun.parameters.iter().map(|e| DisplayType(e.inner(), types)), ", "),
+                            Join(
+                                fun.parameters.iter().map(|e| DisplayType(e.inner(), types)),
+                                ", "
+                            ),
                             DisplayType(fun.return_type.inner(), types)
                         )?;
                     }
                     Type::UserDefined(user_type) => {
                         todo!("User types are not implemented yet")
+                    }
+                    Type::Pointer(PointerType { inner }) => {
+                        write!(f, "{}*", DisplayType(*inner, types))?;
                     }
                 }
             }
@@ -203,6 +235,7 @@ impl<'ast> Display for DisplayType<'ast> {
     }
 }
 
+// @refactor: hardcoded word sizes
 impl<'types> Type<'types> {
     // Note that types should know their size without depending on the TypeCtx. Thus, they should be able to calculate their size on initialization.
     pub fn size(&self) -> usize {
@@ -216,6 +249,7 @@ impl<'types> Type<'types> {
             },
             Type::Function(_) => 8,
             Type::UserDefined(UserType { size, .. }) => *size,
+            Type::Pointer(_) => 8,
         }
     }
     pub fn is_bool(&self) -> bool {
