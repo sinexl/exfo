@@ -1,14 +1,15 @@
 extern "C" func printf(char_ptr, ...): void;
-func swap(f: int*, g: int*): void  {
-    c := *f;
-    *f = *g;
-    *g = c;
-}
-
-// func main(): void {
-//     a := 10;
-//     b := 15;
-//     printf("a: %d, b: %d%c", a, b, 10);
-//     //swap(&a, &b);
-//     printf("a: %d, b: %d%c", a, b, 10);
+// func swap(f: int*, g: int*): void  {
+//     c := *f;
+//     *f = *g;
+//     *g = c;
 // }
+
+func main(): void {
+    a := 10;
+    printf("&a = %p%c", &a, 10);
+//    b := 15;
+//    printf("a: %d, b: %d%c", a, b, 10);
+//    //swap(&a, &b);
+//    printf("a: %d, b: %d%c", a, b, 10);
+}

@@ -75,6 +75,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             writeln!(f, "{tab}jmp_if_not {condition} -> .label{label}")?
         }
         Opcode::Jmp { label } => writeln!(f, "{tab}jmp -> {label}")?,
+        Opcode::AddressOf { result, lvalue } => writeln!(f, "{tab}stack[{result}] = &{lvalue}")?,
     }
 
     Ok(())

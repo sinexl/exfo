@@ -1,6 +1,6 @@
 use crate::analysis::get_at::GetAt;
-use crate::analysis::r#type::{FunctionType, Type, TypeCtx, TypeId};
 use crate::analysis::resolver::Resolutions;
+use crate::analysis::r#type::{FunctionType, Type, TypeCtx, TypeId};
 use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
@@ -10,10 +10,9 @@ use crate::common::{BumpVec, Stack};
 use crate::compiling::ir::binop;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
-use crate::compiling::ir::opcode::Opcode::{Jmp, JmpIfNot};
 use crate::compiling::ir::opcode::{Arg, Opcode};
-use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
+use bumpalo::collections::CollectIn;
 use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'ast, 'types> {
@@ -51,12 +50,6 @@ struct While {
 struct StackSize {
     count: usize,
     max: usize,
-}
-
-#[derive(Copy, Clone)]
-struct ControlFlowLabels {
-    enter_label: usize,
-    exit_label: usize,
 }
 
 impl StackSize {
@@ -116,7 +109,9 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 match kind {
                     BinopKind::And => {
                         /*
-                        Scheme of AND in IR: res = a && b; after;
+                        Scheme of AND in IR that is implemented below.
+                        suppose pseudocode: res = a && b; after;
+                        generated pseudo-IR:
                           a.
                           if !a jump FALSE:
                              b;
@@ -129,7 +124,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         */
                         let short_circuit = self.allocate_label();
                         // Cases: if lhs is false, jump to do_check.
-                        self.push_opcode(JmpIfNot {
+                        self.push_opcode(Opcode::JmpIfNot {
                             label: short_circuit,
                             condition: left.clone(),
                         });
@@ -146,7 +141,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                             }),
                         });
                         let out_label = self.allocate_label();
-                        self.push_opcode(Jmp { label: out_label });
+                        self.push_opcode(Opcode::Jmp { label: out_label });
 
                         // Case 2: `a` is false, so && is false.
                         self.push_opcode(Opcode::Label {
@@ -162,7 +157,9 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     }
                     BinopKind::Or => {
                         /*
-                        Scheme of OR in IR: res = a || b; after;
+                        Scheme of OR in IR:
+                        suppose pseudocode: res = a || b; after;
+                        generated pseudo-IR:
                           a.
                           if !a jump check
                              res = true
@@ -175,7 +172,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         */
                         let do_check = self.allocate_label();
                         // Cases: if lhs is false, jump to do_check.
-                        self.push_opcode(JmpIfNot {
+                        self.push_opcode(Opcode::JmpIfNot {
                             label: do_check,
                             condition: left.clone(),
                         });
@@ -185,7 +182,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                             arg: Arg::Bool(true),
                         });
                         let out_label = self.allocate_label();
-                        self.push_opcode(Jmp { label: out_label });
+                        self.push_opcode(Opcode::Jmp { label: out_label });
 
                         // Case two: The lhs is false, so rhs should be also evaluated to complete ||.
                         self.push_opcode(Opcode::Label { index: do_check });
@@ -230,7 +227,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
             }
 
             ExpressionKind::Unary { item, operator } => {
-                let size = item.ty.get(self.types()).size();
+                let mut size = item.ty.get(self.types()).size();
                 let item = self.compile_expression(item);
                 match operator {
                     UnaryKind::Negation => {
@@ -241,8 +238,20 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                             size,
                         }
                     }
-                    UnaryKind::Dereferencing=> todo!("Compile dereferencing"),
-                    UnaryKind::AddressOf => todo!("Compile address-of"),
+                    UnaryKind::Dereferencing => todo!("Compile dereferencing"),
+                    UnaryKind::AddressOf => {
+                        let address_offset = self.allocate_on_stack(8);
+                        self.push_opcode(Opcode::AddressOf {
+                            result: address_offset,
+                            lvalue: item.clone(),
+                        });
+
+                        size = 8;
+                        Arg::StackOffset {
+                            offset: address_offset,
+                            size,
+                        }
+                    }
                 }
             }
             ExpressionKind::Assignment { target, value } => {
@@ -280,7 +289,10 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 }
             }
             ExpressionKind::VariableAccess(n) => {
-                let depth = *self.resolutions.get(expression).expect("Analysis failed");
+                let depth = *self
+                    .resolutions
+                    .get(expression)
+                    .expect("COMPILER BUG: Analysis failed");
                 let var = self.variables.get_at(&n.name, depth);
                 let var_type = var.ty.get(self.types());
                 if let Type::Function(fn_type) = var_type {
@@ -298,12 +310,15 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 }
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
-                let is_variadic = if let Type::Function(FunctionType { is_variadic, .. }) =
-                    callee.ty.get(self.types())
+                let (is_variadic, return_size) = if let Type::Function(FunctionType {
+                    is_variadic,
+                    return_type,
+                    ..
+                }) = (callee.ty.get(self.types()))
                 {
-                    *is_variadic
+                    (*is_variadic, return_type.inner().get(self.types()).size())
                 } else {
-                    false
+                    todo!("Indirect function call")
                 };
                 let callee = self.compile_expression(callee);
                 let b = self.ir_bump;
@@ -387,7 +402,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 // ....
                 // mth argument <- stack[<sum of all previous arguments' sizes> + m_n];
                 // where:
-                // n_1 ... m_n => mth argument size,
+                // n_1 ... n_m => mth argument size,
                 //           m => amount of arguments
                 let mut sizes = BumpVec::with_capacity_in(parameters.len(), self.ir_bump);
                 self.variables.push(HashMap::new());
@@ -462,7 +477,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 ty,
             }) => {
                 let stack_offset = self.allocate_on_stack(ty.get(self.types()).size());
-                // Since shadowing is allowed, initializers are compiled before variable is inserted in the compiler tables.
+                // To allow shadowing, initializers are compiled before variable is inserted in the compiler tables.
                 // i. e
                 // a := 10;
                 // a := a + 15;

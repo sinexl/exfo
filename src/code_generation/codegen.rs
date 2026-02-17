@@ -26,8 +26,8 @@ macro_rules! comment {
     };
 }
 
-pub struct Codegen<'a> {
-    ir: &'a IntermediateRepresentation<'a>,
+pub struct Codegen<'ir> {
+    ir: &'ir IntermediateRepresentation<'ir>,
     pic: bool,
     output: String,
 
@@ -35,8 +35,8 @@ pub struct Codegen<'a> {
 }
 
 //noinspection SpellCheckingInspection
-impl<'a> Codegen<'a> {
-    pub fn new(ir: &'a IntermediateRepresentation<'a>, pic: bool) -> Self {
+impl<'ir> Codegen<'ir> {
+    pub fn new(ir: &'ir IntermediateRepresentation<'ir>, pic: bool) -> Self {
         Self {
             ir,
             output: String::new(),
@@ -45,7 +45,7 @@ impl<'a> Codegen<'a> {
         }
     }
 
-    pub fn generate_function(&mut self, function: &Function<'a>) {
+    pub fn generate_function(&mut self, function: &Function<'ir>) {
         let name = function.name.name;
         asm!(self, ".global {name}");
         asm!(self, ".p2align 4, 0x90"); // 0x90 is nop
@@ -66,37 +66,43 @@ impl<'a> Codegen<'a> {
         if !function.params.is_empty() {
             comment!(self, "Function Arguments");
         }
+        // Fucntion argument initialization.
         let mut function_args_offsets = Vec::with_capacity(function.params.len());
-        let mut stack_initializer_offset = 0;
+        let mut arg_offset = 0;
+
+        // Register parameters.
         let reg_arg_count = cmp::min(function.params.len(), CALL_REGISTERS.len()); // Amount of registers passed by register.
         #[allow(clippy::needless_range_loop)]
         for i in 0..reg_arg_count {
             let arg_size = function.params[i];
             let p = Register::prefix_from_size(arg_size);
-            stack_initializer_offset += arg_size;
+            arg_offset += arg_size;
             asm!(
                 self,
                 "  mov{p} {}, -{}(%rbp)",
                 CALL_REGISTERS[i].lower_bytes_register(arg_size),
-                stack_initializer_offset
+                arg_offset
             );
-            function_args_offsets.push(stack_initializer_offset);
+            function_args_offsets.push(arg_offset);
         }
-        let stack_params = &function.params[reg_arg_count..];
 
+        // Stack Parameters.
+        let stack_params = &function.params[reg_arg_count..];
+        // X86-64 Stack layout:
         // -16       -8         0         8         16
         //  | * * * * | * * * * | * * * * | * * * * | * * * * | * * * * ...
         //                      ^         ^         ^
         //                   rbp       old rbp   ret addr
-        //                             (0 - 8)   (8 - 16)
-        let mut callarg_read_offset = 16;
+        //                             [0 - 8]   arg_read_offset
+        //                                       [8 - 16]
+        let mut arg_read_offset = 16;
         for i in stack_params {
-            stack_initializer_offset += i;
-            asm!(self, "  movq {callarg_read_offset}(%rbp), {Rax}",);
+            arg_offset += i;
+            asm!(self, "  movq {arg_read_offset}(%rbp), {Rax}",);
 
-            asm!(self, "  movq {Rax}, -{}(%rbp)", stack_initializer_offset);
-            function_args_offsets.push(stack_initializer_offset);
-            callarg_read_offset += i;
+            asm!(self, "  movq {Rax}, -{}(%rbp)", arg_offset);
+            function_args_offsets.push(arg_offset);
+            arg_read_offset += i;
         }
         comment!(self);
 
@@ -110,7 +116,7 @@ impl<'a> Codegen<'a> {
         asm!(self, "  popq %rbp");
         asm!(self, "  ret");
     }
-    fn compile_opcode(&mut self, opcode: &Opcode<'a>) {
+    fn compile_opcode(&mut self, opcode: &Opcode<'ir>) {
         match opcode {
             Opcode::FunctionCall {
                 callee,
@@ -181,6 +187,7 @@ impl<'a> Codegen<'a> {
                         kind,
                         is_logical_with_short_circuit,
                     }) => {
+                        // In some scenarios compiler may load one operator before another. Like short-citcuiting
                         if !is_logical_with_short_circuit {
                             self.load_arg_to_reg(left, Al);
                         }
@@ -241,6 +248,25 @@ impl<'a> Codegen<'a> {
                 comment!(self, "Jmp");
                 asm!(self, "  jmp .label_{label}");
             }
+            Opcode::AddressOf { result, lvalue } => {
+               comment!(self, "AddressOf");
+               match lvalue {
+                   Arg::Bool(_) |
+                   Arg::Int64 { .. } |
+                   Arg::String { .. } => panic!("COMPILER BUG: Could not take address of r-value. Typechecker failed."),
+                   Arg::ExternalFunction(_) => todo!("Indirect functions"),
+
+                   Arg::StackOffset { offset, size } =>  {
+                       asm!(self, "  leaq -{offset}(%rbp), {Rax}");
+                       asm!(self, "  movq {Rax},  -{result}(%rbp)")
+                   }
+                   Arg::Argument { index, size } => {
+                       let offset = self.current_function_args_offsets.as_ref().unwrap()[*index];
+                       asm!(self, "  leaq -{offset}(%rbp), {Rax}");
+                       asm!(self, "  movq {Rax},  -{result}(%rbp)")
+                   }
+               }
+            }
         }
         comment!(self);
     }
@@ -268,7 +294,7 @@ impl<'a> Codegen<'a> {
         }
     }
 
-    fn call_arg(&mut self, arg: &Arg<'a>) {
+    fn call_arg(&mut self, arg: &Arg<'ir>) {
         match arg {
             Arg::ExternalFunction(name) => {
                 let name = if self.pic {
@@ -286,9 +312,9 @@ impl<'a> Codegen<'a> {
     }
 }
 
-impl<'a> Codegen<'a> {
+impl<'ir> Codegen<'ir> {
     // TODO: Factor out common logic between load_arg_to_reg() and push_arg()
-    pub fn load_arg_to_reg(&mut self, arg: &Arg<'a>, reg: Register) {
+    pub fn load_arg_to_reg(&mut self, arg: &Arg<'ir>, reg: Register) {
         let p = reg.prefix();
         match arg {
             Arg::Int64 { bits, signed } => {
@@ -323,7 +349,7 @@ impl<'a> Codegen<'a> {
         }
     }
 
-    fn push_arg(&mut self, arg: &Arg<'a>) {
+    fn push_arg(&mut self, arg: &Arg<'ir>) {
         let p = Register::prefix_from_size(arg.size());
         match arg {
             Arg::Int64 { bits, signed } => {

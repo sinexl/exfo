@@ -19,6 +19,11 @@ pub enum Opcode<'a> {
         result: usize,
         item: Arg<'a>,
     },
+    AddressOf {
+        result: usize,
+        // Must be lvalue
+        lvalue: Arg<'a>,
+    },
     Assign {
         result: usize,
         arg: Arg<'a>,
@@ -39,12 +44,26 @@ pub enum Opcode<'a> {
 #[derive(Clone, Debug)]
 pub enum Arg<'a> {
     Bool(bool),
-    Int64 { bits: [u8; 8], signed: bool },
-    String { index: usize },                    // Index is in ir.strings
+    Int64 {
+        bits: [u8; 8],
+        signed: bool,
+    },
+    String {
+        index: usize,
+    }, // Index is in ir.strings
     ExternalFunction(Identifier<'a>),
-    StackOffset { offset: usize, size: usize }, // TODO: Utilize StackOffset::size and Argument::size
-    Argument { index: usize, size: usize },     // Stores argument number (counting from 0)
-                                                // and size of the argument
+
+    // TODO: Utilize StackOffset::size and Argument::size
+    StackOffset {
+        offset: usize,
+        size: usize,
+    },
+
+    // Stores argument number (counting from 0) and size of the argument
+    Argument {
+        index: usize,
+        size: usize,
+    },
 }
 
 impl Arg<'_> {
