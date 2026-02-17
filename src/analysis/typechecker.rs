@@ -150,7 +150,6 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     .resolutions
                     .get(expression)
                     .expect("Compiler bug: resolution failed");
-                debug_scopes!(&self.locals);
                 let var = self.locals.get_at(&n.name, *depth);
 
                 
@@ -258,7 +257,10 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     return_type: return_type.clone(),
                     parameters: parameters
                         .iter()
-                        .map(|p| p.ty.clone())
+                        .map(|p| {
+                            assert_ne!(p.ty.inner(), TypeId::Unknown, "COMPILER BUG: Function parameter type id could not be Unknown");
+                            p.ty.clone()
+                        })
                         .collect_in::<BumpVec<_>>(b)
                         .into_bump_slice(),
                     is_variadic: false,

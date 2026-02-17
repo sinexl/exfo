@@ -103,7 +103,7 @@ impl<'types> TypeCtx<'types> {
                 inner: TypeId::Index(id),
             })) else { unreachable!("COMPILER BUG: TypeCtx::allocate returned `Unknown` Type") };
             self.pointer_monomorphisms.insert(id, pointer_id);
-            id
+            pointer_id
         };
 
 
