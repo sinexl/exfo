@@ -3,7 +3,7 @@ use crate::code_generation::register::Register::*;
 use crate::compiling::ir::binop::{ArithmeticKind, Binop, BinopKind, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::binop::{IntegerBinop, OrderingKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
-use crate::compiling::ir::opcode::{Arg, Opcode};
+use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode};
 use std::cmp;
 use std::fmt::Write;
 
@@ -184,9 +184,9 @@ impl<'ir> Codegen<'ir> {
                         }
                     }
                     Binop::Bitwise(BitwiseBinop {
-                        kind,
-                        is_logical_with_short_circuit,
-                    }) => {
+                                       kind,
+                                       is_logical_with_short_circuit,
+                                   }) => {
                         // In some scenarios compiler may load one operator before another. Like short-citcuiting
                         if !is_logical_with_short_circuit {
                             self.load_arg_to_reg(left, Al);
@@ -249,23 +249,31 @@ impl<'ir> Codegen<'ir> {
                 asm!(self, "  jmp .label_{label}");
             }
             Opcode::AddressOf { result, lvalue } => {
-               comment!(self, "AddressOf");
-               match lvalue {
-                   Arg::Bool(_) |
-                   Arg::Int64 { .. } |
-                   Arg::String { .. } => panic!("COMPILER BUG: Could not take address of r-value. Typechecker failed."),
-                   Arg::ExternalFunction(_) => todo!("Indirect functions"),
+                comment!(self, "AddressOf");
+                match lvalue {
+                    Arg::Bool(_) |
+                    Arg::Int64 { .. } |
+                    Arg::String { .. } => panic!("COMPILER BUG: Could not take address of r-value. Typechecker failed."),
+                    Arg::ExternalFunction(_) => todo!("Indirect functions"),
 
-                   Arg::StackOffset { offset, size } =>  {
-                       asm!(self, "  leaq -{offset}(%rbp), {Rax}");
-                       asm!(self, "  movq {Rax},  -{result}(%rbp)")
-                   }
-                   Arg::Argument { index, size } => {
-                       let offset = self.current_function_args_offsets.as_ref().unwrap()[*index];
-                       asm!(self, "  leaq -{offset}(%rbp), {Rax}");
-                       asm!(self, "  movq {Rax},  -{result}(%rbp)")
-                   }
-               }
+                    Arg::StackOffset { offset, size } => {
+                        asm!(self, "  leaq -{offset}(%rbp), {Rax}");
+                        self.store_reg_to_lvalue(*result, Rax)
+                    }
+                    Arg::Argument { index, size } => {
+                        let offset = self.current_function_args_offsets.as_ref().unwrap()[*index];
+                        asm!(self, "  leaq -{offset}(%rbp), {Rax}");
+                        self.store_reg_to_lvalue(*result, Rax)
+                    }
+                }
+            }
+            Opcode::Store { result, arg } => {
+                comment!(self, "Store");
+                let val_reg = Rax.lower_bytes_register(arg.size());
+                let p = val_reg.prefix();
+                self.load_arg_to_reg(arg, val_reg);
+                self.load_arg_to_reg(&result.to_arg(), Rcx);
+                asm!(self, "  mov{p} {val_reg}, ({Rcx})");
             }
         }
         comment!(self);
@@ -314,6 +322,19 @@ impl<'ir> Codegen<'ir> {
 
 impl<'ir> Codegen<'ir> {
     // TODO: Factor out common logic between load_arg_to_reg() and push_arg()
+
+    pub fn store_reg_to_lvalue(&mut self, lvalue: Lvalue, reg: Register) {
+        let p = reg.prefix();
+        match lvalue {
+            Lvalue::StackOffset { offset, size } => {
+                asm!(self, "  mov{p} {reg},  -{offset}(%rbp)")
+            }
+            Lvalue::Argument { index, size } => {
+                let offset=  self.current_function_args_offsets.as_ref().expect("COMPILER BUG: Invalid Argument Lvalue")[index];
+                asm!(self, "  mov{p} {reg},  -{offset}(%rbp)")
+            }
+        }
+    }
     pub fn load_arg_to_reg(&mut self, arg: &Arg<'ir>, reg: Register) {
         let p = reg.prefix();
         match arg {

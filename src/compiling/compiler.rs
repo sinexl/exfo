@@ -1,6 +1,6 @@
 use crate::analysis::get_at::GetAt;
 use crate::analysis::resolver::Resolutions;
-use crate::analysis::r#type::{FunctionType, Type, TypeCtx, TypeId};
+use crate::analysis::r#type::{FunctionType, PointerType, Type, TypeCtx, TypeId};
 use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
@@ -10,7 +10,7 @@ use crate::common::{BumpVec, Stack};
 use crate::compiling::ir::binop;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
-use crate::compiling::ir::opcode::{Arg, Opcode};
+use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode};
 use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
 use std::collections::HashMap;
@@ -26,6 +26,8 @@ pub struct Compiler<'ir, 'ast, 'types> {
     loops: HashMap<usize, While>,
     stack_size: StackSize,
     label_count: usize,
+    // A "bucket" lvalue. Used for copy propagation/forwarding
+    bucket: Option<Lvalue>,
 
     // Compiler output
     pub ir: &'ir mut IntermediateRepresentation<'ir>,
@@ -74,6 +76,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
             variables: Stack::new(),
             label_count: 0,
             loops: Default::default(),
+            bucket: None,
         }
     }
     pub fn types(&self) -> &'types TypeCtx<'types> {
@@ -227,10 +230,11 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
             }
 
             ExpressionKind::Unary { item, operator } => {
-                let mut size = item.ty.get(self.types()).size();
+                let ty = item.ty.clone();
                 let item = self.compile_expression(item);
                 match operator {
                     UnaryKind::Negation => {
+                        let size = ty.get(self.types()).size();
                         let result = self.allocate_on_stack(size);
                         self.push_opcode(Opcode::Negate { item, result });
                         Arg::StackOffset {
@@ -240,25 +244,52 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     }
                     UnaryKind::Dereferencing => todo!("Compile dereferencing"),
                     UnaryKind::AddressOf => {
-                        let address_offset = self.allocate_on_stack(8);
+                        let size = 8;
+                        let result: Lvalue =
+                            if let Some(lvalue) = self.bucket.take_if(|e| e.size() == 8) {
+                                lvalue
+                            } else {
+                                Lvalue::StackOffset {
+                                    offset: self.allocate_on_stack(size),
+                                    size,
+                                }
+                            };
                         self.push_opcode(Opcode::AddressOf {
-                            result: address_offset,
+                            result,
                             lvalue: item.clone(),
                         });
 
-                        size = 8;
-                        Arg::StackOffset {
-                            offset: address_offset,
-                            size,
-                        }
+                        result.to_arg()
                     }
                 }
             }
             ExpressionKind::Assignment { target, value } => {
+                // Deref assignment.
+                if let ExpressionKind::Unary { item, operator } = &target.kind
+                    && *operator == UnaryKind::Dereferencing
+                {
+                    let size = item.ty.get(self.types()).size();
+
+                    // TODO: see TODO #3 (opcode.rs)
+                    let result = match self.compile_expression(item) {
+                        Arg::Bool(_)
+                        | Arg::Int64 { .. }
+                        | Arg::String { .. }
+                        | Arg::ExternalFunction(_) => todo!("Proper error handling"),
+                        Arg::StackOffset { offset, size } => Lvalue::StackOffset { offset, size },
+                        Arg::Argument { index, size } => Lvalue::Argument { index, size },
+                    };
+                    let arg = self.compile_expression(value);
+                    self.push_opcode(Opcode::Store { result, arg });
+
+                    return result.to_arg();
+                }
+
+                // Normal assignment
                 let target = self.compile_expression(target);
-                let arg = self.compile_expression(value);
                 match target {
                     Arg::StackOffset { offset, size } => {
+                        let arg = self.compile_expression(value);
                         self.push_opcode(Opcode::Assign {
                             result: offset,
                             arg,
@@ -309,6 +340,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     }
                 }
             }
+
             ExpressionKind::FunctionCall { callee, arguments } => {
                 let (is_variadic, return_size) = if let Type::Function(FunctionType {
                     is_variadic,
@@ -476,17 +508,25 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 initializer,
                 ty,
             }) => {
-                let stack_offset = self.allocate_on_stack(ty.get(self.types()).size());
+                let size = ty.get(self.types()).size();
+                let stack_offset = self.allocate_on_stack(size);
                 // To allow shadowing, initializers are compiled before variable is inserted in the compiler tables.
                 // i. e
                 // a := 10;
                 // a := a + 15;
                 if let Some(initializer) = initializer {
+                    self.bucket = Some(Lvalue::StackOffset {
+                        size,
+                        offset: stack_offset,
+                    });
                     let arg = self.compile_expression(initializer);
-                    self.push_opcode(Opcode::Assign {
-                        result: stack_offset,
-                        arg,
-                    })
+                    if self.bucket.is_some() {
+                        self.push_opcode(Opcode::Assign {
+                            result: stack_offset,
+                            arg,
+                        });
+                    }
+                    self.bucket = None;
                 }
                 let var = Variable {
                     stack_offset,

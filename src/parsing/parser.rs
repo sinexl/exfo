@@ -468,7 +468,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     pub fn parse_type(&mut self) -> Result<TypeId, ParseError> {
         let name = self.expect(&[TokenType::Id], "Expected type name")?;
 
-        let ty = match name.string.as_ref() {
+        let mut ty = match name.string.as_ref() {
             "int" => Ok(TypeId::from_basic(BasicType::Int64)),
             "void" => Ok(TypeId::from_basic(BasicType::Void)),
             "bool" => Ok(TypeId::from_basic(BasicType::Bool)),
@@ -478,9 +478,8 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 location: name.loc.clone(),
             }),
         }?;
-        if self.consume(&[TokenType::Star]).is_some() { // TODO: Parse double and higher dim pointers
-            let id = unsafe { (*self.types).monomorph_or_get_pointer(ty) };
-            return Ok(id);
+        while self.consume(&[TokenType::Star]).is_some() { 
+            ty = unsafe { (*self.types).monomorph_or_get_pointer(ty) };
         }
         Ok(ty)
     }
@@ -489,7 +488,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         let target = self.parse_binop(0)?;
         if let Some(tk) = self.consume(&[TokenType::Equal]) {
             let value = self.parse_assignment()?;
-            if !target.kind.is_assignable() {
+            if !target.kind.lvalue() {
                 return Err(ParseError {
                     location: target.loc.clone(),
                     kind: InvalidAssignment(target.kind.humanize()),

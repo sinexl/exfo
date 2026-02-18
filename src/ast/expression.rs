@@ -42,7 +42,7 @@ pub enum ExpressionKind<'ast> {
 }
 
 impl ExpressionKind<'_> {
-    pub fn is_assignable(&self) -> bool {
+    pub fn lvalue(&self) -> bool {
         match self {
             ExpressionKind::Assignment { .. } => true,
             ExpressionKind::VariableAccess(_) => true,

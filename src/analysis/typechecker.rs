@@ -1,4 +1,3 @@
-use crate::debug_scope;
 use crate::analysis::get_at::GetAt;
 use crate::analysis::resolver::Resolutions;
 use crate::analysis::r#type::{
@@ -122,6 +121,12 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                         }
                     }
                     UnaryKind::AddressOf => {
+                        if !item.kind.lvalue() {
+                            return Err(TypeError {
+                                loc: expression.loc.clone(),
+                                kind: TypeErrorKind::RvalueAddressOf(DisplayType(item.ty.inner(), self.types()).to_string().into_boxed_str()),
+                            })
+                        }
                         unsafe { (*self.types).monomorph_or_get_pointer(item.ty.inner()) }
                     }
                 };
@@ -453,6 +458,8 @@ pub enum TypeErrorKind {
     DereferencingNonPointer {
         actual_type: Box<str>,
     },
+
+    RvalueAddressOf(Box<str>),
 }
 impl CompilerError for TypeError {
     fn location(&self) -> SourceLocation {
@@ -508,6 +515,7 @@ impl CompilerError for TypeError {
             TypeErrorKind::DereferencingNonPointer { actual_type } => {
                 format!("Could not dereference `{}`", actual_type)
             }
+            TypeErrorKind::RvalueAddressOf(typename) => format!("Could not take an address of rvalue of type `{typename}`")
         }
     }
 
@@ -539,6 +547,7 @@ impl CompilerError for TypeError {
             TypeErrorKind::FromPrevious => None,
             TypeErrorKind::InvalidOperands(_, _, _) => None,
             TypeErrorKind::DereferencingNonPointer { .. } => None,
+            TypeErrorKind::RvalueAddressOf(_) => None,
         }
     }
 }

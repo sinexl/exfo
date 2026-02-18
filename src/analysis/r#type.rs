@@ -2,8 +2,7 @@ use crate::common::{BumpVec, Join};
 use bumpalo::Bump;
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::ops::{Index, IndexMut};
 
@@ -67,11 +66,21 @@ impl<'types> UserType<'types> {
     }
 }
 
-#[derive(Debug)]
 pub struct TypeCtx<'types> {
     types: BumpVec<'types, Type<'types>>,
     // T -> T*
     pointer_monomorphisms: HashMap<usize, usize>,
+}
+
+impl<'types> Debug for TypeCtx<'types> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for i in 0..self.types.len() {
+            let ty = TypeId::Index(i);
+            writeln!(f, "--------")?;
+            writeln!(f, "{}", DisplayType(ty, self))?;
+        }
+        Ok(())
+    }
 }
 
 impl<'types> TypeCtx<'types> {

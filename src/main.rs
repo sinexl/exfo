@@ -14,6 +14,7 @@ use std::path::Path;
 use std::process::{exit, Command, Stdio};
 use std::ptr::addr_of_mut;
 use std::{fs, io};
+use crate::ast::tree_printer::{DisplayStatement, PrintStatement};
 
 mod analysis;
 mod ast;
@@ -89,11 +90,14 @@ fn main() -> io::Result<()> {
     let mut compiler = Compiler::new(&ir_allocator, types_ptr, type_checker.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
-    dprintln!(args, "{ir}");
 
     let codegen = Codegen::new(ir, args.pic());
     let generated_assembly = codegen.generate();
-    dprintln!(args, "{}", generated_assembly);
+    dprintln!(args, "{generated_assembly}");
+    for i in ast {
+        dprintln!(args, "{}", DisplayStatement(i, &types));
+    }
+    dprintln!(args, "{ir}");
 
     // Outputting the result of compilation to user.
     const BUILD_DIR: &str = "./.exfo_build";
