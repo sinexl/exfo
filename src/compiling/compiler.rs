@@ -426,16 +426,6 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     },
                 );
 
-                // Function argument allocation.
-                // Function argument loading convention:
-                // 1st argument <- stack[n_1];
-                // 2nd argument <- stack[n_1 + n_2];
-                // 3rd argument <- stack[n_1 + n_2 + n_3];
-                // ....
-                // mth argument <- stack[<sum of all previous arguments' sizes> + m_n];
-                // where:
-                // n_1 ... n_m => mth argument size,
-                //           m => amount of arguments
                 let mut sizes = BumpVec::with_capacity_in(parameters.len(), self.ir_bump);
                 self.variables.push(HashMap::new());
                 let function_scope = self.variables.len() - 1;

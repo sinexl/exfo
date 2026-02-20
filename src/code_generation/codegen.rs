@@ -53,9 +53,10 @@ impl<'ir> Codegen<'ir> {
         comment!(self, "Function Prologue");
         asm!(self, "  pushq %rbp");
         asm!(self, "  movq %rsp, %rbp");
-        let total_stack_size = function.stack_size + function.params.iter().sum::<usize>();
-        let final_stack_size = (total_stack_size.div_ceil(16) * 16) + 8;
+        let total_param_size = function.params.iter().sum::<usize>();
+        let total_stack_size = function.stack_size + total_param_size;
         if total_stack_size > 0 {
+            let final_stack_size = (total_stack_size.div_ceil(16) * 16) + 8;
             comment!(
                 self,
                 "Stack size: {total_stack_size}. Padding: {}",
@@ -67,16 +68,24 @@ impl<'ir> Codegen<'ir> {
             comment!(self, "Function Arguments");
         }
         // Fucntion argument initialization.
+
+        // Function argument allocation.
+        // Arguments are received at the end of function stack frame.
+        // first argument counting from the right is last passed parameter
+        // second argument counting from the right is second-to-last parameter.
+        // etc.
+
         let mut function_args_offsets = Vec::with_capacity(function.params.len());
-        let mut arg_offset = 0;
+        let mut arg_offset = total_stack_size - total_param_size;
+        let reg_arg_count = cmp::min(function.params.len(), CALL_REGISTERS.len()); // Amount of parameters passed by register.
+
+        let reg_params = &function.params[..reg_arg_count];
 
         // Register parameters.
-        let reg_arg_count = cmp::min(function.params.len(), CALL_REGISTERS.len()); // Amount of registers passed by register.
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..reg_arg_count {
-            let arg_size = function.params[i];
-            let p = Register::prefix_from_size(arg_size);
+        for (i, arg_size) in reg_params.iter().enumerate() {
+            let arg_size = *arg_size;
             arg_offset += arg_size;
+            let p = Register::prefix_from_size(arg_size);
             asm!(
                 self,
                 "  mov{p} {}, -{}(%rbp)",
@@ -96,14 +105,16 @@ impl<'ir> Codegen<'ir> {
         //                             [0 - 8]   arg_read_offset
         //                                       [8 - 16]
         let mut arg_read_offset = 16;
-        for i in stack_params {
-            arg_offset += i;
+        for arg_size in stack_params {
+            arg_offset += arg_size;
             asm!(self, "  movq {arg_read_offset}(%rbp), {Rax}",);
 
             asm!(self, "  movq {Rax}, -{}(%rbp)", arg_offset);
+
             function_args_offsets.push(arg_offset);
-            arg_read_offset += i;
+            arg_read_offset += arg_size;
         }
+
         comment!(self);
 
         self.current_function_args_offsets = Some(function_args_offsets);
