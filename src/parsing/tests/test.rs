@@ -1,9 +1,9 @@
-use std::ptr::addr_of_mut;
+use crate::analysis::type_context::TypeCtx;
+use crate::ast::tree_printer::DisplayStatement;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
-use crate::analysis::r#type::TypeCtx;
-use crate::ast::tree_printer::DisplayStatement;
+use std::ptr::addr_of_mut;
 
 #[test]
 pub fn parser() {

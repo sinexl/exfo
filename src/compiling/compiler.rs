@@ -1,6 +1,7 @@
 use crate::analysis::get_at::GetAt;
+use crate::analysis::r#type::{FunctionType, Type, TypeId};
 use crate::analysis::resolver::Resolutions;
-use crate::analysis::r#type::{FunctionType, PointerType, Type, TypeCtx, TypeId};
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
@@ -11,8 +12,8 @@ use crate::compiling::ir::binop;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode};
-use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
+use bumpalo::Bump;
 use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'ast, 'types> {

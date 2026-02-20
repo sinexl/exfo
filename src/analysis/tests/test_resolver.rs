@@ -1,4 +1,5 @@
 use crate::analysis::resolver::{Resolver, ResolverError, ResolverErrorKind};
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{Identifier, IdentifierBox, SourceLocation};
 use crate::hashmap;
@@ -6,6 +7,7 @@ use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
 use std::collections::HashMap;
+use std::ptr::addr_of_mut;
 use std::rc::Rc;
 
 const PATH: &str = "PATH";
@@ -181,8 +183,9 @@ pub fn proper_label_resolution() {
     assert!(errors.is_empty());
     let ast_alloc = Bump::new();
     let type_alloc = Bump::new();
+    let mut type_ctx = TypeCtx::new(&type_alloc);
 
-    let mut parser = Parser::new(tokens.into(), &ast_alloc, &type_alloc);
+    let mut parser = Parser::new(tokens.into(), &ast_alloc, addr_of_mut!(type_ctx));
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
@@ -236,8 +239,9 @@ fn success(src: &str) -> HashMap<(usize, usize), usize> {
     assert!(errors.is_empty());
     let ast_alloc = Bump::new();
     let type_alloc =  Bump::new();
+    let mut type_ctx = TypeCtx::new(&type_alloc);
 
-    let mut parser = Parser::new(tokens.into(), &ast_alloc, &type_alloc);
+    let mut parser = Parser::new(tokens.into(), &ast_alloc, addr_of_mut!(type_ctx));
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
@@ -260,10 +264,12 @@ fn error(src: &str) -> ResolverError {
 fn errors(src: &str) -> Vec<ResolverError> {
     let (tokens, errors) = Lexer::new(src, PATH).accumulate();
     assert!(errors.is_empty());
+
     let ast_alloc = Bump::new();
     let type_alloc = Bump::new();
+    let mut type_ctx = TypeCtx::new(&type_alloc);
 
-    let mut parser = Parser::new(tokens.into(), &ast_alloc, &type_alloc);
+    let mut parser = Parser::new(tokens.into(), &ast_alloc, addr_of_mut!(type_ctx));
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 

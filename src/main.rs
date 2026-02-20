@@ -1,6 +1,7 @@
-use crate::analysis::r#type::TypeCtx;
 use crate::analysis::resolver::Resolver;
+use crate::analysis::type_context::TypeCtx;
 use crate::analysis::typechecker::Typechecker;
+use crate::ast::tree_printer::DisplayStatement;
 use crate::code_generation::codegen::Codegen;
 use crate::common::CompilerError;
 use crate::compiler_io::compiler_arguments::CompilerArguments;
@@ -14,7 +15,6 @@ use std::path::Path;
 use std::process::{exit, Command, Stdio};
 use std::ptr::addr_of_mut;
 use std::{fs, io};
-use crate::ast::tree_printer::{DisplayStatement, PrintStatement};
 
 mod analysis;
 mod ast;

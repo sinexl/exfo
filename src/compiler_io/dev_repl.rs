@@ -1,5 +1,5 @@
-use crate::analysis::r#type::TypeCtx;
 use crate::analysis::resolver::Resolver;
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::ast::tree_printer::DisplayStatement;
 use crate::common::CompilerError;

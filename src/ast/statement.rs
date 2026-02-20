@@ -1,4 +1,5 @@
-use crate::analysis::r#type::{DisplayType, TypeCtx, TypeIdCell};
+use crate::analysis::r#type::{DisplayType, TypeIdCell};
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::expression::Expression;
 use crate::common::{Identifier, SourceLocation};
 use std::cell::Cell;
@@ -49,7 +50,7 @@ pub struct FunctionDeclaration<'ast, 'types> {
     pub name: Identifier<'ast>,
     pub parameters: &'ast [FunctionParameter<'ast>],
     pub body: &'ast [&'ast Statement<'ast, 'types>],
-    pub return_type: TypeIdCell
+    pub return_type: TypeIdCell,
 }
 
 #[derive(Debug)]
@@ -79,11 +80,19 @@ pub struct FunctionParameter<'ast> {
     pub ty: TypeIdCell,
 }
 
-pub struct DisplayFunctionParameter<'ast, 'types>(pub &'ast FunctionParameter<'ast>, pub &'types  TypeCtx<'types>);
+pub struct DisplayFunctionParameter<'ast, 'types>(
+    pub &'ast FunctionParameter<'ast>,
+    pub &'types TypeCtx<'types>,
+);
 
 impl<'ast, 'types> Display for DisplayFunctionParameter<'ast, 'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let Self (param, types) = self;
-        write!(f, "{}: {}", param.name.name, DisplayType(param.ty.clone().inner(), types))
+        let Self(param, types) = self;
+        write!(
+            f,
+            "{}: {}",
+            param.name.name,
+            DisplayType(param.ty.clone().inner(), types)
+        )
     }
 }

@@ -1,10 +1,10 @@
-use std::ptr::addr_of_mut;
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use crate::parsing::tests::test_precedence::PATH;
 use bumpalo::Bump;
-use crate::analysis::r#type::TypeCtx;
+use std::ptr::addr_of_mut;
 
 #[test]
 pub fn simple_expression_statements() {

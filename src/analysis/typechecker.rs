@@ -1,14 +1,15 @@
 use crate::analysis::get_at::GetAt;
-use crate::analysis::resolver::Resolutions;
 use crate::analysis::r#type::{
-    BasicType, DisplayType, FunctionType, PointerType, Type, TypeCtx, TypeId, TypeIdCell,
+    BasicType, DisplayType, FunctionType, PointerType, Type, TypeId, TypeIdCell,
 };
-use crate::{ast, debug_scopes};
+use crate::analysis::resolver::Resolutions;
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::binop::BinopFamily;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{BumpVec, CompilerError, SourceLocation, Stack};
+use crate::ast;
 use bumpalo::collections::CollectIn;
 use std::collections::HashMap;
 

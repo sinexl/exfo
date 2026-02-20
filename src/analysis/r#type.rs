@@ -1,10 +1,8 @@
-use crate::common::{BumpVec, Join};
-use bumpalo::Bump;
+use crate::analysis::type_context::TypeCtx;
+use crate::common::Join;
 use std::cell::Cell;
-use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
-use std::ops::{Index, IndexMut};
 
 #[derive(PartialEq, Debug)]
 pub enum Type<'types> {
@@ -19,6 +17,40 @@ pub enum Type<'types> {
     // UserDefined Types
     UserDefined(UserType<'types>),
 }
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
+pub enum BasicType {
+    Void,
+    Int64,
+    Float64,
+    Bool,
+    CharPtr,
+}
+pub const BASIC_TYPES: &[BasicType] = &[
+    BasicType::Void,
+    BasicType::Int64,
+    BasicType::Float64,
+    BasicType::Bool,
+    BasicType::CharPtr,
+];
+
+#[derive(PartialEq, Debug)]
+pub struct UserType<'types> {
+    name: &'types str,
+    size: usize,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct FunctionType<'types> {
+    pub return_type: TypeIdCell,
+    pub parameters: &'types [TypeIdCell],
+    pub is_variadic: bool,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct PointerType {
+    pub inner: TypeId,
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum TypeId {
     Unknown,
@@ -38,105 +70,6 @@ pub struct TypeIdCell {
     inner: Cell<TypeId>,
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
-pub enum BasicType {
-    Void,
-    Int64,
-    Float64,
-    Bool,
-    CharPtr,
-}
-const BASIC_TYPES: &[BasicType] = &[
-    BasicType::Void,
-    BasicType::Int64,
-    BasicType::Float64,
-    BasicType::Bool,
-    BasicType::CharPtr,
-];
-
-#[derive(PartialEq, Debug)]
-pub struct UserType<'types> {
-    name: &'types str,
-    size: usize,
-}
-
-impl<'types> UserType<'types> {
-    pub fn new(types: &'types mut TypeCtx) -> Self {
-        todo!("UserTypes are not implemented yet");
-    }
-}
-
-pub struct TypeCtx<'types> {
-    types: BumpVec<'types, Type<'types>>,
-    // T -> T*
-    pointer_monomorphisms: HashMap<usize, usize>,
-}
-
-impl<'types> Debug for TypeCtx<'types> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for i in 0..self.types.len() {
-            let ty = TypeId::Index(i);
-            writeln!(f, "--------")?;
-            writeln!(f, "{}", DisplayType(ty, self))?;
-        }
-        Ok(())
-    }
-}
-
-impl<'types> TypeCtx<'types> {
-    pub fn new(types: &'types Bump) -> Self {
-        let mut result = Self {
-            types: BumpVec::with_capacity_in(BASIC_TYPES.len(), types),
-            pointer_monomorphisms: HashMap::new(),
-        };
-        for basic_type in BASIC_TYPES {
-            result.types.push(Type::Basic(*basic_type));
-        }
-        result
-    }
-
-    pub fn allocate(&mut self, item: Type<'types>) -> TypeId {
-        let len = self.types.len();
-        self.types.push(item);
-        TypeId::Index(len)
-    }
-
-    pub fn monomorph_or_get_pointer(&mut self, id: TypeId) -> TypeId {
-        let TypeId::Index(id) = id else {
-            panic!("COMPILER BUG: Could not monomorph `Unknown` type")
-        };
-        let result = if self.pointer_monomorphisms.contains_key(&id) {
-            *self.pointer_monomorphisms.get(&id).unwrap()
-        } else {
-            let TypeId::Index(pointer_id) = self.allocate(Type::Pointer(PointerType {
-                inner: TypeId::Index(id),
-            })) else { unreachable!("COMPILER BUG: TypeCtx::allocate returned `Unknown` Type") };
-            self.pointer_monomorphisms.insert(id, pointer_id);
-            pointer_id
-        };
-
-
-        TypeId::Index(result)
-    }
-
-    pub fn bump(&self) -> &'types Bump {
-        self.types.bump()
-    }
-}
-
-impl<'types> Index<usize> for TypeCtx<'types> {
-    type Output = Type<'types>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.types[index]
-    }
-}
-
-impl<'types> IndexMut<usize> for TypeCtx<'types> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.types[index]
-    }
-}
 
 impl TypeId {
     pub fn get<'types>(self, arena: &'types TypeCtx<'types>) -> &'types Type<'types> {
@@ -192,17 +125,6 @@ impl TypeIdCell {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct FunctionType<'types> {
-    pub return_type: TypeIdCell,
-    pub parameters: &'types [TypeIdCell],
-    pub is_variadic: bool,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct PointerType {
-    pub inner: TypeId,
-}
 
 pub struct DisplayType<'types>(pub TypeId, pub &'types TypeCtx<'types>);
 impl<'ast> Display for DisplayType<'ast> {

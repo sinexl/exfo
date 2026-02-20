@@ -1,0 +1,15 @@
+extern "C" func printf(char_ptr, ...): void;
+func swap(a: int*, b: int*): void {
+    temp := *a;
+    *a = *b;
+    *b = temp;
+}
+
+
+func main(): void {
+    a := 15;
+    b := 10;
+    printf("Before swap: a = %d, b = %d%c", a, b, 10);
+    swap(&a, &b);
+    printf("After swap:  a = %d, b = %d%c", a, b, 10);
+}

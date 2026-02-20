@@ -1,4 +1,4 @@
-use std::ptr::addr_of_mut;
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::expression::AstLiteral::Integral;
 use crate::ast::expression::ExpressionKind;
 use crate::ast::prefix_printer::PrefixPrint;
@@ -6,8 +6,8 @@ use crate::common::SourceLocation;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::{ParseError, ParseErrorKind, Parser};
 use bumpalo::Bump;
+use std::ptr::addr_of_mut;
 use std::rc::Rc;
-use crate::analysis::r#type::TypeCtx;
 
 pub const PATH: &str = "<testcase>";
 
