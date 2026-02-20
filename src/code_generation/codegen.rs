@@ -156,7 +156,7 @@ impl<'ir> Codegen<'ir> {
             Opcode::Binop {
                 left,
                 right,
-                result,
+                destination: result,
                 kind,
             } => {
                 comment!(self, "Binop ({})", kind.to_ast_binop().operator());
@@ -195,9 +195,9 @@ impl<'ir> Codegen<'ir> {
                         }
                     }
                     Binop::Bitwise(BitwiseBinop {
-                                       kind,
-                                       is_logical_with_short_circuit,
-                                   }) => {
+                        kind,
+                        is_logical_with_short_circuit,
+                    }) => {
                         // In some scenarios compiler may load one operator before another. Like short-citcuiting
                         if !is_logical_with_short_circuit {
                             self.load_arg_to_reg(left, Al);
@@ -205,23 +205,27 @@ impl<'ir> Codegen<'ir> {
                         self.load_arg_to_reg(right, Bl);
                         let p = Register::prefix_from_size(left.size());
                         match kind {
-                            BitwiseKind::Or =>
-                                asm!(self, "  or{p} {Al}, {Bl}"),
-                            BitwiseKind::And =>
-                                asm!(self, "  and{p} {Al}, {Bl}")
+                            BitwiseKind::Or => asm!(self, "  or{p} {Al}, {Bl}"),
+                            BitwiseKind::And => asm!(self, "  and{p} {Al}, {Bl}"),
                         }
                         asm!(self, "mov{p} {Bl}, -{result}(%rbp)");
                     }
                 }
             }
 
-            Opcode::Negate { result, item } => {
+            Opcode::Negate {
+                destination: result,
+                item,
+            } => {
                 comment!(self, "Negate");
                 self.load_arg_to_reg(item, Rax);
                 asm!(self, "  negq %rax");
                 asm!(self, "  movq %rax, -{result}(%rbp)");
             }
-            Opcode::Assign { result, arg: item } => {
+            Opcode::Assign {
+                destination: result,
+                source: item,
+            } => {
                 comment!(self, "Assign");
                 let register = match item.size() {
                     8 => Rax, // TODO: introduce function for this.
@@ -259,12 +263,15 @@ impl<'ir> Codegen<'ir> {
                 comment!(self, "Jmp");
                 asm!(self, "  jmp .label_{label}");
             }
-            Opcode::AddressOf { result, lvalue } => {
+            Opcode::AddressOf {
+                destination: result,
+                lvalue,
+            } => {
                 comment!(self, "AddressOf");
                 match lvalue {
-                    Arg::Bool(_) |
-                    Arg::Int64 { .. } |
-                    Arg::String { .. } => panic!("COMPILER BUG: Could not take address of r-value. Typechecker failed."),
+                    Arg::Bool(_) | Arg::Int64 { .. } | Arg::String { .. } => panic!(
+                        "COMPILER BUG: Could not take address of r-value. Typechecker failed."
+                    ),
                     Arg::ExternalFunction(_) => todo!("Indirect functions"),
 
                     Arg::StackOffset { offset, size } => {
@@ -278,13 +285,33 @@ impl<'ir> Codegen<'ir> {
                     }
                 }
             }
-            Opcode::Store { result, arg } => {
+            Opcode::Store {
+                destination,
+                source,
+            } => {
                 comment!(self, "Store");
-                let val_reg = Rax.lower_bytes_register(arg.size());
+                let val_reg = Rax.lower_bytes_register(source.size());
                 let p = val_reg.prefix();
-                self.load_arg_to_reg(arg, val_reg);
-                self.load_arg_to_reg(&result.to_arg(), Rcx);
+                self.load_arg_to_reg(source, val_reg);
+                self.load_arg_to_reg(&destination.to_arg(), Rcx);
                 asm!(self, "  mov{p} {val_reg}, ({Rcx})");
+            }
+            Opcode::Load {
+                destination,
+                source,
+            } => {
+                comment!(self, "Load");
+                assert_eq!(
+                    source.size(),
+                    8,
+                    "COMPILER BUG: Could not dereference {e} byte address",
+                    e = source.size()
+                );
+                let reg = Rax.lower_bytes_register(source.size());
+                let p = reg.prefix();
+                self.load_arg_to_reg(source, Rax);
+                asm!(self, "  mov{p} ({Rax}), {reg}");
+                self.store_reg_to_lvalue(*destination, reg);
             }
         }
         comment!(self);
@@ -341,7 +368,10 @@ impl<'ir> Codegen<'ir> {
                 asm!(self, "  mov{p} {reg},  -{offset}(%rbp)")
             }
             Lvalue::Argument { index, size } => {
-                let offset=  self.current_function_args_offsets.as_ref().expect("COMPILER BUG: Invalid Argument Lvalue")[index];
+                let offset = self
+                    .current_function_args_offsets
+                    .as_ref()
+                    .expect("COMPILER BUG: Invalid Argument Lvalue")[index];
                 asm!(self, "  mov{p} {reg},  -{offset}(%rbp)")
             }
         }

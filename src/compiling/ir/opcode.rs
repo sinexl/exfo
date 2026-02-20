@@ -3,30 +3,29 @@ use crate::compiling::ir::binop::Binop;
 
 #[derive(Clone, Debug)]
 pub enum Opcode<'ir> {
+    // Operators.
+    Binop {
+        left: Arg<'ir>,
+        right: Arg<'ir>,
+        destination: usize,
+        kind: Binop,
+    },
+    Negate {
+        destination: usize,
+        item: Arg<'ir>,
+    },
+    AddressOf {
+        destination: Lvalue,
+        // Must be lvalue
+        lvalue: Arg<'ir>,
+    },
+
+    // Control Flow
     FunctionCall {
         result: usize,
         callee: Arg<'ir>,
         args: &'ir [Arg<'ir>],
         is_variadic: bool,
-    },
-    Binop {
-        left: Arg<'ir>,
-        right: Arg<'ir>,
-        result: usize,
-        kind: Binop,
-    },
-    Negate {
-        result: usize,
-        item: Arg<'ir>,
-    },
-    AddressOf {
-        result: Lvalue,
-        // Must be lvalue
-        lvalue: Arg<'ir>,
-    },
-    Assign {
-        result: usize,
-        arg: Arg<'ir>,
     },
     Label {
         index: usize,
@@ -38,15 +37,24 @@ pub enum Opcode<'ir> {
     Jmp {
         label: usize,
     },
+    Return(Option<Arg<'ir>>),
 
+
+    // Writes
+    Assign {
+        destination: usize,
+        source: Arg<'ir>,
+    },
     // Dereference assign
     Store {
         // Offset in memory containing address.
-        result: Lvalue,
-        arg: Arg<'ir>,
+        destination: Lvalue,
+        source: Arg<'ir>,
     },
-
-    Return(Option<Arg<'ir>>),
+    Load {
+        destination: Lvalue,
+        source: Arg<'ir>,
+    }
 }
 
 // TODO #3: Split the Arg enum into Rvalue & Lvalue. For now, there will be extra redundant "copy" of StackOffset & Argument

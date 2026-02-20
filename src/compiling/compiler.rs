@@ -108,7 +108,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 let size = expression.ty.get(self.types()).size();
                 assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
                 let left = self.compile_expression(left);
-                let offset = self.allocate_on_stack(size);
+                let destination = self.allocate_on_stack(size);
                 match kind {
                     BinopKind::And => {
                         /*
@@ -137,7 +137,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         self.push_opcode(Opcode::Binop {
                             left,
                             right,
-                            result: offset,
+                            destination,
                             kind: Binop::Bitwise(BitwiseBinop {
                                 kind: BitwiseKind::And,
                                 is_logical_with_short_circuit: true,
@@ -151,12 +151,15 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                             index: short_circuit,
                         });
                         self.push_opcode(Opcode::Assign {
-                            result: offset,
-                            arg: Arg::Bool(false),
+                            destination,
+                            source: Arg::Bool(false),
                         });
                         self.push_opcode(Opcode::Label { index: out_label });
 
-                        Arg::StackOffset { offset, size }
+                        Arg::StackOffset {
+                            offset: destination,
+                            size,
+                        }
                     }
                     BinopKind::Or => {
                         /*
@@ -181,8 +184,8 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         });
                         // Case one: The lhs is true, so entire || is true.
                         self.push_opcode(Opcode::Assign {
-                            result: offset,
-                            arg: Arg::Bool(true),
+                            destination,
+                            source: Arg::Bool(true),
                         });
                         let out_label = self.allocate_label();
                         self.push_opcode(Opcode::Jmp { label: out_label });
@@ -193,7 +196,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         self.push_opcode(Opcode::Binop {
                             left,
                             right,
-                            result: offset,
+                            destination,
                             kind: Binop::Bitwise(BitwiseBinop {
                                 kind: BitwiseKind::Or,
                                 is_logical_with_short_circuit: true,
@@ -201,7 +204,10 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         });
 
                         self.push_opcode(Opcode::Label { index: out_label });
-                        Arg::StackOffset { offset, size }
+                        Arg::StackOffset {
+                            offset: destination,
+                            size,
+                        }
                     }
                     _ => unreachable!("Unknown binary operation"),
                 }
@@ -215,7 +221,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 self.push_opcode(Opcode::Binop {
                     left,
                     right,
-                    result: offset,
+                    destination: offset,
                     kind: match kind.family() {
                         BinopFamily::Arithmetic | BinopFamily::Ordering => {
                             //                         TODO: Unsigned
@@ -236,13 +242,29 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     UnaryKind::Negation => {
                         let size = ty.get(self.types()).size();
                         let result = self.allocate_on_stack(size);
-                        self.push_opcode(Opcode::Negate { item, result });
+                        self.push_opcode(Opcode::Negate {
+                            item,
+                            destination: result,
+                        });
                         Arg::StackOffset {
                             offset: result,
                             size,
                         }
                     }
-                    UnaryKind::Dereferencing => todo!("Compile dereferencing"),
+                    UnaryKind::Dereferencing => {
+                        let size = ty.get(self.types()).size();
+                        let result = self.allocate_on_stack(size);
+                        let result = Lvalue::StackOffset {
+                            offset: result,
+                            size,
+                        };
+                        self.push_opcode(Opcode::Load {
+                            destination: result,
+                            source: item,
+                        });
+
+                        result.to_arg()
+                    }
                     UnaryKind::AddressOf => {
                         let size = 8;
                         let result: Lvalue =
@@ -255,7 +277,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                                 }
                             };
                         self.push_opcode(Opcode::AddressOf {
-                            result,
+                            destination: result,
                             lvalue: item.clone(),
                         });
 
@@ -280,7 +302,10 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         Arg::Argument { index, size } => Lvalue::Argument { index, size },
                     };
                     let arg = self.compile_expression(value);
-                    self.push_opcode(Opcode::Store { result, arg });
+                    self.push_opcode(Opcode::Store {
+                        destination: result,
+                        source: arg,
+                    });
 
                     return result.to_arg();
                 }
@@ -291,8 +316,8 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     Arg::StackOffset { offset, size } => {
                         let arg = self.compile_expression(value);
                         self.push_opcode(Opcode::Assign {
-                            result: offset,
-                            arg,
+                            destination: offset,
+                            source: arg,
                         });
                         Arg::StackOffset { offset, size }
                     }
@@ -346,7 +371,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     is_variadic,
                     return_type,
                     ..
-                }) = (callee.ty.get(self.types()))
+                }) = callee.ty.get(self.types())
                 {
                     (*is_variadic, return_type.inner().get(self.types()).size())
                 } else {
@@ -512,8 +537,8 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     let arg = self.compile_expression(initializer);
                     if self.bucket.is_some() {
                         self.push_opcode(Opcode::Assign {
-                            result: stack_offset,
-                            arg,
+                            destination: stack_offset,
+                            source: arg,
                         });
                     }
                     self.bucket = None;
