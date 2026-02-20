@@ -1,16 +1,17 @@
-extern "C" func puts(char_ptr): void; 
+extern "C" func printf(char_ptr, ...): void;
 func print_bool(a: bool): void {
-    if a puts("true");
-    else puts("false");
+    if a printf("true%c", 10);
+    else printf("false%c", 10);
 }
 
 func main(): void { 
-   a := 15; 
-   b := 15; 
-   print_bool(a > b); 
-   if a > b 
-       puts("a is greater than b"); 
-   else if a < b 
-       puts("a is less than b"); 
-   else puts("a is equal to b");
+    a := 15;
+    b := 15;
+    printf("a = %d, b = %d%c", a, b, 10);
+    print_bool(a > b);
+    if a > b
+        printf("a is greater than b%c", 10);
+    else if a < b
+        printf("a is less than b%c", 10);
+    else printf("a is equal to b%c", 10);
 }

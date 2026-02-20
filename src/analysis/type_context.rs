@@ -1,4 +1,4 @@
-use crate::analysis::r#type::{DisplayType, PointerType, Type, TypeId, BASIC_TYPES};
+use crate::analysis::r#type::{BASIC_TYPES, DisplayType, PointerType, Type, TypeId};
 use crate::common::BumpVec;
 use bumpalo::Bump;
 use std::collections::HashMap;
@@ -13,12 +13,12 @@ pub struct TypeCtx<'types> {
 
 impl<'types> Debug for TypeCtx<'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for i in 0..self.types.len() {
-            let ty = TypeId::Index(i);
-            writeln!(f, "--------")?;
-            writeln!(f, "{}", DisplayType(ty, self))?;
-        }
-        Ok(())
+        f.debug_list()
+            .entries(self.types.iter().enumerate().map(|(i, _)| {
+                let ty = TypeId::Index(i);
+                format!("{i} => {}", DisplayType(ty, self))
+            }))
+            .finish()
     }
 }
 
@@ -49,11 +49,12 @@ impl<'types> TypeCtx<'types> {
         } else {
             let TypeId::Index(pointer_id) = self.allocate(Type::Pointer(PointerType {
                 inner: TypeId::Index(id),
-            })) else { unreachable!("COMPILER BUG: TypeCtx::allocate returned `Unknown` Type") };
+            })) else {
+                unreachable!("COMPILER BUG: TypeCtx::allocate returned `Unknown` Type")
+            };
             self.pointer_monomorphisms.insert(id, pointer_id);
             pointer_id
         };
-
 
         TypeId::Index(result)
     }

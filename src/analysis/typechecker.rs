@@ -1,15 +1,16 @@
 use crate::analysis::get_at::GetAt;
+use crate::analysis::resolver::Resolutions;
 use crate::analysis::r#type::{
     BasicType, DisplayType, FunctionType, PointerType, Type, TypeId, TypeIdCell,
 };
-use crate::analysis::resolver::Resolutions;
 use crate::analysis::type_context::TypeCtx;
 use crate::ast::binop::BinopFamily;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{BumpVec, CompilerError, SourceLocation, Stack};
-use crate::ast;
+use crate::debug_scope;
+use crate::{ast, debug_scopes};
 use bumpalo::collections::CollectIn;
 use std::collections::HashMap;
 
@@ -125,8 +126,12 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                         if !item.kind.lvalue() {
                             return Err(TypeError {
                                 loc: expression.loc.clone(),
-                                kind: TypeErrorKind::RvalueAddressOf(DisplayType(item.ty.inner(), self.types()).to_string().into_boxed_str()),
-                            })
+                                kind: TypeErrorKind::RvalueAddressOf(
+                                    DisplayType(item.ty.inner(), self.types())
+                                        .to_string()
+                                        .into_boxed_str(),
+                                ),
+                            });
                         }
                         unsafe { (*self.types).monomorph_or_get_pointer(item.ty.inner()) }
                     }
@@ -158,7 +163,6 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     .expect("Compiler bug: resolution failed");
                 let var = self.locals.get_at(&n.name, *depth);
 
-                
                 expression.ty.set(var.ty);
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
@@ -176,7 +180,11 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 }) = callee.ty.get(self.types())
                 {
                     let arity_error = TypeError {
-                        loc: expression.loc.clone(),
+                        loc: if let Some(last) = arguments.last() {
+                            unsafe { (**last).loc.clone() }
+                        } else {
+                            expression.loc.clone()
+                        },
                         kind: TypeErrorKind::InvalidArity {
                             expected_arguments: parameters.len(),
                             actual_arguments: arguments.len(),
@@ -264,7 +272,11 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     parameters: parameters
                         .iter()
                         .map(|p| {
-                            assert_ne!(p.ty.inner(), TypeId::Unknown, "COMPILER BUG: Function parameter type id could not be Unknown");
+                            assert_ne!(
+                                p.ty.inner(),
+                                TypeId::Unknown,
+                                "COMPILER BUG: Function parameter type id could not be Unknown"
+                            );
                             p.ty.clone()
                         })
                         .collect_in::<BumpVec<_>>(b)
@@ -516,7 +528,9 @@ impl CompilerError for TypeError {
             TypeErrorKind::DereferencingNonPointer { actual_type } => {
                 format!("Could not dereference `{}`", actual_type)
             }
-            TypeErrorKind::RvalueAddressOf(typename) => format!("Could not take an address of rvalue of type `{typename}`")
+            TypeErrorKind::RvalueAddressOf(typename) => {
+                format!("Could not take an address of rvalue of type `{typename}`")
+            }
         }
     }
 
@@ -553,10 +567,7 @@ impl CompilerError for TypeError {
     }
 }
 
-#[allow(dead_code)]
-fn print_type<'types>(item: TypeId, types: &'types TypeCtx<'types>)  {
+fn print_type<'types>(item: TypeId, types: &'types TypeCtx<'types>) {
     let ty = item.get(types);
     dbg!(&ty);
-
-
 }

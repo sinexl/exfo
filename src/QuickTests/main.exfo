@@ -1,59 +1,31 @@
+extern "C" func puts(char_ptr): void;
 extern "C" func printf(char_ptr, ...): void;
 
-func set_value(p: int*, value: int): void {
-    *p = value;
+func print_i64(a: int): void {
+    printf("%d%c", a, 10);
 }
 
-func set_pointer(pp: int**, new_target: int*): void {
-    *pp = new_target;
-}
+func main(): int {
+    // While Loop
+    i := 0;
+    while i < 10 {
+        i = i + 1;
+        if i == 3 continue;
+        if i == 8 break;
+        print_i64(i);
+    }
 
-func swap_ptrs(pp1: int**, pp2: int**): void {
-    temp := *pp1;
-    *pp1 = *pp2;
-    *pp2 = temp;
-}
+    puts("---------");
 
-func main(): void {
-    a := 111;
-    b := 222;
-
-    pa := &a;
-    pb := &b;
-
-    ppa := &pa;
-    ppb := &pb;
-
-    printf("Initial values:%c", 10);
-    printf("a     = %d, b     = %d%c", a, b, 10);
-    printf("*pa   = %d, *pb   = %d%c", *pa, *pb, 10);
-    printf("**ppa = %d, **ppb = %d%c", **ppa, **ppb, 10);
-
-    printf("%c", 10);
-
-    set_value(pa, 500);
-    printf("After set_value(pa, 500): a = %d%c", a, 10);
-
-    printf("%c", 10);
-
-    set_value(*ppa, 700);
-    printf("After set_value(*ppa, 700): a = %d%c", a, 10);
-
-    printf("%c", 10);
-
-    set_pointer(ppa, pb);
-    printf("After set_pointer(ppa, pb):%c", 10);
-    printf("  *pa = %d%c", *pa, 10);
-
-    printf("%c", 10);
-
-    set_pointer(ppb, &a);
-    printf("After set_pointer(ppb, &a):%c", 10);
-    printf("  *pb = %d%c", *pb, 10);
-
-    printf("%c", 10);
-
-    swap_ptrs(ppa, ppb);
-    printf("After swap_ptrs(ppa, ppb):%c", 10);
-    printf("*pa = %d, *pb = %d%c", *pa, *pb, 10);
+    // Nested loops with labels
+    i := 0;
+    outer: while i < 5 {
+        j := 0;
+        while j < 8 {
+            print_i64(j);
+            if j == 3 break outer; // break from outer while loop
+            j = j + 1;
+        }
+        i = i + 1;
+    }
 }

@@ -11,8 +11,7 @@ for file in *.exfo; do
     name="${file%.exfo}"
 
     echo "Compiling $file -> $OUT_DIR/$name"
-    "$COMPILER" "$file" -o "$OUT_DIR/$name"
-    echo "------------------"
+    "$COMPILER" "$file" -o "$OUT_DIR/$name" > /dev/null
 done
 
-echo "All examples are placed into $BIN folder."
+echo "All examples programs are placed into $OUT_DIR folder."

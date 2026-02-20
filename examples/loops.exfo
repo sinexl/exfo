@@ -1,6 +1,4 @@
-extern "C" func puts(char_ptr): void;
-extern "C" func printf(char_ptr): void;
-
+extern "C" func printf(char_ptr, ...): void;
 func print_i64(a: int): void {
     printf("%d%c", a, 10);
 }
@@ -15,7 +13,7 @@ func main(): int {
         print_i64(i);
     }
 
-    puts("---------");
+    printf("----%c", 10);
 
     // Nested loops with labels
     i := 0;

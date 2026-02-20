@@ -1,17 +1,17 @@
 extern "C" func printf(char_ptr, ...): void; 
-func print_bool(a: bool): void { 
-    if a printf("true"); 
-    else printf("false"); 
-    printf("%c", 10);
-} 
-func main(): void { 
-    f := 10; 
+func to_string(b: bool): char_ptr {
+    if b return "true";
+    return "false";
+}
+
+func main(): void {
+    f := 10;
     s := 15;
-    a: bool = false; 
-    a = f == s; print_bool(a); 
-    a = f != s; print_bool(a); 
-    a = f > s;  print_bool(a); 
-    a = f >= s; print_bool(a); 
-    a = f < s;  print_bool(a); 
-    a = f <= s; print_bool(a); 
-} 
+    printf("f = %d , s = %d%c", f, s,   10);
+    printf("f == s : %s%c"    , to_string(f == s), 10);
+    printf("f != s : %s%c"    , to_string(f != s), 10);
+    printf("f > s  : %s%c"    , to_string(f >  s), 10);
+    printf("f >= s : %s%c"    , to_string(f >= s), 10);
+    printf("f < s  : %s%c"    , to_string(f <  s), 10);
+    printf("f <= s : %s%c"    , to_string(f <= s), 10);
+}

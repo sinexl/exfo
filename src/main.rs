@@ -112,7 +112,10 @@ fn main() -> io::Result<()> {
     let object_path = object_path.as_str();
 
 
-    if let Some(parent) = output.parent() {
+    if let Some(parent) = output.parent()
+        && parent.file_name().is_some_and(|e| e != "") // it's weird because if there is no parent directory, it returns "" which is considered non-existing
+        && !parent.exists()
+    {
         println!("Creating directory {parent}", parent = parent.display());
         fs::create_dir_all(parent).expect("failed to create output directory");
     }

@@ -1,38 +1,36 @@
-extern "C" func printf(char_ptr): void;
+extern "C" func printf(char_ptr, ...): void;
 
-func print_i64(a: int): void {
-    printf("%d%c", a, 10);
+func to_string(a: bool): char_ptr {
+    if a return "true";
+    return "false";
 }
 
-func print_bool(a: bool): void {
-    if a printf("true");
-    else printf("false");
-    printf("%c", 10);
-}
+func main(): int {
+    printf("(scoping: this is a code example, please open scoping.exfo to see what it is about)%c", 10);
 
-func main(): int { 
-    a := 1; 
-    print_i64(a);  // prints "1" 
-    a := a + 1; // Shadowing. `a` now points to another variable on the stack. 
-    print_i64(a); // prints "2" 
+    // Variables are declared / shadowed (see below) using := operator.
+    a := 1;
+    printf("before shadowing: a = %d%c", a, 10);
+    a := a + 1; // Shadowing. `a` now points to another variable on the stack.
+    printf("after shadowing:  a = %d (a is still integer)%c", a, 10); // prints "2"
     
     // Changing type via shadowing. Exfo is statically typed language, but a single name can point 
-    // to couple if different "objects" in memory 
+    // to couple if different "objects" in memory at different code locations (even in the same scope)
     // After variable shadowing, previous value unreachable.
     a := false; 
-    print_bool(a);  // prints "false" 
+    printf("after shadowing:  a = %s (a is boolean now)%c", to_string(a), 10);  // prints "false"
     
     a := 2; 
     a = a + 1; // Mutation. Update add "1" to the memory pointed by "a" 
-    print_i64(a);
+    printf("after mutation & shadowing: a = %d%c", a, 10);
     
     b := 10;
-    print_i64(b); 
+    printf("Outer scope: b = %d%c", b, 10);
     { 
-        b = b + 1; 
-        print_i64(b); 
-    } 
-    print_i64(b);
+        b := b + 1;
+        printf("Inner scope: b = %d%c", b, 10);
+    }
+    printf("Outer scope: b = %d (left unchanged) %c", b, 10);
     
     return 0; 
 } 
