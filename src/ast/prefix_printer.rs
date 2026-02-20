@@ -1,6 +1,9 @@
+use crate::analysis::r#type::DisplayType;
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
-    ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
+    DisplayFunctionParameter, ExternalFunction, FunctionDeclaration, Statement, StatementKind,
+    VariableDeclaration,
 };
 use crate::common::Join;
 use std::fmt::{Display, Formatter, Write};
@@ -16,6 +19,8 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
         ExpressionKind::Unary { item, operator } => {
             let op = match operator {
                 UnaryKind::Negation => "-",
+                UnaryKind::Dereferencing => "*",
+                UnaryKind::AddressOf => "&",
             };
             parenthesize(f, op, &[item])
         }
@@ -26,14 +31,18 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
             let mut temp: Vec<&Expression> = Vec::with_capacity(arguments.len() + 1);
             temp.push(*callee);
             for arg in arguments.iter() {
-                temp.push(unsafe {arg.as_ref().expect("FunctionCall: null argument") } );
+                temp.push(unsafe { arg.as_ref().expect("FunctionCall: null argument") });
             }
             parenthesize(f, "call", temp.as_slice())
         }
     }
 }
 
-pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> std::fmt::Result {
+pub fn prefix_print_statement<'ast, 'types>(
+    statement: &Statement<'ast, 'types>,
+    types: &'types TypeCtx<'types>,
+    f: &mut impl Write,
+) -> std::fmt::Result {
     let tab = PREFIX_TAB;
     match &statement.kind {
         StatementKind::ExpressionStatement(expr) => {
@@ -50,13 +59,18 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
                 f,
                 "(func `{}` ({}): {}",
                 name.name,
-                Join(*parameters, ", "),
-                return_type.get()
+                Join(
+                    parameters
+                        .iter()
+                        .map(|e| DisplayFunctionParameter(e, types)),
+                    ", "
+                ),
+                DisplayType(return_type.inner(), types)
             )?;
             if !body.is_empty() {
                 writeln!(f)?;
                 for statement in *body {
-                    writeln!(f, "{tab}{}", PrefixPrintStatement(statement))?;
+                    writeln!(f, "{tab}{}", PrefixPrintStatement(statement, types))?;
                 }
             }
             writeln!(f, ")")?;
@@ -73,9 +87,9 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
                 f,
                 "(extern \"{kind:?}\" `{}` ({}{}): {}",
                 name.name,
-                Join(*parameters, ", "),
+                Join(parameters.iter().map(|e| DisplayType(e.inner(), types)), ", "),
                 if *is_variadic { ", ..." } else { "" },
-                return_type.get()
+                DisplayType(return_type.inner(), types)
             )?;
         }
         StatementKind::Block(body) => {
@@ -83,7 +97,7 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             if !body.is_empty() {
                 writeln!(f)?;
                 for statement in *body {
-                    writeln!(f, "{tab}{}", PrefixPrintStatement(statement))?;
+                    writeln!(f, "{tab}{}", PrefixPrintStatement(statement, types))?;
                 }
             }
             writeln!(f, ")")?;
@@ -93,7 +107,7 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             initializer,
             ty,
         }) => {
-            write!(f, "(`{}`: {} ", name.name, ty.get())?;
+            write!(f, "(`{}`: {} ", name.name, DisplayType(ty.inner(), types))?;
             if let Some(initializer) = initializer {
                 write!(f, "= {}", PrefixPrint(initializer))?;
             }
@@ -102,7 +116,7 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
         StatementKind::Return(ret) => {
             write!(f, "(return")?;
             if let Some(ret) = ret {
-                write!(f, " {ret}")?;
+                write!(f, " {ret}", ret = PrefixPrint(ret))?;
             }
             writeln!(f, ")")?;
         }
@@ -111,9 +125,14 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             then,
             r#else,
         } => {
-            write!(f, "(if {condition}: {then}")?;
+            write!(
+                f,
+                "(if {condition}: {then}",
+                condition = PrefixPrint(condition),
+                then = PrefixPrintStatement(then, types)
+            )?;
             if let Some(r#else) = r#else {
-                write!(f, "else: {r}", r = r#else)?;
+                write!(f, "else: {r}", r = PrefixPrintStatement(r#else, types))?;
             }
             writeln!(f, ")")?;
         }
@@ -128,7 +147,13 @@ pub fn prefix_print_statement(statement: &Statement<'_>, f: &mut impl Write) -> 
             } else {
                 "".to_string()
             };
-            write!(f, "(({id}{name}): while {condition}: {body}", id = id.get())?;
+            write!(
+                f,
+                "(({id}{name}): while {condition}: {body}",
+                condition = PrefixPrint(condition),
+                body = PrefixPrintStatement(body, types),
+                id = id.get()
+            )?;
             writeln!(f, ")")?;
         }
         StatementKind::Break { name, id } => {
@@ -180,10 +205,13 @@ impl Display for PrefixPrint<'_> {
     }
 }
 
-pub(crate) struct PrefixPrintStatement<'a>(pub &'a Statement<'a>);
-impl Display for PrefixPrintStatement<'_> {
+pub(crate) struct PrefixPrintStatement<'ast, 'types>(
+    pub &'ast Statement<'ast, 'types>,
+    pub &'types TypeCtx<'types>,
+);
+impl<'ast, 'types> Display for PrefixPrintStatement<'ast, 'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let PrefixPrintStatement(statement) = self;
-        prefix_print_statement(statement, f)
+        let PrefixPrintStatement(statement, types) = self;
+        prefix_print_statement(statement, types, f)
     }
 }

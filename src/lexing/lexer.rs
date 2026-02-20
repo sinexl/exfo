@@ -3,7 +3,7 @@ use crate::lexing::extensions::{CharExtensions, OptionCharExtensions, StringExte
 use crate::lexing::lexer::LexerErrorKind::{
     UnexpectedCharacter, UnterminatedComment, UnterminatedString,
 };
-use crate::lexing::token::{SINGLE_PUNCTS, Token, TokenType, is_punct};
+use crate::lexing::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::rc::Rc;

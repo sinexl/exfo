@@ -1,7 +1,6 @@
-use crate::analysis::r#type::Type;
+use crate::analysis::r#type::TypeIdCell;
 use crate::ast::binop::BinopKind;
 use crate::common::{Identifier, SourceLocation};
-use std::cell::Cell;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
@@ -10,7 +9,7 @@ pub struct Expression<'ast> {
     pub kind: ExpressionKind<'ast>,
     pub loc: SourceLocation,
     pub id: usize,
-    pub ty: Cell<Type<'ast>>,
+    pub ty: TypeIdCell,
 }
 
 impl<'a> Hash for Expression<'a> {
@@ -43,12 +42,16 @@ pub enum ExpressionKind<'ast> {
 }
 
 impl ExpressionKind<'_> {
-    pub fn is_assignable(&self) -> bool {
+    pub fn lvalue(&self) -> bool {
         match self {
             ExpressionKind::Assignment { .. } => true,
             ExpressionKind::VariableAccess(_) => true,
             ExpressionKind::Binop { .. } => false,
-            ExpressionKind::Unary { .. } => false,
+            ExpressionKind::Unary { operator, ..} =>
+                match operator {
+                    UnaryKind::Negation | UnaryKind::AddressOf => false,
+                    UnaryKind::Dereferencing => true,
+                },
             ExpressionKind::Literal(_) => false,
             ExpressionKind::FunctionCall { .. } => false,
         }
@@ -68,12 +71,16 @@ impl ExpressionKind<'_> {
 #[derive(Hash, Debug, Eq, PartialEq)]
 pub enum UnaryKind {
     Negation,
+    Dereferencing,
+    AddressOf,
 }
 
 impl UnaryKind {
     pub(crate) fn name(&self) -> &'static str {
         match self {
             UnaryKind::Negation => "Negation",
+            UnaryKind::Dereferencing => "Dereferencing",
+            UnaryKind::AddressOf => "AddressOf"
         }
     }
 }

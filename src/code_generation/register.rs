@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Register {
     // General purpose registers
     // Call registers
@@ -51,6 +51,7 @@ impl Register {
     pub fn prefix(&self) -> &'static str {
         Self::prefix_from_size(self.size())
     }
+
 
     pub fn prefix_from_size(size: usize) -> &'static str {
         match size {

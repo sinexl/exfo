@@ -51,16 +51,16 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             left,
             right,
             kind,
-            result,
+            destination: result,
         } => writeln!(
             f,
             "{tab}stack[{}] = {left} {op} {right}",
             result,
             op = kind.to_ast_binop().operator()
         )?,
-        Opcode::Negate { result, item } => writeln!(f, "{tab}stack[{result}] = -{item}")?,
+        Opcode::Negate { destination: result, item } => writeln!(f, "{tab}stack[{result}] = -{item}")?,
 
-        Opcode::Assign { result, arg: item } => writeln!(f, "{tab}stack[{result}] = {item}")?,
+        Opcode::Assign { destination: result, source: item } => writeln!(f, "{tab}stack[{result}] = {item}")?,
         Opcode::Return(ret) => {
             write!(f, "{tab}return")?;
             if let Some(ret) = ret {
@@ -75,6 +75,9 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             writeln!(f, "{tab}jmp_if_not {condition} -> .label{label}")?
         }
         Opcode::Jmp { label } => writeln!(f, "{tab}jmp -> {label}")?,
+        Opcode::AddressOf { destination, lvalue } => writeln!(f, "{tab}stack[{destination:?}] = &{lvalue}")?,
+        Opcode::Store { destination, source } => writeln!(f, "{tab}*stack[{destination:?}] = {source}")?,
+        Opcode::Load { destination, source } => writeln!(f, "{tab}stack[{destination:?}] = *{source}")?,
     }
 
     Ok(())
@@ -97,7 +100,7 @@ pub fn print_arg(arg: &Arg, f: &mut impl Write) -> std::fmt::Result {
             write!(f, "stack[{offset}]")?;
         }
         Arg::String { index } => write!(f, "string[{index}]")?,
-        Arg::Argument { index, size } => write!(f, "argument[{index}]")?
+        Arg::Argument { index, size } => write!(f, "argument[{index}]")?,
     }
 
     Ok(())

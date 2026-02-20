@@ -1,16 +1,19 @@
 use crate::analysis::resolver::Resolver;
+use crate::analysis::type_context::TypeCtx;
 use crate::analysis::typechecker::Typechecker;
+use crate::ast::tree_printer::DisplayStatement;
 use crate::code_generation::codegen::Codegen;
 use crate::common::CompilerError;
 use crate::compiler_io::compiler_arguments::CompilerArguments;
 use crate::compiler_io::dev_repl::dev_repl;
-use crate::compiler_io::util::{DisplayCommand, create_dir_if_not_exists, run_command};
+use crate::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
 use std::path::Path;
-use std::process::{Command, Stdio, exit};
+use std::process::{exit, Command, Stdio};
+use std::ptr::addr_of_mut;
 use std::{fs, io};
 
 mod analysis;
@@ -37,12 +40,15 @@ fn main() -> io::Result<()> {
     // Compilation process.
     let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
     let ast_allocator = Bump::new();
+    let type_allocator = Bump::new();
+    let mut types = TypeCtx::new(&type_allocator);
+    let types_ptr = addr_of_mut!(types);
     let ir_allocator = Bump::new();
     // Lexing.
     let (tokens, errors) = Lexer::new(&file, input.to_str().unwrap()).accumulate();
     push_errors!(static_errors, errors);
     // Parsing
-    let mut parser = Parser::new(tokens.into(), &ast_allocator);
+    let mut parser = Parser::new(tokens.into(), &ast_allocator, types_ptr);
     let (ast, errors) = parser.parse_program();
     push_errors!(static_errors, errors);
 
@@ -65,7 +71,8 @@ fn main() -> io::Result<()> {
         }
         exit(1);
     }
-    let mut type_checker = Typechecker::new(&ast_allocator, resolutions);
+
+    let mut type_checker = Typechecker::new(types_ptr, resolutions);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {
         push_errors!(static_errors, r);
@@ -80,14 +87,17 @@ fn main() -> io::Result<()> {
     }
 
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator, &ast_allocator, type_checker.resolutions);
+    let mut compiler = Compiler::new(&ir_allocator, types_ptr, type_checker.resolutions);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
-    dprintln!(args, "{ir}");
 
     let codegen = Codegen::new(ir, args.pic());
     let generated_assembly = codegen.generate();
-    dprintln!(args, "{}", generated_assembly);
+    dprintln!(args, "{generated_assembly}");
+    for i in ast {
+        dprintln!(args, "{}", DisplayStatement(i, &types));
+    }
+    dprintln!(args, "{ir}");
 
     // Outputting the result of compilation to user.
     const BUILD_DIR: &str = "./.exfo_build";

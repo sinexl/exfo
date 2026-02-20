@@ -1,27 +1,28 @@
-use crate::analysis::r#type::Type;
+use crate::analysis::r#type::{DisplayType, TypeIdCell};
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::expression::Expression;
 use crate::common::{Identifier, SourceLocation};
 use std::cell::Cell;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
-pub struct Statement<'a> {
-    pub kind: StatementKind<'a>,
+pub struct Statement<'ast, 'types> {
+    pub kind: StatementKind<'ast, 'types>,
     pub loc: SourceLocation,
 }
 
 #[derive(Debug)]
-pub enum StatementKind<'a> {
-    ExpressionStatement(&'a Expression<'a>),
-    FunctionDeclaration(FunctionDeclaration<'a>),
-    VariableDeclaration(VariableDeclaration<'a>),
-    Block(&'a [&'a Statement<'a>]),
-    Return(Option<&'a Expression<'a>>),
-    Extern(ExternalFunction<'a>),
+pub enum StatementKind<'ast, 'types> {
+    ExpressionStatement(&'ast Expression<'ast>),
+    FunctionDeclaration(FunctionDeclaration<'ast, 'types>),
+    VariableDeclaration(VariableDeclaration<'ast>),
+    Block(&'ast [&'ast Statement<'ast, 'types>]),
+    Return(Option<&'ast Expression<'ast>>),
+    Extern(ExternalFunction<'ast, 'types>),
     If {
-        condition: &'a Expression<'a>,
-        then: &'a Statement<'a>,
-        r#else: Option<&'a Statement<'a>>,
+        condition: &'ast Expression<'ast>,
+        then: &'ast Statement<'ast, 'types>,
+        r#else: Option<&'ast Statement<'ast, 'types>>,
     },
 
     /// Fields of while, break and continue nodes:
@@ -29,35 +30,35 @@ pub enum StatementKind<'a> {
     /// id: unique identifier.
     /// Name is only needed for resolver. All later passes should use id.
     While {
-        condition: &'a Expression<'a>,
-        body: &'a Statement<'a>,
-        name: Option<Identifier<'a>>,
+        condition: &'ast Expression<'ast>,
+        body: &'ast Statement<'ast, 'types>,
+        name: Option<Identifier<'ast>>,
         id: Cell<usize>,
     },
     Break {
-        name: Option<Identifier<'a>>,
+        name: Option<Identifier<'ast>>,
         id: Cell<usize>,
     },
     Continue {
-        name: Option<Identifier<'a>>,
+        name: Option<Identifier<'ast>>,
         id: Cell<usize>,
     },
 }
 
 #[derive(Debug)]
-pub struct FunctionDeclaration<'ast> {
+pub struct FunctionDeclaration<'ast, 'types> {
     pub name: Identifier<'ast>,
     pub parameters: &'ast [FunctionParameter<'ast>],
-    pub body: &'ast [&'ast Statement<'ast>],
-    pub return_type: Cell<Type<'ast>>,
+    pub body: &'ast [&'ast Statement<'ast, 'types>],
+    pub return_type: TypeIdCell,
 }
 
 #[derive(Debug)]
-pub struct ExternalFunction<'ast> {
+pub struct ExternalFunction<'ast, 'types> {
     pub name: Identifier<'ast>,
     pub kind: ExternKind,
-    pub parameters: &'ast [Type<'ast>],
-    pub return_type: Cell<Type<'ast>>,
+    pub parameters: &'types [TypeIdCell],
+    pub return_type: TypeIdCell,
     pub is_variadic: bool,
 }
 
@@ -70,17 +71,28 @@ pub enum ExternKind {
 pub struct VariableDeclaration<'a> {
     pub name: Identifier<'a>,
     pub initializer: Option<&'a Expression<'a>>,
-    pub ty: Cell<Type<'a>>,
+    pub ty: TypeIdCell,
 }
 
 #[derive(Debug)]
 pub struct FunctionParameter<'ast> {
     pub name: Identifier<'ast>,
-    pub ty: Type<'ast>,
+    pub ty: TypeIdCell,
 }
 
-impl<'ast> Display for FunctionParameter<'ast> {
+pub struct DisplayFunctionParameter<'ast, 'types>(
+    pub &'ast FunctionParameter<'ast>,
+    pub &'types TypeCtx<'types>,
+);
+
+impl<'ast, 'types> Display for DisplayFunctionParameter<'ast, 'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.name.name, self.ty)
+        let Self(param, types) = self;
+        write!(
+            f,
+            "{}: {}",
+            param.name.name,
+            DisplayType(param.ty.clone().inner(), types)
+        )
     }
 }

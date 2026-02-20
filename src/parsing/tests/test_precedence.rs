@@ -1,3 +1,4 @@
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::expression::AstLiteral::Integral;
 use crate::ast::expression::ExpressionKind;
 use crate::ast::prefix_printer::PrefixPrint;
@@ -5,6 +6,7 @@ use crate::common::SourceLocation;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::{ParseError, ParseErrorKind, Parser};
 use bumpalo::Bump;
+use std::ptr::addr_of_mut;
 use std::rc::Rc;
 
 pub const PATH: &str = "<testcase>";
@@ -131,10 +133,12 @@ pub fn success(expr: &str) -> String {
     let (tokens, errors) = Lexer::new(expr, PATH).accumulate();
     assert_eq!(errors.len(), 0);
     let test_alloc = Bump::new();
-    let v = Parser::new(tokens.into(), &test_alloc)
+    let type_alloc = Bump::new();
+    let mut type_ctx = TypeCtx::new(&type_alloc);
+    let v = Parser::new(tokens.into(), &test_alloc, addr_of_mut!(type_ctx))
         .parse_expression()
         .unwrap();
-    println!("{}", v);
+    println!("{}", PrefixPrint(v));
     format!("{}", PrefixPrint(v))
 }
 
@@ -142,7 +146,8 @@ pub fn fail(expr: &str) -> ParseError {
     let (tokens, errors) = Lexer::new(expr, PATH).accumulate();
     assert_eq!(errors.len(), 0);
     let test_alloc = Bump::new();
-    Parser::new(tokens.into(), &test_alloc)
+    let mut type_ctx = TypeCtx::new(&test_alloc);
+    Parser::new(tokens.into(), &test_alloc, addr_of_mut!(type_ctx))
         .parse_expression()
         .expect_err("should fail")
 }

@@ -1,12 +1,21 @@
+use crate::analysis::r#type::DisplayType;
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::expression::{Expression, ExpressionKind};
-use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
+use crate::ast::statement::{
+    DisplayFunctionParameter, ExternalFunction, FunctionDeclaration, VariableDeclaration,
+};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::Join;
 use std::fmt::{Display, Formatter, Write};
 
-pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> std::fmt::Result {
+pub fn print_ast<'ast, 'types>(
+    expr: &'ast Expression<'ast>,
+    types: &'types TypeCtx<'types>,
+    f: &mut impl Write,
+    indent: usize,
+) -> std::fmt::Result {
     let tab = " ".repeat((indent + 1) * 2);
-    write!(f, "<{:?}> ", expr.ty.get())?;
+    write!(f, "<{}> ", DisplayType(expr.ty.inner(), types))?;
     match &expr.kind {
         ExpressionKind::Literal(value) => writeln!(f, "Literal({})", value),
         ExpressionKind::VariableAccess(identifier) => {
@@ -14,36 +23,45 @@ pub fn print_ast(expr: &Expression<'_>, f: &mut impl Write, indent: usize) -> st
         }
         ExpressionKind::Binop { left, right, kind } => {
             writeln!(f, "{}", kind.name())?;
-            write!(f, "{tab}left = {}", Print(left, indent + 1))?;
-            write!(f, "{tab}right = {}", Print(right, indent + 1))
+            write!(f, "{tab}left = {}", PrintExpression(left, types, indent + 1))?;
+            write!(f, "{tab}right = {}", PrintExpression(right, types, indent + 1))
         }
         ExpressionKind::Assignment {
             target: taget,
             value,
         } => {
             writeln!(f, "Assignment")?;
-            write!(f, "{tab}target = {}", Print(taget, indent + 1))?;
-            write!(f, "{tab}value  = {}", Print(value, indent + 1))
+            write!(f, "{tab}target = {}", PrintExpression(taget, types, indent + 1))?;
+            write!(f, "{tab}value  = {}", PrintExpression(value, types, indent + 1))
         }
         ExpressionKind::Unary { item, operator } => {
             writeln!(f, "{}", operator.name())?;
-            write!(f, "{tab}item = {}", Print(item, indent + 1))
+            write!(f, "{tab}item = {}", PrintExpression(item, types, indent + 1))
         }
         ExpressionKind::FunctionCall { callee, arguments } => {
             writeln!(f, "Call")?;
-            write!(f, "{tab}callee = {}", Print(callee, indent + 1))?;
+            write!(f, "{tab}callee = {}", PrintExpression(callee, types, indent + 1))?;
             writeln!(f, "{tab}arguments = ")?;
             let tab = " ".repeat((indent + 2) * 2);
             for arg in *arguments {
-                write!(f, "{tab}{}", Print(unsafe {arg.as_ref().expect("FunctionCall: null argument") }, indent + 2))?;
+                write!(
+                    f,
+                    "{tab}{}",
+                    PrintExpression(
+                        unsafe { arg.as_ref().expect("FunctionCall: null argument") },
+                        types,
+                        indent + 2
+                    )
+                )?;
             }
             Ok(())
         }
     }
 }
 
-pub fn print_statement(
-    stmt: &Statement<'_>,
+pub fn print_statement<'ast, 'types>(
+    stmt: &Statement<'ast, 'types>,
+    types: &'types TypeCtx<'types>,
     f: &mut impl Write,
     indent: usize,
 ) -> std::fmt::Result {
@@ -51,7 +69,7 @@ pub fn print_statement(
     match &stmt.kind {
         StatementKind::ExpressionStatement(expr) => {
             writeln!(f, "Expression Statement")?;
-            write!(f, "{tab}{}", Print(expr, indent + 1))?;
+            write!(f, "{tab}{}", PrintExpression(expr, types, indent + 1))?;
         }
         StatementKind::FunctionDeclaration(FunctionDeclaration {
             name,
@@ -63,11 +81,16 @@ pub fn print_statement(
                 f,
                 "Func `{}` ({}): {}",
                 name.name,
-                Join(*parameters, ", "),
-                return_type.get()
+                Join(
+                    parameters
+                        .iter()
+                        .map(|e| DisplayFunctionParameter(e, types)),
+                    ", "
+                ),
+                DisplayType(return_type.inner(), types)
             )?;
             for statement in *body {
-                write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
+                write!(f, "{tab}{}", PrintStatement(statement, types, indent + 1))?;
             }
         }
 
@@ -82,15 +105,15 @@ pub fn print_statement(
                 f,
                 "Extern \"{kind:?}\" `{}` ({}{}): {}",
                 name.name,
-                Join(*parameters, ", "),
+                Join(parameters.iter().map(|e| DisplayType(e.inner(), types)), ", "),
                 if *is_variadic { ", ..." } else { "" },
-                return_type.get()
+                DisplayType(return_type.inner(), types)
             )?;
         }
         StatementKind::Block(statements) => {
             writeln!(f, "Block")?;
             for statement in *statements {
-                write!(f, "{tab}{}", PrintStatement(statement, indent + 1))?;
+                write!(f, "{tab}{}", PrintStatement(statement, types, indent + 1))?;
             }
         }
         StatementKind::VariableDeclaration(VariableDeclaration {
@@ -98,15 +121,15 @@ pub fn print_statement(
             initializer,
             ty,
         }) => {
-            writeln!(f, "Variable `{}`: {}", name.name, ty.get())?;
+            writeln!(f, "Variable `{}`: {}", name.name, DisplayType(ty.inner(), types))?;
             if let Some(init) = initializer {
-                write!(f, "{tab}Initializer = {init}")?;
+                write!(f, "{tab}Initializer = {init}", init = TreePrintExpression(init, types))?;
             }
         }
         StatementKind::Return(ret) => {
             writeln!(f, "Return")?;
             if let Some(ret) = ret {
-                write!(f, "{tab}{ret}")?;
+                write!(f, "{tab}{ret}", ret = TreePrintExpression(ret, types))?;
             }
         }
         StatementKind::If {
@@ -115,15 +138,15 @@ pub fn print_statement(
             r#else,
         } => {
             writeln!(f, "If")?;
-            write!(f, "{tab}condition = {condition}")?;
+            write!(f, "{tab}condition = {condition}", condition = TreePrintExpression(condition, types))?;
             write!(
                 f,
                 "{tab}do = \n{then}",
-                then = PrintStatement(then, indent + 1)
+                then = PrintStatement(then, types, indent + 1)
             )?;
 
             if let Some(r#else) = r#else {
-                write!(f, "else = \n{}", PrintStatement(r#else, indent + 1))?;
+                write!(f, "else = \n{}", PrintStatement(r#else, types, indent + 1))?;
             }
         }
         StatementKind::While {
@@ -138,11 +161,11 @@ pub fn print_statement(
                 "".to_string()
             };
             writeln!(f, "While ({id}{name})", id = id.get())?;
-            write!(f, "{tab}condition = {condition}")?;
+            write!(f, "{tab}condition = {condition}", condition = TreePrintExpression(condition, types))?;
             write!(
                 f,
                 "{tab}do = \n{then}",
-                then = PrintStatement(body, indent + 1)
+                then = PrintStatement(body, types, indent + 1)
             )?;
         }
         StatementKind::Break { name, id } => {
@@ -165,29 +188,39 @@ pub fn print_statement(
     Ok(())
 }
 
-pub(crate) struct Print<'expr, 'ast>(pub &'expr Expression<'ast>, pub usize);
-impl<'ast, 'expr> Display for Print<'ast, 'expr> {
+pub(crate) struct PrintExpression<'ast, 'types>(pub &'ast Expression<'ast>, pub &'types TypeCtx<'types>, pub usize);
+impl<'ast,  'types> Display for PrintExpression<'ast, 'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let Print(expr, ind) = self;
-        print_ast(expr, f, *ind)
+        let PrintExpression(expr, types, ind) = self;
+        print_ast(expr, types, f, *ind)
     }
 }
 
-impl<'ast> Display for Expression<'ast> {
+struct TreePrintExpression<'ast, 'types>(pub &'ast Expression<'ast>, pub &'types TypeCtx<'types>);
+
+impl<'ast, 'types> Display for TreePrintExpression<'ast, 'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Print(self, 0).fmt(f)
+        PrintExpression(self.0, self.1, 0).fmt(f)
     }
 }
-pub(crate) struct PrintStatement<'ast, 'expr>(pub &'expr Statement<'ast>, pub usize);
-impl<'ast, 'expr> Display for PrintStatement<'ast, 'expr> {
+pub(crate) struct PrintStatement<'ast, 'expr, 'types>(
+    pub &'expr Statement<'ast, 'types>,
+    pub &'types TypeCtx<'types>,
+    pub usize,
+);
+impl<'ast, 'expr, 'types> Display for PrintStatement<'ast, 'expr, 'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let PrintStatement(statement, ind) = self;
-        print_statement(statement, f, *ind)
+        let PrintStatement(statement, types, ind) = self;
+        print_statement(statement, types, f, *ind)
     }
 }
 
-impl Display for Statement<'_> {
+pub struct DisplayStatement<'ast, 'types>(
+    pub &'ast Statement<'ast, 'types>,
+    pub &'types TypeCtx<'types>,
+);
+impl<'ast, 'types> Display for DisplayStatement<'ast, 'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        PrintStatement(self, 0).fmt(f)
+        PrintStatement(self.0, self.1, 0).fmt(f)
     }
 }

@@ -1,4 +1,5 @@
-use crate::analysis::r#type::Type;
+use crate::analysis::r#type::{BasicType, TypeId, TypeIdCell};
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::ExpressionKind::{
@@ -9,7 +10,7 @@ use crate::ast::statement::{
     ExternKind, ExternalFunction, FunctionDeclaration, FunctionParameter, Statement, StatementKind,
     VariableDeclaration,
 };
-use crate::common::{BumpVec, IdentifierBox};
+use crate::common::BumpVec;
 use crate::common::{CompilerError, Identifier, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParseErrorKind::{
@@ -42,7 +43,7 @@ use std::rc::Rc;
     unary               => "-" unary | functionCall;
     functionCall        => primary ( "( args ")" )*
     primary             => NUMBER | STRING | BOOLEAN | IDENTIFIER | "(" expression ")" ;
-    type                => IDENTIFIER
+    type                => IDENTIFIER ("*")?
 
 
  * - For Binary Operator Precedence, visit ./src/ast/binop.rs
@@ -52,18 +53,20 @@ use std::rc::Rc;
 
 /// Parser
 #[derive(Debug)]
-pub struct Parser<'a> {
+pub struct Parser<'ast, 'types> {
     current: usize,
     tokens: Rc<[Token]>,
-    bump: &'a Bump,
+    ast_bump: &'ast Bump,
+    types:  *mut TypeCtx<'types>,
     nodes_amount: usize,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(tokens: Rc<[Token]>, bump: &'a Bump) -> Parser<'a> {
+impl<'ast, 'types> Parser<'ast, 'types> {
+    pub fn new(tokens: Rc<[Token]>, ast_bump: &'ast Bump, type_ctx: *mut TypeCtx<'types>) -> Parser<'ast, 'types> {
         Self {
             current: 0,
-            bump,
+            ast_bump,
+            types: type_ctx,
             tokens,
             nodes_amount: 0,
         }
@@ -77,9 +80,9 @@ impl<'a> Parser<'a> {
 }
 
 #[allow(clippy::result_large_err)]
-impl<'a> Parser<'a> {
-    pub fn parse_program(&mut self) -> (&'a [&'a Statement<'a>], Box<[ParseError]>) {
-        let mut statements = BumpVec::new_in(self.bump);
+impl<'ast, 'types> Parser<'ast, 'types> {
+    pub fn parse_program(&mut self) -> (&'ast [&'ast Statement<'ast, 'types>], Box<[ParseError]>) {
+        let mut statements = BumpVec::new_in(self.ast_bump);
         let mut errors = Vec::new();
         if self.tokens.len() == 1 {
             return (
@@ -101,7 +104,7 @@ impl<'a> Parser<'a> {
         (statements.into_bump_slice(), errors.into_boxed_slice())
     }
 
-    pub fn parse_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+    pub fn parse_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let state = self.save_state();
 
         // --- Function declaration ---
@@ -145,12 +148,12 @@ impl<'a> Parser<'a> {
         self.parse_statement().map_err(|e| self.sync_and_return(e))
     }
 
-    pub fn parse_variable_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+    pub fn parse_variable_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let name = self.expect(&[TokenType::Id], "Expected variable name")?;
         let colon = self.expect(&[TokenType::Colon], "Expected colon")?;
 
-        let mut initializer: Option<&'a Expression<'a>> = None;
-        let mut variable_type = Type::Unknown;
+        let mut initializer: Option<&'ast Expression<'ast>> = None;
+        let mut variable_type = TypeId::Unknown;
         if self.consume(&[TokenType::Equal]).is_some() {
             initializer = Some(self.parse_expression()?);
         } else {
@@ -165,17 +168,17 @@ impl<'a> Parser<'a> {
             "Expected semicolon after variable declaration",
         )?;
 
-        Ok(self.bump.alloc(Statement {
+        Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::VariableDeclaration(VariableDeclaration {
-                name: Identifier::from_token(name, self.bump),
+                name: Identifier::from_token(name, self.ast_bump),
                 initializer,
-                ty: Cell::new(variable_type),
+                ty: variable_type.into()
             }),
             loc: colon.loc,
         }))
     }
 
-    pub fn parse_external_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+    pub fn parse_external_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let keyword = self.expect(&[TokenType::Extern], "Expected extern keyword")?;
         let kind = self.expect(
             &[TokenType::String],
@@ -200,22 +203,22 @@ impl<'a> Parser<'a> {
         // TODO : On error, we should map error into UnbalancedParens
         let mut is_variadic = false;
 
-        let mut res = BumpVec::new_in(self.bump);
+        let mut res: BumpVec<TypeIdCell> = BumpVec::new_in(self.types().bump());
         if self.peek_token()?.kind != TokenType::CloseParen {
 
             let expr = self.parse_type()?;
-            res.push(expr);
+            res.push(expr.into());
 
             while self.consume(&[TokenType::Comma]).is_some() {
                 if let Some(td) = self.consume(&[TokenType::TripleDot]) {
                     is_variadic = true;
                     break;
                 }
-                res.push(self.parse_type()?);
+                res.push(self.parse_type()?.into());
             }
         }
 
-        let parameters: &[Type<'a>] = res.into_bump_slice();
+        let parameters: &[TypeIdCell] = res.into_bump_slice();
         let mut message = String::from("Expected closing parenthesis.");
         if is_variadic { message += " Variadic parameters should be last in parameter list." }
         self.expect(&[TokenType::CloseParen], message.as_str())?;
@@ -231,31 +234,31 @@ impl<'a> Parser<'a> {
         External functions can't have body",
         )?;
 
-        Ok(self.bump.alloc(Statement {
+        Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::Extern(ExternalFunction {
-                name: Identifier::from_token(name, self.bump),
+                name: Identifier::from_token(name, self.ast_bump),
                 kind,
                 is_variadic,
                 parameters,
-                return_type: Cell::from(return_type),
+                return_type: return_type.into(),
             }),
             loc: keyword.loc,
         }))
     }
 
     /// func name (args) {} ...
-    pub fn parse_function_declaration(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+    pub fn parse_function_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let func_keyword = self.expect(&[TokenType::Func], "Expected function declaration")?;
         let name = self.expect(&[TokenType::Id], "Expected function name")?;
         debug_assert!(name.kind == TokenType::Id);
         let (parameters, body, return_type) = self.parse_function()?;
 
-        Ok(self.bump.alloc(Statement {
+        Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::FunctionDeclaration(FunctionDeclaration {
-                name: Identifier::from_token(name, self.bump),
+                name: Identifier::from_token(name, self.ast_bump),
                 body,
                 parameters,
-                return_type: Cell::from(return_type),
+                return_type: return_type.into(),
             }),
             loc: func_keyword.loc,
         }))
@@ -266,9 +269,9 @@ impl<'a> Parser<'a> {
         &mut self,
     ) -> Result<
         (
-            &'a [FunctionParameter<'a>],
-            &'a [&'a Statement<'a>],
-            Type<'a>,
+            &'ast [FunctionParameter<'ast>],
+            &'ast [&'ast Statement<'ast, 'types>],
+            TypeId,
         ),
         ParseError,
     > {
@@ -283,7 +286,7 @@ impl<'a> Parser<'a> {
                 e
             })
         };
-        let mut arguments: &[FunctionParameter<'a>] = &[];
+        let mut arguments: &[FunctionParameter<'ast>] = &[];
         if peek(self, o_paren.clone())?.kind != TokenType::CloseParen {
             arguments = self
                 .parse_comma_separated(|this| {
@@ -291,8 +294,8 @@ impl<'a> Parser<'a> {
                     this.expect(&[TokenType::Colon], "Expected colon")?;
                     let ty = this.parse_type()?;
                     Ok(FunctionParameter {
-                        name: Identifier::from_token(id, this.bump),
-                        ty,
+                        name: Identifier::from_token(id, this.ast_bump),
+                        ty: ty.into(),
                     })
                 })
                 .map_err(|mut e| {
@@ -306,7 +309,7 @@ impl<'a> Parser<'a> {
             "Expected closing parenthesis after argument list",
         )?;
 
-        let mut return_type = Type::Unknown;
+        let mut return_type = TypeId::Unknown;
         if self.consume(&[TokenType::Colon]).is_some() {
             return_type = self.parse_type()?;
         }
@@ -318,7 +321,7 @@ impl<'a> Parser<'a> {
         Ok((arguments, statements, return_type))
     }
 
-    pub fn parse_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+    pub fn parse_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let state = self.save_state();
         if self.consume(&[TokenType::OpenBrace]).is_some() {
             self.restore_state(state);
@@ -342,13 +345,13 @@ impl<'a> Parser<'a> {
             let id = 0.into(); // parser doesn't set any ids. it is done by resolver
             let name = self
                 .consume(&[TokenType::Id])
-                .map(|e| Identifier::from_token(e, self.bump));
+                .map(|e| Identifier::from_token(e, self.ast_bump));
             let (kind, name) = match flow.kind {
                 TokenType::Break => (StatementKind::Break { id, name }, "break"),
                 TokenType::Continue => (StatementKind::Continue { id, name }, "continue"),
                 _ => unreachable!(),
             };
-            let statement = self.bump.alloc(Statement {
+            let statement = self.ast_bump.alloc(Statement {
                 kind,
                 loc: flow.loc.clone(),
             });
@@ -361,7 +364,7 @@ impl<'a> Parser<'a> {
         self.parse_expression_statement()
     }
 
-    pub fn parse_if_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+    pub fn parse_if_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let loc = self.expect(&[TokenType::If], "Expected if keyword")?.loc;
 
         let condition = self.parse_expression()?;
@@ -372,7 +375,7 @@ impl<'a> Parser<'a> {
             r#else = Some(self.parse_statement()?);
         }
 
-        Ok(self.bump.alloc(Statement {
+        Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::If {
                 condition,
                 then,
@@ -381,10 +384,10 @@ impl<'a> Parser<'a> {
             loc,
         }))
     }
-    pub fn parse_while_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
-        let mut name: Option<Identifier<'a>> = None;
+    pub fn parse_while_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+        let mut name: Option<Identifier<'ast>> = None;
         if let Some(id) = self.consume(&[TokenType::Id]) {
-            name = Some(Identifier::from_token(id, self.bump));
+            name = Some(Identifier::from_token(id, self.ast_bump));
             self.expect(&[TokenType::Colon], "Expected colon after 'while' label.")?;
         }
         let loc = self
@@ -393,7 +396,7 @@ impl<'a> Parser<'a> {
 
         let condition = self.parse_expression()?;
         let body = self.parse_statement()?;
-        Ok(self.bump.alloc(Statement {
+        Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::While {
                 condition,
                 body,
@@ -404,11 +407,11 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    pub fn parse_return_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+    pub fn parse_return_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let loc = self
             .expect(&[TokenType::Return], "Expected return keyword")?
             .loc;
-        let mut val: Option<&'a Expression<'a>> = None;
+        let mut val: Option<&'ast Expression<'ast>> = None;
         if self.peek_token()?.kind != TokenType::Semicolon {
             val = Some(self.parse_expression()?);
         }
@@ -418,14 +421,14 @@ impl<'a> Parser<'a> {
             "Expected semicolon in return expression",
         )?;
 
-        Ok(self.bump.alloc(Statement {
+        Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::Return(val),
             loc,
         }))
     }
 
-    pub fn parse_block_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
-        let mut statements = BumpVec::new_in(self.bump);
+    pub fn parse_block_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+        let mut statements = BumpVec::new_in(self.ast_bump);
         let left_brace = self.expect(
             &[TokenType::OpenBrace],
             "Expected opening brace in block statement",
@@ -443,57 +446,61 @@ impl<'a> Parser<'a> {
             });
         }
 
-        Ok(self.bump.alloc(Statement {
+        Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::Block(statements.into_bump_slice()),
             loc: left_brace.loc,
         }))
     }
 
-    fn parse_expression_statement(&mut self) -> Result<&'a Statement<'a>, ParseError> {
+    fn parse_expression_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let loc = self.peek_token()?.loc;
         let expr = self.parse_expression()?;
         self.expect(&[TokenType::Semicolon], "Expected ';' after expression")?;
-        Ok(self.bump.alloc(Statement {
+        Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::ExpressionStatement(expr),
             loc,
         }))
     }
 
-    pub fn parse_expression(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
+    pub fn parse_expression(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
         self.parse_assignment()
     }
 
-    pub fn parse_type(&mut self) -> Result<Type<'a>, ParseError> {
+    pub fn parse_type(&mut self) -> Result<TypeId, ParseError> {
         let name = self.expect(&[TokenType::Id], "Expected type name")?;
 
-        match name.string.as_ref() {
-            "int" => Ok(Type::Int64),
-            "void" => Ok(Type::Void),
-            "bool" => Ok(Type::Bool),
-            "char_ptr" => Ok(Type::CharPtr),
+        let mut ty = match name.string.as_ref() {
+            "int" => Ok(TypeId::from_basic(BasicType::Int64)),
+            "void" => Ok(TypeId::from_basic(BasicType::Void)),
+            "bool" => Ok(TypeId::from_basic(BasicType::Bool)),
+            "char_ptr" => Ok(TypeId::from_basic(BasicType::CharPtr)),
             _ => Err(ParseError {
                 kind: UnknownType(String::from(name.string.as_ref())),
                 location: name.loc.clone(),
             }),
+        }?;
+        while self.consume(&[TokenType::Star]).is_some() { 
+            ty = unsafe { (*self.types).monomorph_or_get_pointer(ty) };
         }
+        Ok(ty)
     }
 
-    fn parse_assignment(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
+    fn parse_assignment(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
         let target = self.parse_binop(0)?;
         if let Some(tk) = self.consume(&[TokenType::Equal]) {
             let value = self.parse_assignment()?;
-            if !target.kind.is_assignable() {
+            if !target.kind.lvalue() {
                 return Err(ParseError {
                     location: target.loc.clone(),
                     kind: InvalidAssignment(target.kind.humanize()),
                 });
             }
 
-            return Ok(self.bump.alloc(Expression {
+            return Ok(self.ast_bump.alloc(Expression {
                 loc: tk.loc,
                 id: self.id(),
                 kind: Assignment { target, value },
-                ty: Cell::new(Type::Unknown),
+                ty: TypeId::Unknown.into()
             }));
         }
         Ok(target)
@@ -502,7 +509,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_binop(
         &mut self,
         precedence: i32,
-    ) -> Result<&'a mut Expression<'a>, ParseError> {
+    ) -> Result<&'ast mut Expression<'ast>, ParseError> {
         if precedence >= binop::MAX_PRECEDENCE {
             return self.parse_unary();
         }
@@ -530,34 +537,40 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_unary(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
-        if let Some(tok) = self.consume(&[TokenType::Minus]) {
+    fn parse_unary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
+        if let Some(tok) = self.consume(&[TokenType::Minus, TokenType::Star, TokenType::Ampersand]) {
             let item = self.parse_unary()?;
 
-            return Ok(self.bump.alloc(Expression {
+            return Ok(self.ast_bump.alloc(Expression {
                 kind: ExpressionKind::Unary {
                     item,
-                    operator: UnaryKind::Negation,
+                    operator: match tok.kind {
+                        TokenType::Star => UnaryKind::Dereferencing,
+                        TokenType::Minus => UnaryKind::Negation,
+                        TokenType::Ampersand => UnaryKind::AddressOf,
+                        _ => unreachable!()
+                    },
                 },
                 loc: tok.loc,
                 id: self.id(),
-                ty: Cell::new(Type::Unknown),
+                ty: TypeId::Unknown.into()
             }));
         }
+
         self.parse_call()
     }
 
-    fn parse_call(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
+    fn parse_call(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
         let mut left = self.parse_primary()?;
         while let Some(tk) = self.consume(&[TokenType::OpenParen]) {
-            left = self.bump.alloc(Expression {
+            left = self.ast_bump.alloc(Expression {
                 kind: FunctionCall {
                     callee: left,
                     arguments: self.parse_args()?,
                 },
                 loc: tk.clone().loc,
                 id: self.id(),
-                ty: Cell::new(Type::Unknown),
+                ty: TypeId::Unknown.into()
             });
             if self.consume(&[TokenType::CloseParen]).is_none() {
                 return Err(ParseError {
@@ -570,10 +583,10 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_args(&mut self) -> Result<&'a [*mut Expression<'a>], ParseError> {
-        let mut args = BumpVec::<*mut Expression<'a>>::new_in(self.bump);
+    fn parse_args(&mut self) -> Result<&'ast [*mut Expression<'ast>], ParseError> {
+        let mut args = BumpVec::<*mut Expression<'ast>>::new_in(self.ast_bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
-            let comma_separated= self.parse_comma_separated::<*mut Expression<'a>>(|this|
+            let comma_separated= self.parse_comma_separated::<*mut Expression<'ast>>(|this|
                  this.parse_expression().map(|e| e as *mut _)
             )?;
             args.extend(comma_separated);
@@ -581,17 +594,17 @@ impl<'a> Parser<'a> {
         Ok(args.into_bump_slice())
     }
 
-    fn parse_primary(&mut self) -> Result<&'a mut Expression<'a>, ParseError> {
+    fn parse_primary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
         use TokenType::*;
         let token = self.peek_token()?;
 
         if let Some(id) = self.consume(&[Id]) {
             let loc = id.loc.clone();
-            return Ok(self.bump.alloc(Expression {
+            return Ok(self.ast_bump.alloc(Expression {
                 loc,
-                kind: VariableAccess(Identifier::from_token(id, self.bump)),
+                kind: VariableAccess(Identifier::from_token(id, self.ast_bump)),
                 id: self.id(),
-                ty: Cell::new(Type::Unknown),
+                ty: TypeId::Unknown.into()
             }));
         }
 
@@ -602,7 +615,7 @@ impl<'a> Parser<'a> {
                 AstLiteral::Integral(value),
                 integer.loc.clone(),
                 id,
-                Type::Int64,
+                TypeId::from_basic(BasicType::Int64),
             ));
         }
         if let Some(double) = self.consume(&[Double]) {
@@ -612,7 +625,7 @@ impl<'a> Parser<'a> {
                 AstLiteral::FloatingPoint(value),
                 double.loc.clone(),
                 id,
-                Type::Float64,
+                TypeId::from_basic(BasicType::Float64)
             ));
         }
         if let Some(boolean) = self.consume(&[False, True]) {
@@ -627,17 +640,17 @@ impl<'a> Parser<'a> {
                 AstLiteral::Boolean(bool),
                 boolean.loc.clone(),
                 id,
-                Type::Bool,
+                TypeId::from_basic(BasicType::Bool),
             ));
         }
         if let Some(string) = self.consume(&[String]) {
             let id = self.id();
-            let val = self.bump.alloc_str(string.string.as_ref());
+            let val = self.ast_bump.alloc_str(string.string.as_ref());
             return Ok(self.construct_literal(
                 AstLiteral::String(val),
                 string.loc.clone(),
                 id,
-                Type::CharPtr,
+                TypeId::from_basic(BasicType::CharPtr)
             ));
         }
 
@@ -662,32 +675,32 @@ impl<'a> Parser<'a> {
 
     pub fn construct_literal(
         &self,
-        value: AstLiteral<'a>,
+        value: AstLiteral<'ast>,
         loc: SourceLocation,
         id: usize,
-        ty: Type<'a>,
-    ) -> &'a mut Expression<'a> {
-        self.bump.alloc(Expression {
+        ty: TypeId
+    ) -> &'ast mut Expression<'ast> {
+        self.ast_bump.alloc(Expression {
             loc,
             kind: Literal(value),
             id,
-            ty: Cell::new(ty),
+            ty: ty.into(),
         })
     }
 
     pub fn reconstruct_binop(
         &self,
-        left: &'a mut Expression<'a>,
-        right: &'a mut Expression<'a>,
+        left: &'ast mut Expression<'ast>,
+        right: &'ast mut Expression<'ast>,
         kind: BinopKind,
         loc: SourceLocation,
         id: usize,
-    ) -> &'a mut Expression<'a> {
-        self.bump.alloc(Expression {
+    ) -> &'ast mut Expression<'ast> {
+        self.ast_bump.alloc(Expression {
             kind: Binop { left, right, kind },
             loc,
             id,
-            ty: Cell::new(Type::Unknown),
+            ty: TypeId::Unknown.into()
         })
     }
 
@@ -720,13 +733,13 @@ impl<'a> Parser<'a> {
     }
 }
 /// Helper methods for parsing
-impl<'a> Parser<'a> {
+impl<'ast, 'types> Parser<'ast, 'types> {
     #[allow(clippy::result_large_err)]
     pub fn parse_comma_separated<T>(
         &mut self,
         mut single_item: impl FnMut(&mut Self) -> Result<T, ParseError>,
-    ) -> Result<&'a [T], ParseError> {
-        let mut res = BumpVec::new_in(self.bump);
+    ) -> Result<&'ast [T], ParseError> {
+        let mut res = BumpVec::new_in(self.ast_bump);
         let expr = single_item(self)?;
         res.push(expr);
 
@@ -739,7 +752,7 @@ impl<'a> Parser<'a> {
 
 // Machinery for parser.
 #[allow(clippy::result_large_err)]
-impl Parser<'_> {
+impl<'ast, 'types> Parser<'ast, 'types> {
     fn next_token(&mut self) -> Result<Token, ParseError> {
         let tk = self
             .tokens
@@ -811,6 +824,10 @@ impl Parser<'_> {
         } else {
             true
         }
+    }
+
+    pub fn types(&self) -> &'types TypeCtx<'types> {
+        unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") }
     }
 }
 

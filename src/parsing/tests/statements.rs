@@ -1,8 +1,10 @@
+use crate::analysis::type_context::TypeCtx;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use crate::parsing::tests::test_precedence::PATH;
 use bumpalo::Bump;
+use std::ptr::addr_of_mut;
 
 #[test]
 pub fn simple_expression_statements() {
@@ -13,11 +15,14 @@ pub fn single(input: &str) -> String {
     let (t, e) = Lexer::new(input, PATH).accumulate();
     assert_eq!(e.len(), 0);
 
-    let mut bump = Bump::new();
-    let mut p = Parser::new(t.into(), &mut bump);
+    let ast_bump = Bump::new();
+    let type_bump = Bump::new();
+    let mut type_ctx = TypeCtx::new(&type_bump);
+    let mut p = Parser::new(t.into(), &ast_bump,  addr_of_mut!(type_ctx));
     let (expr, e) = p.parse_program();
     assert_eq!(e.len(), 0);
     assert_eq!(expr.len(), 1);
 
-    format!("{}", PrefixPrintStatement(expr[0]))
+    let type_ctx = TypeCtx::new(&type_bump);
+    format!("{}", PrefixPrintStatement(expr[0], &type_ctx))
 }
