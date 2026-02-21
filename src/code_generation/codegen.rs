@@ -185,12 +185,11 @@ impl<'ir> Codegen<'ir> {
                         if !*signed {
                             todo!("Unsigned integer binop")
                         }
+                        assert_same!("Binop::Integer: Result size and operation size must be the same", *size, result.size());
                         let size = assert_same!(
-                            "Binop::Iteger: Sizes of operands & destination must be the same",
-                            *size,
+                            "Binop::Integer: Operands' sizes must be the same",
                             left.size(),
                             right.size(),
-                            result.size()
                         );
                         // Left hand side: Rax appropriate bytes, Right hand side: Rcx appropriate bytes.
                         let lhs = Rax.lower_bytes_register(size);
