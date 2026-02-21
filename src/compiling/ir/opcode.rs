@@ -7,22 +7,22 @@ pub enum Opcode<'ir> {
     Binop {
         left: Arg<'ir>,
         right: Arg<'ir>,
-        destination: usize,
+        result: Lvalue,
         kind: Binop,
     },
     Negate {
-        destination: usize,
+        result: Lvalue,
         item: Arg<'ir>,
     },
     AddressOf {
-        destination: Lvalue,
-        // Must be lvalue
-        lvalue: Arg<'ir>,
+        result: Lvalue,
+        source: Lvalue,
     },
 
     // Control Flow
     FunctionCall {
-        result: usize,
+        // Return value of the function
+        result: Lvalue,
         callee: Arg<'ir>,
         args: &'ir [Arg<'ir>],
         is_variadic: bool,
@@ -42,36 +42,23 @@ pub enum Opcode<'ir> {
 
     // Writes
     Assign {
-        destination: usize,
+        result: Lvalue,
         source: Arg<'ir>,
     },
     // Dereference assign
     Store {
         // Offset in memory containing address.
-        destination: Lvalue,
+        result: Lvalue,
         source: Arg<'ir>,
     },
     Load {
-        destination: Lvalue,
+        result: Lvalue,
         source: Arg<'ir>,
     }
 }
 
-// TODO #3: Split the Arg enum into Rvalue & Lvalue. For now, there will be extra redundant "copy" of StackOffset & Argument
-#[derive(Clone, Copy, Debug)]
-pub enum Lvalue {
-    StackOffset { offset: usize, size: usize } ,
-    Argument{ index: usize,  size: usize },
-}
 
 impl<'ir> Lvalue {
-    pub fn to_arg(self) -> Arg<'ir> {
-        match self {
-            Lvalue::StackOffset { offset, size } => Arg::StackOffset { offset, size },
-            Lvalue::Argument { index, size } => Arg::Argument {index, size },
-        }
-    }
-
     pub fn size(self) -> usize {
         match self {
             Lvalue::StackOffset { size, .. } => size,
@@ -80,29 +67,60 @@ impl<'ir> Lvalue {
     }
 }
 
+impl Rvalue<'_> {
+    pub fn size(&self) -> usize {
+        match self {
+            Rvalue::Bool(_) => 1,
+            Rvalue::Int64 { .. } => 8,
+            Rvalue::String { .. } => 8,
+            Rvalue::ExternalFunction(_) => 8,
+        }
+    }
+}
+
+
+
 #[derive(Clone, Debug)]
 pub enum Arg<'ir> {
+    LValue(Lvalue),
+    RValue(Rvalue<'ir>),
+}
+
+
+#[derive(Clone, Copy, Debug)]
+pub enum Lvalue {
+    // TODO: Utilize size in LValues
+    StackOffset { offset: usize, size: usize } ,
+    Argument{ index: usize,  size: usize },
+}
+
+#[derive(Clone, Debug)]
+pub enum Rvalue<'ir> {
     Bool(bool),
     Int64 { bits: [u8; 8], signed: bool },
     String { index: usize }, // Index is in ir.strings
     ExternalFunction(Identifier<'ir>),
-
-    // TODO: Utilize StackOffset::size and Argument::size
-    StackOffset { offset: usize, size: usize },
-
-    // Stores argument index (counting from 0) and size of the argument
-    Argument { index: usize, size: usize },
 }
 
 impl Arg<'_> {
     pub fn size(&self) -> usize {
         match self {
-            Arg::Bool(_) => 1,
-            Arg::Int64 { .. } => 8,
-            Arg::String { .. } => 8,
-            Arg::ExternalFunction(_) => 8,
-            Arg::StackOffset { size, .. } => *size,
-            Arg::Argument { index: _, size } => *size,
+            // Arg::Bool(_) => 1,
+            // Arg::Int64 { .. } => 8,
+            // Arg::String { .. } => 8,
+            // Arg::ExternalFunction(_) => 8,
+            // Arg::StackOffset { size, .. } => *size,
+            // Arg::Argument { index: _, size } => *size,
+            Arg::RValue(rvalue) => {
+                match rvalue {
+                    Rvalue::Bool(_) => 1,
+                    Rvalue::Int64 { .. } => 8,
+                    Rvalue::String { .. } => 8,
+                    Rvalue::ExternalFunction(_) => 8,
+                }
+            }
+
+            Arg::LValue(lvalue) => lvalue.size(),
         }
     }
 }

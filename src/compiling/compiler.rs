@@ -138,7 +138,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         self.push_opcode(Opcode::Binop {
                             left,
                             right,
-                            destination,
+                            result: destination,
                             kind: Binop::Bitwise(BitwiseBinop {
                                 kind: BitwiseKind::And,
                                 is_logical_with_short_circuit: true,
@@ -152,7 +152,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                             index: short_circuit,
                         });
                         self.push_opcode(Opcode::Assign {
-                            destination,
+                            result: destination,
                             source: Arg::Bool(false),
                         });
                         self.push_opcode(Opcode::Label { index: out_label });
@@ -185,7 +185,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         });
                         // Case one: The lhs is true, so entire || is true.
                         self.push_opcode(Opcode::Assign {
-                            destination,
+                            result: destination,
                             source: Arg::Bool(true),
                         });
                         let out_label = self.allocate_label();
@@ -197,7 +197,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         self.push_opcode(Opcode::Binop {
                             left,
                             right,
-                            destination,
+                            result: destination,
                             kind: Binop::Bitwise(BitwiseBinop {
                                 kind: BitwiseKind::Or,
                                 is_logical_with_short_circuit: true,
@@ -222,7 +222,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 self.push_opcode(Opcode::Binop {
                     left,
                     right,
-                    destination: offset,
+                    result: offset,
                     kind: match kind.family() {
                         BinopFamily::Arithmetic | BinopFamily::Ordering => {
                             //                         TODO: Unsigned
@@ -245,7 +245,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         let result = self.allocate_on_stack(size);
                         self.push_opcode(Opcode::Negate {
                             item,
-                            destination: result,
+                            result: result,
                         });
                         Arg::StackOffset {
                             offset: result,
@@ -260,7 +260,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                             size,
                         };
                         self.push_opcode(Opcode::Load {
-                            destination: result,
+                            result: result,
                             source: item,
                         });
 
@@ -278,8 +278,8 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                                 }
                             };
                         self.push_opcode(Opcode::AddressOf {
-                            destination: result,
-                            lvalue: item.clone(),
+                            result: result,
+                            source: item.clone(),
                         });
 
                         result.to_arg()
@@ -304,7 +304,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     };
                     let arg = self.compile_expression(value);
                     self.push_opcode(Opcode::Store {
-                        destination: result,
+                        result: result,
                         source: arg,
                     });
 
@@ -317,7 +317,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     Arg::StackOffset { offset, size } => {
                         let arg = self.compile_expression(value);
                         self.push_opcode(Opcode::Assign {
-                            destination: offset,
+                            result: offset,
                             source: arg,
                         });
                         Arg::StackOffset { offset, size }
@@ -394,7 +394,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 self.push_opcode(Opcode::FunctionCall {
                     callee,
                     args,
-                    result,
+                    result: result,
                     is_variadic,
                 });
                 Arg::StackOffset {
@@ -538,7 +538,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     let arg = self.compile_expression(initializer);
                     if self.bucket.is_some() {
                         self.push_opcode(Opcode::Assign {
-                            destination: stack_offset,
+                            result: stack_offset,
                             source: arg,
                         });
                     }

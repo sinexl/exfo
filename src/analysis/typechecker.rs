@@ -9,7 +9,6 @@ use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::{BumpVec, CompilerError, SourceLocation, Stack};
-use crate::debug_scope;
 use crate::{ast, debug_scopes};
 use bumpalo::collections::CollectIn;
 use std::collections::HashMap;
@@ -300,10 +299,6 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     );
                 }
                 for statement in body.iter() {
-                    // lifetime may not live long enough
-                    // argument requires that `'1` must outlive `'ast`
-                    // Note: requirement occurs because of a mutable reference to `analysis::typechecker::Typechecker<'_, '_>`
-                    // Note: mutable references are invariant over their type parameter
                     self.typecheck_statement(statement)?;
                 }
                 self.current_function_type = None;
@@ -316,17 +311,6 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 initializer,
                 ty,
             }) => {
-                // let return_type = self.bump.alloc(decl.return_type.get());
-                // let b = self.bump;
-                // let fn_type = FunctionType {
-                //     return_type,
-                //     parameters: decl
-                //         .parameters
-                //         .iter()
-                //         .map(|p| p.ty)
-                //         .collect_in::<BumpVec<_>>(b)
-                //         .into_bump_slice(),
-                // };
                 let variable_type = ty;
                 let mut initializer_type = TypeId::Unknown;
                 if let Some(init) = initializer {

@@ -29,7 +29,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::FunctionCall {
             callee,
             args,
-            result, is_variadic,
+            result: result, is_variadic,
         } => {
             let args_str = args
                 .iter()
@@ -51,16 +51,16 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             left,
             right,
             kind,
-            destination: result,
+            result: result,
         } => writeln!(
             f,
             "{tab}stack[{}] = {left} {op} {right}",
             result,
             op = kind.to_ast_binop().operator()
         )?,
-        Opcode::Negate { destination: result, item } => writeln!(f, "{tab}stack[{result}] = -{item}")?,
+        Opcode::Negate { result: result, item } => writeln!(f, "{tab}stack[{result}] = -{item}")?,
 
-        Opcode::Assign { destination: result, source: item } => writeln!(f, "{tab}stack[{result}] = {item}")?,
+        Opcode::Assign { result: result, source: item } => writeln!(f, "{tab}stack[{result}] = {item}")?,
         Opcode::Return(ret) => {
             write!(f, "{tab}return")?;
             if let Some(ret) = ret {
@@ -75,9 +75,9 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             writeln!(f, "{tab}jmp_if_not {condition} -> .label{label}")?
         }
         Opcode::Jmp { label } => writeln!(f, "{tab}jmp -> {label}")?,
-        Opcode::AddressOf { destination, lvalue } => writeln!(f, "{tab}stack[{destination:?}] = &{lvalue}")?,
-        Opcode::Store { destination, source } => writeln!(f, "{tab}*stack[{destination:?}] = {source}")?,
-        Opcode::Load { destination, source } => writeln!(f, "{tab}stack[{destination:?}] = *{source}")?,
+        Opcode::AddressOf { result: destination, source: lvalue } => writeln!(f, "{tab}stack[{destination:?}] = &{lvalue}")?,
+        Opcode::Store { result: destination, source } => writeln!(f, "{tab}*stack[{destination:?}] = {source}")?,
+        Opcode::Load { result: destination, source } => writeln!(f, "{tab}stack[{destination:?}] = *{source}")?,
     }
 
     Ok(())

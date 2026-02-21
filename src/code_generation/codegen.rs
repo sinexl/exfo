@@ -156,7 +156,7 @@ impl<'ir> Codegen<'ir> {
             Opcode::Binop {
                 left,
                 right,
-                destination: result,
+                result,
                 kind,
             } => {
                 comment!(self, "Binop ({})", kind.to_ast_binop().operator());
@@ -214,7 +214,7 @@ impl<'ir> Codegen<'ir> {
             }
 
             Opcode::Negate {
-                destination: result,
+                result,
                 item,
             } => {
                 comment!(self, "Negate");
@@ -223,7 +223,7 @@ impl<'ir> Codegen<'ir> {
                 asm!(self, "  movq %rax, -{result}(%rbp)");
             }
             Opcode::Assign {
-                destination: result,
+                result,
                 source: item,
             } => {
                 comment!(self, "Assign");
@@ -264,8 +264,8 @@ impl<'ir> Codegen<'ir> {
                 asm!(self, "  jmp .label_{label}");
             }
             Opcode::AddressOf {
-                destination: result,
-                lvalue,
+                result,
+                source: lvalue,
             } => {
                 comment!(self, "AddressOf");
                 match lvalue {
@@ -286,7 +286,7 @@ impl<'ir> Codegen<'ir> {
                 }
             }
             Opcode::Store {
-                destination,
+                result: destination,
                 source,
             } => {
                 comment!(self, "Store");
@@ -297,7 +297,7 @@ impl<'ir> Codegen<'ir> {
                 asm!(self, "  mov{p} {val_reg}, ({Rcx})");
             }
             Opcode::Load {
-                destination,
+                result: destination,
                 source,
             } => {
                 comment!(self, "Load");
