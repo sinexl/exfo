@@ -39,30 +39,32 @@ pub enum Opcode<'ir> {
     },
     Return(Option<Arg<'ir>>),
 
-
     // Writes
+    // a = b.
     Assign {
         result: Lvalue,
         source: Arg<'ir>,
     },
-    // Dereference assign
+    // Dereference assign (Store)
+    // *result = source;
     Store {
         // Offset in memory containing address.
         result: Lvalue,
         source: Arg<'ir>,
     },
+    // Load.
+    // result = *source;
     Load {
         result: Lvalue,
         source: Arg<'ir>,
-    }
+    },
 }
-
 
 impl<'ir> Lvalue {
     pub fn size(self) -> usize {
         match self {
             Lvalue::StackOffset { size, .. } => size,
-            Lvalue::Argument { size, .. } => size
+            Lvalue::Argument { size, .. } => size,
         }
     }
 }
@@ -76,9 +78,15 @@ impl Rvalue<'_> {
             Rvalue::ExternalFunction(_) => 8,
         }
     }
+    // needed because strings differ from other args depending on PIC/non-pic, just to make code simpler.
+    pub fn is_string(&self) -> bool {
+        if let Rvalue::String { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
 }
-
-
 
 #[derive(Clone, Debug)]
 pub enum Arg<'ir> {
@@ -86,12 +94,11 @@ pub enum Arg<'ir> {
     RValue(Rvalue<'ir>),
 }
 
-
 #[derive(Clone, Copy, Debug)]
 pub enum Lvalue {
-    // TODO: Utilize size in LValues
-    StackOffset { offset: usize, size: usize } ,
-    Argument{ index: usize,  size: usize },
+    StackOffset { offset: usize, size: usize },
+    //         Index in Codegen::arg_offsets.
+    Argument { index: usize, size: usize },
 }
 
 #[derive(Clone, Debug)]
@@ -105,20 +112,12 @@ pub enum Rvalue<'ir> {
 impl Arg<'_> {
     pub fn size(&self) -> usize {
         match self {
-            // Arg::Bool(_) => 1,
-            // Arg::Int64 { .. } => 8,
-            // Arg::String { .. } => 8,
-            // Arg::ExternalFunction(_) => 8,
-            // Arg::StackOffset { size, .. } => *size,
-            // Arg::Argument { index: _, size } => *size,
-            Arg::RValue(rvalue) => {
-                match rvalue {
-                    Rvalue::Bool(_) => 1,
-                    Rvalue::Int64 { .. } => 8,
-                    Rvalue::String { .. } => 8,
-                    Rvalue::ExternalFunction(_) => 8,
-                }
-            }
+            Arg::RValue(rvalue) => match rvalue {
+                Rvalue::Bool(_) => 1,
+                Rvalue::Int64 { .. } => 8,
+                Rvalue::String { .. } => 8,
+                Rvalue::ExternalFunction(_) => 8,
+            },
 
             Arg::LValue(lvalue) => lvalue.size(),
         }
