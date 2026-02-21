@@ -1,9 +1,9 @@
 extern "C" func printf(char_ptr, ...): void;
-func to_string(b: bool): char_ptr {
-    if b return "true";
-    return "false";
+func void(): void {
+    return;
 }
 
 func main(): void {
-    b := printf("Hello, World");
+    b := void();
+    c := void();
 }

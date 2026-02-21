@@ -1,5 +1,5 @@
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
-use crate::compiling::ir::opcode::{Arg, Opcode};
+use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
 use std::fmt::{Display, Formatter, Write};
 
 pub fn print_ir(ir: &IntermediateRepresentation, f: &mut impl Write) -> std::fmt::Result {
@@ -15,7 +15,12 @@ pub fn print_ir(ir: &IntermediateRepresentation, f: &mut impl Write) -> std::fmt
 }
 
 pub fn print_function(function: &Function<'_>, f: &mut impl Write) -> std::fmt::Result {
-    writeln!(f, "{name}:", name = function.name.name)?;
+    writeln!(
+        f,
+        "{name}: stack size = {stack_size}",
+        name = function.name.name,
+        stack_size = function.stack_size
+    )?;
     for opcode in function.code {
         print_opcode(opcode, f, 1)?;
     }
@@ -29,7 +34,8 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::FunctionCall {
             callee,
             args,
-            result: result, is_variadic,
+            result,
+            is_variadic,
         } => {
             let args_str = args
                 .iter()
@@ -37,10 +43,23 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
                 .collect::<Vec<_>>()
                 .join(", ");
             match callee {
-                Arg::ExternalFunction(id) => {
-                    write!(f, "{tab}stack[{result}] = {var}call(\"{name}\"",  var = if *is_variadic {"var"} else {""}, name = id.name)?
+                Arg::RValue(Rvalue::ExternalFunction(id)) => {
+                    write!(f, "{tab}")?;
+                    if let Some(result) = result {
+                        write!(f, "stack[{result}] = ")?;
+                    }
+                    write!(
+                        f,
+                        "{var}call(\"{name}\"",
+                        var = if *is_variadic { "var" } else { "" },
+                        name = id.name
+                    )?
                 }
-                arg => write!(f, "{tab}{}call({arg}", if *is_variadic { "var" } else {""} )?,
+                arg => write!(
+                    f,
+                    "{tab}{}call({arg}",
+                    if *is_variadic { "var" } else { "" }
+                )?,
             }
             if !args.is_empty() {
                 write!(f, ", {args_str}")?;
@@ -51,16 +70,15 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             left,
             right,
             kind,
-            result: result,
+            result,
         } => writeln!(
             f,
-            "{tab}stack[{}] = {left} {op} {right}",
-            result,
+            "{tab}{result} = {left} {op} {right}",
             op = kind.to_ast_binop().operator()
         )?,
-        Opcode::Negate { result: result, item } => writeln!(f, "{tab}stack[{result}] = -{item}")?,
+        Opcode::Negate { result, item } => writeln!(f, "{tab}{result} = -{item}")?,
 
-        Opcode::Assign { result: result, source: item } => writeln!(f, "{tab}stack[{result}] = {item}")?,
+        Opcode::Assign { result, source } => writeln!(f, "{tab}{result} = {source}")?,
         Opcode::Return(ret) => {
             write!(f, "{tab}return")?;
             if let Some(ret) = ret {
@@ -75,32 +93,43 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
             writeln!(f, "{tab}jmp_if_not {condition} -> .label{label}")?
         }
         Opcode::Jmp { label } => writeln!(f, "{tab}jmp -> {label}")?,
-        Opcode::AddressOf { result: destination, source: lvalue } => writeln!(f, "{tab}stack[{destination:?}] = &{lvalue}")?,
-        Opcode::Store { result: destination, source } => writeln!(f, "{tab}*stack[{destination:?}] = {source}")?,
-        Opcode::Load { result: destination, source } => writeln!(f, "{tab}stack[{destination:?}] = *{source}")?,
+        Opcode::AddressOf { result, source } => writeln!(f, "{tab}{result} = &{source}")?,
+        Opcode::Store { result, source } => writeln!(f, "{tab}*{result} = {source}")?,
+        Opcode::Load { result, source } => writeln!(f, "{tab}{result} = *{source}")?,
     }
 
     Ok(())
 }
 
-pub fn print_arg(arg: &Arg, f: &mut impl Write) -> std::fmt::Result {
-    match arg {
-        Arg::Int64 { bits, signed } => {
+pub fn print_lvalue(lvalue: &Lvalue, f: &mut impl Write) -> std::fmt::Result {
+    match lvalue {
+        Lvalue::StackOffset { offset, size: _ } => write!(f, "stack[{offset}]")?,
+        Lvalue::Argument { index, size } => write!(f, "argument[{index}]")?,
+    };
+    Ok(())
+}
+pub fn print_rvalue(rvalue: &Rvalue, f: &mut impl Write) -> std::fmt::Result {
+    match rvalue {
+        Rvalue::Int64 { bits, signed } => {
             let literal = match *signed {
                 true => i64::from_le_bytes(*bits).to_string(),
                 false => u64::from_le_bytes(*bits).to_string(),
             };
             write!(f, "{literal}")?;
         }
-        Arg::Bool(bool) => write!(f, "{}", bool)?,
-        Arg::ExternalFunction(id) => {
+        Rvalue::Bool(bool) => write!(f, "{}", bool)?,
+        Rvalue::ExternalFunction(id) => {
             write!(f, "external fn(\"{name}\")", name = id.name)?;
         }
-        Arg::StackOffset { offset, size: _ } => {
-            write!(f, "stack[{offset}]")?;
-        }
-        Arg::String { index } => write!(f, "string[{index}]")?,
-        Arg::Argument { index, size } => write!(f, "argument[{index}]")?,
+        Rvalue::String { index } => write!(f, "string[{index}]")?,
+        Rvalue::Void => write!(f, "void")?,
+    };
+    Ok(())
+}
+pub fn print_arg(arg: &Arg, f: &mut impl Write) -> std::fmt::Result {
+    match arg {
+        Arg::LValue(lvalue) => print_lvalue(lvalue, f)?,
+        Arg::RValue(rvalue) => print_rvalue(rvalue, f)?,
     }
 
     Ok(())
@@ -109,6 +138,18 @@ pub fn print_arg(arg: &Arg, f: &mut impl Write) -> std::fmt::Result {
 impl<'a> Display for Arg<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         print_arg(self, f)
+    }
+}
+
+impl<'a> Display for Lvalue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        print_lvalue(self, f)
+    }
+}
+
+impl<'a> Display for Rvalue<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        print_rvalue(self, f)
     }
 }
 
