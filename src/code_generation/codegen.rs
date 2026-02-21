@@ -170,7 +170,7 @@ impl<'ir> Codegen<'ir> {
                 }
                 self.call_arg(callee);
                 let ret_arg = Rax.lower_bytes_register(result.size());
-                self.store_reg_to_lvalue(result, ret_arg);
+                self.store_reg_to_lvalue(ret_arg, result);
             }
             Opcode::Binop {
                 left,
@@ -210,7 +210,7 @@ impl<'ir> Codegen<'ir> {
                                         asm!(self, "  idiv{p} {rhs}");
                                     }
                                 }
-                                self.store_reg_to_lvalue(result, lhs);
+                                self.store_reg_to_lvalue(lhs, result);
                             }
                             BinopKind::Ordering(c) => {
                                 asm!(self, "  cmp{p} {rhs}, {lhs}");
@@ -223,7 +223,7 @@ impl<'ir> Codegen<'ir> {
                                     LessThan => asm!(self, "  setl %al"),
                                     LessEq => asm!(self, "  setle %al"),
                                 }
-                                self.store_reg_to_lvalue(result, Al);
+                                self.store_reg_to_lvalue(Al, result);
                             }
                         }
                     }
@@ -241,7 +241,7 @@ impl<'ir> Codegen<'ir> {
                             BitwiseKind::Or => asm!(self, "  or{p} {Al}, {Bl}"),
                             BitwiseKind::And => asm!(self, "  and{p} {Al}, {Bl}"),
                         }
-                        self.store_reg_to_lvalue(result, Bl);
+                        self.store_reg_to_lvalue(Bl, result);
                     }
                 }
             }
@@ -257,7 +257,7 @@ impl<'ir> Codegen<'ir> {
                 let p = reg.prefix();
                 self.load_arg_to_reg(item, reg);
                 asm!(self, "  neg{p} {reg}");
-                self.store_reg_to_lvalue(result, reg);
+                self.store_reg_to_lvalue(reg, result);
             }
             Opcode::Assign { result, source } => {
                 let size = assert_same!(
@@ -268,7 +268,7 @@ impl<'ir> Codegen<'ir> {
                 comment!(self, "Assign");
                 let reg = Rax.lower_bytes_register(size);
                 self.load_arg_to_reg(source, reg);
-                self.store_reg_to_lvalue(result, reg);
+                self.store_reg_to_lvalue(reg, result);
             }
             Opcode::Return(ret) => {
                 if let Some(ret) = ret {
@@ -312,7 +312,7 @@ impl<'ir> Codegen<'ir> {
                             .expect("COMPILER BUG: Codegen: no current function")
                     )
                 );
-                self.store_reg_to_lvalue(result, Rax)
+                self.store_reg_to_lvalue(Rax, result)
             }
             Opcode::Store { result, source } => {
                 comment!(self, "Store");
@@ -333,7 +333,7 @@ impl<'ir> Codegen<'ir> {
                 let p = reg.prefix();
                 self.load_arg_to_reg(source, Rax);
                 asm!(self, "  mov{p} ({Rax}), {reg}");
-                self.store_reg_to_lvalue(result, reg);
+                self.store_reg_to_lvalue(reg, result);
             }
         }
         comment!(self);
@@ -387,7 +387,7 @@ impl<'ir> Codegen<'ir> {
 }
 
 impl<'ir> Codegen<'ir> {
-    pub fn store_reg_to_lvalue(&mut self, lvalue: &Lvalue, reg: Register) {
+    pub fn store_reg_to_lvalue(&mut self, reg: Register, lvalue: &Lvalue) {
         let p = reg.prefix();
         let lvalue = DisplayLValue(*lvalue, self.arg_offsets()).to_string();
         asm!(self, "  mov{p} {reg}, {lvalue}");
