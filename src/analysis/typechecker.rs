@@ -102,6 +102,7 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
             ExpressionKind::Unary { item, operator } => {
                 self.typecheck_expression(item)?;
                 let ty = match operator {
+                    // TODO: ensure that the expression really could be negated. 
                     UnaryKind::Negation => item.ty.inner(),
                     UnaryKind::Dereferencing => {
                         use Type::*;

@@ -21,8 +21,8 @@ pub enum Opcode<'ir> {
 
     // Control Flow
     FunctionCall {
-        // Return value of the function
-        result: Lvalue,
+        // Return value of the function (None means function returns void)
+        result: Option<Lvalue>,
         callee: Arg<'ir>,
         args: &'ir [Arg<'ir>],
         is_variadic: bool,
@@ -72,6 +72,7 @@ impl<'ir> Lvalue {
 impl Rvalue<'_> {
     pub fn size(&self) -> usize {
         match self {
+            Rvalue::Void => 0,
             Rvalue::Bool(_) => 1,
             Rvalue::Int64 { .. } => 8,
             Rvalue::String { .. } => 8,
@@ -103,6 +104,9 @@ pub enum Lvalue {
 
 #[derive(Clone, Debug)]
 pub enum Rvalue<'ir> {
+    // Nothing. Needed for the functions returning void.
+    Void,
+
     Bool(bool),
     Int64 { bits: [u8; 8], signed: bool },
     String { index: usize }, // Index is in ir.strings
@@ -112,12 +116,7 @@ pub enum Rvalue<'ir> {
 impl Arg<'_> {
     pub fn size(&self) -> usize {
         match self {
-            Arg::RValue(rvalue) => match rvalue {
-                Rvalue::Bool(_) => 1,
-                Rvalue::Int64 { .. } => 8,
-                Rvalue::String { .. } => 8,
-                Rvalue::ExternalFunction(_) => 8,
-            },
+            Arg::RValue(rvalue) => rvalue.size(),
 
             Arg::LValue(lvalue) => lvalue.size(),
         }

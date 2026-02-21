@@ -1,31 +1,9 @@
-extern "C" func puts(char_ptr): void;
 extern "C" func printf(char_ptr, ...): void;
-
-func print_i64(a: int): void {
-    printf("%d%c", a, 10);
+func to_string(b: bool): char_ptr {
+    if b return "true";
+    return "false";
 }
 
-func main(): int {
-    // While Loop
-    i := 0;
-    while i < 10 {
-        i = i + 1;
-        if i == 3 continue;
-        if i == 8 break;
-        print_i64(i);
-    }
-
-    puts("---------");
-
-    // Nested loops with labels
-    i := 0;
-    outer: while i < 5 {
-        j := 0;
-        while j < 8 {
-            print_i64(j);
-            if j == 3 break outer; // break from outer while loop
-            j = j + 1;
-        }
-        i = i + 1;
-    }
+func main(): void {
+    b := printf("Hello, World");
 }

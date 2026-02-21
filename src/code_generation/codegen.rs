@@ -102,13 +102,15 @@ impl<'ir> Codegen<'ir> {
         for (i, arg_size) in reg_params.iter().enumerate() {
             let arg_size = *arg_size;
             arg_offset += arg_size;
-            let p = Register::prefix_from_size(arg_size);
-            asm!(
-                self,
-                "  mov{p} {}, -{}(%rbp)",
-                CALL_REGISTERS[i].lower_bytes_register(arg_size),
-                arg_offset
-            );
+            if arg_size != 0 {
+                let p = Register::prefix_from_size(arg_size);
+                asm!(
+                    self,
+                    "  mov{p} {}, -{}(%rbp)",
+                    CALL_REGISTERS[i].lower_bytes_register(arg_size),
+                    arg_offset
+                );
+            }
             function_args_offsets.push(arg_offset);
         }
 
@@ -169,8 +171,10 @@ impl<'ir> Codegen<'ir> {
                     asm!(self, "  movb $0, %al"); // SysV requires to put amount of floating point arguments into %al when calling variadic function
                 }
                 self.call_arg(callee);
-                let ret_arg = Rax.lower_bytes_register(result.size());
-                self.store_reg_to_lvalue(ret_arg, result);
+                if let Some(result) = result {
+                    let ret_arg = Rax.lower_bytes_register(result.size());
+                    self.store_reg_to_lvalue(ret_arg, result);
+                }
             }
             Opcode::Binop {
                 left,
@@ -185,7 +189,11 @@ impl<'ir> Codegen<'ir> {
                         if !*signed {
                             todo!("Unsigned integer binop")
                         }
-                        assert_same!("Binop::Integer: Result size and operation size must be the same", *size, result.size());
+                        assert_same!(
+                            "Binop::Integer: Result size and operation size must be the same",
+                            *size,
+                            result.size()
+                        );
                         let size = assert_same!(
                             "Binop::Integer: Operands' sizes must be the same",
                             left.size(),
@@ -387,11 +395,20 @@ impl<'ir> Codegen<'ir> {
 
 impl<'ir> Codegen<'ir> {
     pub fn store_reg_to_lvalue(&mut self, reg: Register, lvalue: &Lvalue) {
+        if reg.size() == 0 || lvalue.size() == 0 {
+            assert_same!("", reg.size(), lvalue.size(), 0);
+            return;
+        }
         let p = reg.prefix();
         let lvalue = DisplayLValue(*lvalue, self.arg_offsets()).to_string();
         asm!(self, "  mov{p} {reg}, {lvalue}");
     }
     pub fn load_arg_to_reg(&mut self, arg: &Arg<'ir>, reg: Register) {
+        if arg.size() == 0 || reg == VoidReg {
+            assert!(arg.size() == 0 && reg == VoidReg);
+            return;
+        };
+
         let p = reg.prefix();
         let offsets = self.arg_offsets();
         match arg {
@@ -414,6 +431,9 @@ impl<'ir> Codegen<'ir> {
     }
 
     fn push_arg(&mut self, arg: &Arg<'ir>) {
+        if arg.size() == 0 {
+            return;
+        };
         let p = Register::prefix_from_size(arg.size());
         let offsets = self.arg_offsets();
         match arg {
@@ -462,6 +482,9 @@ impl<'a> Display for DisplayRValue<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Self(rvalue, pic) = self;
         match rvalue {
+            Rvalue::Void => panic!(
+                "COMPILER BUG: Codegen: DisplayRValue should never be called on Rvalue::Void"
+            ),
             Rvalue::Bool(bool) => write!(f, "${}", *bool as i32)?,
             Rvalue::Int64 { bits, signed } => {
                 match *signed {
