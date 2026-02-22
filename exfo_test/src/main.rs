@@ -2,6 +2,7 @@ mod util;
 
 use crate::util::{DisplayBox, ensure_compiler_exists, remove_dir_contents};
 use serde::{Deserialize, Serialize};
+use similar::TextDiff;
 use std::collections::BTreeMap;
 use std::env::Args;
 use std::fs::OpenOptions;
@@ -9,12 +10,20 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::{cmp, env, fs, io};
-use similar::TextDiff;
 
 #[derive(Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq, Eq, Clone)]
-struct TestResult {
-    stdout: String,
-    return_code: i32,
+pub enum TestResult {
+    CompilerFailure,
+    SuccessfulExecution { stdout: String, return_code: i32 },
+}
+
+impl TestResult {
+    pub fn descriptive(&self) -> &'static str {
+        match self {
+            TestResult::CompilerFailure => "test compilation failure",
+            TestResult::SuccessfulExecution { .. } => "successful test execution",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -115,24 +124,33 @@ fn record_tests<P: AsRef<Path>>(
     let mut results: TestResults = BTreeMap::new();
     for path in paths {
         let path = path.as_ref();
-        let stem = path.file_stem().unwrap().to_str().unwrap();
+        let stem = path
+            .file_stem()
+            .ok_or(io::ErrorKind::NotFound)?
+            .to_str()
+            .ok_or(io::ErrorKind::NotFound)?;
         let test_bin_path = test_bin.join(stem);
-        Command::new(compiler_path)
+        let mut compiler = Command::new(compiler_path)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .arg(path)
             .arg("-o")
             .arg(&test_bin_path)
-            .output()?;
+            .spawn()?;
+
+        if !compiler.wait()?.success() {
+            results.insert(stem.to_string(), TestResult::CompilerFailure);
+            continue;
+        }
 
         let output = Command::new(&test_bin_path).output()?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let return_code = output.status.code().unwrap();
+        let return_code = output.status.code().ok_or(io::ErrorKind::NotFound)?;
 
         results.insert(
             stem.to_string(),
-            TestResult {
+            TestResult::SuccessfulExecution {
                 stdout,
                 return_code,
             },
@@ -165,52 +183,65 @@ fn check_tests(
     let mut failed = 0;
     for case in recorded.keys() {
         let tab = " ".repeat(max_name_length - case.len());
+        let total_tab = " ".repeat(max_name_length + 1);
         print!("{case}:{tab}");
         let expected = recorded.get(case).unwrap();
         let got = got.get(case).unwrap();
 
+        use TestResult::*;
         match (expected, got) {
-            (a, b) if a == b => {
-                println!("{GREEN}OK{RESET}");
-            }
+            // wow rust pattern matching so cool!
+            (a, b) if a == b => println!("{GREEN}OK{RESET}"),
+            // wow rust pattern matching so cool! Just as copying the same match arm & this message.
+            (CompilerFailure, CompilerFailure) => println!("{GREEN}OK{RESET}"),
 
-            (a, b) => {
+            (
+                SuccessfulExecution {
+                    stdout: expected_stdout,
+                    return_code: expected_code,
+                },
+                SuccessfulExecution {
+                    stdout: got_stdout,
+                    return_code: got_code,
+                },
+            ) => {
                 if failed == 0 {
                     remove_dir_contents(diff_folder)?;
                 }
                 failed += 1;
-                if a.return_code != b.return_code {
+                if expected_code != got_code {
                     println!("{RED}ERR{RESET}: RETURN CODES DIFFER:");
                     println!(
-                        "{}GOT({RED}{}{RESET}) != EXPECTED({GREEN}{}{RESET})",
-                        " ".repeat(max_name_length + 1),
-                        expected.return_code,
-                        got.return_code
+                        "{total_tab}GOT({RED}{}{RESET}) != EXPECTED({GREEN}{}{RESET})",
+                        expected_code, got_code,
                     );
                 }
-                if a.stdout != b.stdout {
+                if expected_stdout != got_stdout {
                     println!("{RED}ERR{RESET}: OUTPUTS DIFFER");
                     let path = diff_folder.join(case).with_extension("diff");
                     {
-                        let lines = cmp::max(a.stdout.lines().count(), b.stdout.lines().count());
-                        let diff = TextDiff::from_lines(&a.stdout, &b.stdout)
+                        let lines =
+                            cmp::max(expected_stdout.lines().count(), got_stdout.lines().count());
+                        let diff = TextDiff::from_lines(expected_stdout, got_stdout)
                             .unified_diff()
                             .context_radius(lines)
                             .header("EXPECTED STDOUT", "GOT STDOUT")
                             .to_string();
-                        let mut file = OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .open(&path)?;
+                        let mut file = OpenOptions::new().create(true).write(true).open(&path)?;
                         file.write_all(diff.as_bytes())?;
                     }
                     // Put :0:0 because some editors/terminals only recognize <filepath>:<line>:<column>-kind-of format
-                    println!(
-                        "{}at {}:1:1",
-                        " ".repeat(max_name_length + 1),
-                        path.display()
-                    );
+                    println!("{total_tab}at {}:1:1", path.display());
                 }
+            }
+            // the last case left: if test was expected to fail, but it executed successfully or vice versa.
+            (expected, got) => {
+                println!("{RED}ERR{RESET}:");
+                println!(
+                    "{total_tab}expected {} but got {}",
+                    expected.descriptive(),
+                    got.descriptive()
+                );
             }
         };
     }
