@@ -56,24 +56,30 @@ fn main() -> io::Result<()> {
     let program_name = args.next().unwrap();
     let command = parse_command(&mut args);
 
-    let mut paths = Vec::new();
+    let mut tests: Vec<String> = Vec::new();
     let dir = fs::read_dir(test_folder)?;
     // Iterate only over files
-    dir.filter_map(Result::ok)
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map(|ext| ext == "exfo")
-                .unwrap_or(false)
-        })
-        .for_each(|e| {
-            paths.push(e.path());
-        });
+    for e in dir {
+        let Ok(e) = e else {
+            continue;
+        };
+        if e.path().extension() == Some(OsStr::new("exfo")) {
+            let path = e.path();
+            let test_case = path
+                .file_stem()
+                .ok_or(io::ErrorKind::NotFound)?
+                .to_string_lossy()
+                .into_owned();
+            tests.push(test_case);
+        }
+    }
 
+    let recorded = fs::read_to_string(json_path)?;
+    let recorded: TestResults = serde_json::from_str(&recorded)?;
     match &command {
         Subcommand::Record => {
             println!("Recording tests...");
-            let results = record_tests(compiler_path, &paths, test_bin)?;
+            let results = record_tests(compiler_path, &tests, test_folder, test_bin)?;
             let json = serde_json::to_string(&results)?;
             fs::write(json_path, json)?;
 
@@ -93,9 +99,7 @@ fn main() -> io::Result<()> {
                 eprintln!("Use `{program_name} record` to record tests first");
                 Err(io::ErrorKind::NotFound)?;
             }
-            let json = fs::read_to_string(json_path)?;
-            let recorded: TestResults = serde_json::from_str(&json)?;
-            let got: TestResults = record_tests(compiler_path, &paths, test_bin)?;
+            let got: TestResults = record_tests(compiler_path, &tests, test_folder, test_bin)?;
             let failed = check_tests(&recorded, &got, &diff_folder)?;
 
             if failed == 0 {
@@ -116,40 +120,38 @@ fn main() -> io::Result<()> {
 
 fn record_tests<P: AsRef<Path>>(
     compiler_path: P,
-    paths: &[impl AsRef<Path>],
+    tests: &[String],
+    test_folder: P,
     test_bin: P,
 ) -> io::Result<TestResults> {
     let compiler_path = compiler_path.as_ref();
     let test_bin = test_bin.as_ref();
+    let test_folder = test_folder.as_ref();
+
     let mut results: TestResults = BTreeMap::new();
-    for path in paths {
-        let path = path.as_ref();
-        let stem = path
-            .file_stem()
-            .ok_or(io::ErrorKind::NotFound)?
-            .to_str()
-            .ok_or(io::ErrorKind::NotFound)?;
-        let test_bin_path = test_bin.join(stem);
+    for test in tests {
+        let test_path = test_folder.join(test).with_extension("exfo");
+        let test_output = test_bin.join(test);
         let mut compiler = Command::new(compiler_path)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
-            .arg(path)
+            .arg(&test_path)
             .arg("-o")
-            .arg(&test_bin_path)
+            .arg(&test_output)
             .spawn()?;
 
         if !compiler.wait()?.success() {
-            results.insert(stem.to_string(), TestResult::CompilerFailure);
+            results.insert(test.clone(), TestResult::CompilerFailure);
             continue;
         }
 
-        let output = Command::new(&test_bin_path).output()?;
+        let output = Command::new(&test_output).output()?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let return_code = output.status.code().ok_or(io::ErrorKind::NotFound)?;
 
         results.insert(
-            stem.to_string(),
+            test.clone(),
             TestResult::SuccessfulExecution {
                 stdout,
                 return_code,
