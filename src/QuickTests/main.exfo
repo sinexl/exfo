@@ -1,31 +1,29 @@
-extern "C" func puts(char_ptr): void;
 extern "C" func printf(char_ptr, ...): void;
 
 func print_i64(a: int): void {
     printf("%d%c", a, 10);
 }
 
+
+func print_bool(b: bool): void {
+    if b printf("true");
+    else printf("false");
+    printf("%c", 10);
+}
+
+
 func main(): int {
-    // While Loop
-    i := 0;
-    while i < 10 {
-        i = i + 1;
-        if i == 3 continue;
-        if i == 8 break;
-        print_i64(i);
-    }
+    a := 1;
+    print_i64(a);
+    a := a + 1; // Shadowing
+    print_i64(a);
 
-    puts("---------");
+    a := false; // Changing type
+    print_bool(a);
 
-    // Nested loops with labels
-    i := 0;
-    outer: while i < 5 {
-        j := 0;
-        while j < 8 {
-            print_i64(j);
-            if j == 3 break outer; // break from outer while loop
-            j = j + 1;
-        }
-        i = i + 1;
-    }
+    a := 2;
+    a = a + 1; // Mutation
+    print_i64(a);
+
+    return 0;
 }

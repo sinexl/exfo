@@ -1,11 +1,16 @@
+mod util;
+
+use crate::util::{DisplayBox, ensure_compiler_exists, remove_dir_contents};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env::Args;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::{env, fs, io};
 
-#[derive(Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq, Eq, Clone)]
 struct TestResult {
     stdout: String,
     return_code: i32,
@@ -30,12 +35,14 @@ fn main() -> io::Result<()> {
     let json_path = Path::new("./src/tests.json");
     let test_folder = Path::new("./tests/");
     let test_bin = Path::new("./tests/bin/");
+    let diff_folder = Path::new("./tests/diff");
     let compiler_path = Path::new("./../target/debug/exfo");
     fs::create_dir_all(test_folder)?;
     fs::create_dir_all(test_bin)?;
+    fs::create_dir_all(diff_folder)?;
     ensure_compiler_exists(compiler_path)?;
 
-    let mut args = std::env::args();
+    let mut args = env::args();
     let program_name = args.next().unwrap();
     let command = parse_command(&mut args);
 
@@ -59,11 +66,13 @@ fn main() -> io::Result<()> {
             let results = record_tests(compiler_path, &paths, test_bin)?;
             let json = serde_json::to_string(&results)?;
             fs::write(json_path, json)?;
-            println!(
+
+            let message = format!(
                 "Recorded {n} test case(s) into {path}",
                 n = results.len(),
                 path = json_path.display()
-            )
+            );
+            print!("{message}", message = DisplayBox(&message));
         }
         Subcommand::Check => {
             if !json_path.exists() {
@@ -77,7 +86,18 @@ fn main() -> io::Result<()> {
             let json = fs::read_to_string(json_path)?;
             let recorded: TestResults = serde_json::from_str(&json)?;
             let got: TestResults = record_tests(compiler_path, &paths, test_bin)?;
-            check_tests(&recorded, &got);
+            let failed = check_tests(&recorded, &got, &diff_folder)?;
+
+            if failed == 0 {
+                remove_dir_contents(diff_folder)?;
+            }
+
+            let message = if failed != 0 {
+                format!("{failed} test(s) failed...")
+            } else {
+                "All tests succeeded...".to_string()
+            };
+            print!("{message}", message = DisplayBox(&message));
         }
     };
 
@@ -96,11 +116,11 @@ fn record_tests<P: AsRef<Path>>(
         let path = path.as_ref();
         let stem = path.file_stem().unwrap().to_str().unwrap();
         let test_bin_path = test_bin.join(stem);
-        println!("{}", env::current_dir()?.display()); 
         Command::new(compiler_path)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
             .arg(path)
             .arg("-o")
-            .arg("-c_helper")
             .arg(&test_bin_path)
             .output()?;
 
@@ -120,7 +140,13 @@ fn record_tests<P: AsRef<Path>>(
     Ok(results)
 }
 
-fn check_tests(recorded: &TestResults, got: &TestResults) {
+// Returns how much tests failed
+fn check_tests(
+    recorded: &TestResults,
+    got: &TestResults,
+    diff_folder: impl AsRef<Path>,
+) -> io::Result<usize> {
+    let diff_folder = diff_folder.as_ref();
     if recorded.len() != got.len() {
         println!(
             "{YELLOW}WARNING{RESET}: found {a} testcases than recorded\n\tRecorded: {}\n\tGot: {}",
@@ -134,31 +160,60 @@ fn check_tests(recorded: &TestResults, got: &TestResults) {
         )
     }
 
-    let max = recorded.keys().map(|e| e.len()).max().unwrap() + 1;
+    let max_name_length = recorded.keys().map(|e| e.len()).max().unwrap() + 1;
+    let mut failed = 0;
     for case in recorded.keys() {
-        let tab = " ".repeat(max - case.len());
+        let tab = " ".repeat(max_name_length - case.len());
         print!("{case}:{tab}");
-        if recorded.get(case).unwrap() == got.get(case).unwrap() {
-            println!("{GREEN}OK{RESET}");
-        } else {
-            println!("{RED}ERR{RESET}");
-        }
+        let expected = recorded.get(case).unwrap();
+        let got = got.get(case).unwrap();
+
+        match (expected, got) {
+            (a, b) if a == b => {
+                println!("{GREEN}OK{RESET}");
+            }
+
+            (a, b) => {
+                if failed == 0 {
+                    remove_dir_contents(diff_folder)?;
+                }
+                failed += 1;
+                if a.return_code != b.return_code {
+                    println!("{RED}ERR{RESET}: RETURN CODES DIFFER:");
+                    println!(
+                        "{}GOT({RED}{}{RESET}) != EXPECTED({GREEN}{}{RESET})",
+                        " ".repeat(max_name_length + 1),
+                        expected.return_code,
+                        got.return_code
+                    );
+                }
+                if a.stdout != b.stdout {
+                    println!("{RED}ERR{RESET}: OUTPUTS DIFFER");
+                    let path = diff_folder.join(case).with_extension("diff");
+                    {
+                        let mut file = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            // TODO: Produce actual diff
+                            .open(&path)?;
+                        file.write_all("< ------- EXPECTED STDOUT: ------- >\n".as_bytes())?;
+                        file.write_all(format!("{}\n", expected.stdout).as_bytes())?;
+                        file.write_all("< ------- GOT STDOUT: ------- >\n".as_bytes())?;
+                        file.write_all(format!("{}\n", got.stdout).as_bytes())?;
+                    }
+                    // Put :0:0 because some editors/terminals only recognize <filepath>:<line>:<column>-kind-of format
+                    println!(
+                        "{}at {}:1:1",
+                        " ".repeat(max_name_length + 1),
+                        path.display()
+                    );
+                }
+            }
+        };
     }
+    Ok(failed)
 }
 
-fn ensure_compiler_exists<P: AsRef<Path>>(compiler_path: P) -> io::Result<()> {
-    let compiler_path = compiler_path.as_ref();
-    if !compiler_path.exists() {
-        eprintln!(
-            "Could not find compiler at {}",
-            compiler_path.to_str().unwrap(),
-        );
-        eprintln!("Ensure that exfo was built and is located at src/target/debug/");
-        Err(io::ErrorKind::NotFound)?;
-    }
-
-    Ok(())
-}
 fn parse_command(args: &mut Args) -> Subcommand {
     let arg = args.next();
     if arg.is_none() {
