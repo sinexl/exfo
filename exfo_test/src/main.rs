@@ -2,7 +2,7 @@ mod util;
 
 use crate::util::{DisplayBox, ensure_compiler_exists, remove_dir_contents};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::env::Args;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -29,7 +29,7 @@ pub const GREY: &str = "\x1b[90m";
 pub const RED: &str = "\x1b[31m";
 pub const BLUE: &str = "\x1b[94m";
 
-type TestResults = HashMap<String, TestResult>;
+type TestResults = BTreeMap<String, TestResult>;
 
 fn main() -> io::Result<()> {
     let json_path = Path::new("./src/tests.json");
@@ -111,7 +111,7 @@ fn record_tests<P: AsRef<Path>>(
 ) -> io::Result<TestResults> {
     let compiler_path = compiler_path.as_ref();
     let test_bin = test_bin.as_ref();
-    let mut results: TestResults = HashMap::new();
+    let mut results: TestResults = BTreeMap::new();
     for path in paths {
         let path = path.as_ref();
         let stem = path.file_stem().unwrap().to_str().unwrap();
