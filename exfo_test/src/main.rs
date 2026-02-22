@@ -8,7 +8,8 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::{env, fs, io};
+use std::{cmp, env, fs, io};
+use similar::TextDiff;
 
 #[derive(Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq, Eq, Clone)]
 struct TestResult {
@@ -191,15 +192,17 @@ fn check_tests(
                     println!("{RED}ERR{RESET}: OUTPUTS DIFFER");
                     let path = diff_folder.join(case).with_extension("diff");
                     {
+                        let lines = cmp::max(a.stdout.lines().count(), b.stdout.lines().count());
+                        let diff = TextDiff::from_lines(&a.stdout, &b.stdout)
+                            .unified_diff()
+                            .context_radius(lines)
+                            .header("EXPECTED STDOUT", "GOT STDOUT")
+                            .to_string();
                         let mut file = OpenOptions::new()
                             .create(true)
                             .write(true)
-                            // TODO: Produce actual diff
                             .open(&path)?;
-                        file.write_all("< ------- EXPECTED STDOUT: ------- >\n".as_bytes())?;
-                        file.write_all(format!("{}\n", expected.stdout).as_bytes())?;
-                        file.write_all("< ------- GOT STDOUT: ------- >\n".as_bytes())?;
-                        file.write_all(format!("{}\n", got.stdout).as_bytes())?;
+                        file.write_all(diff.as_bytes())?;
                     }
                     // Put :0:0 because some editors/terminals only recognize <filepath>:<line>:<column>-kind-of format
                     println!(

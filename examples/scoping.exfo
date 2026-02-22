@@ -37,7 +37,7 @@ func main(): int {
         b := b + 1;
         // scopes also can mutate variables from outer scopes like this:
         c = c * c; // This statement affects outer scope (squares "c")
-        printf("Inner scope: b = %d, c = %d%c", b, c, 10);
+        printf("  Inner scope: b = %d, c = %d%c", b, c, 10);
     }
     printf("Outer scope: b = %d, c = %d (b left unchanged) %c", b, c, 10);
     
