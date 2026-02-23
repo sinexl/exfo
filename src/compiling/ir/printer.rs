@@ -17,9 +17,11 @@ pub fn print_ir(ir: &IntermediateRepresentation, f: &mut impl Write) -> std::fmt
 pub fn print_function(function: &Function<'_>, f: &mut impl Write) -> std::fmt::Result {
     writeln!(
         f,
-        "{name}: stack size = {stack_size}",
+        "{name}: stack size = {stack_size}, params = {params} (size = {params_size})",
         name = function.name.name,
-        stack_size = function.stack_size
+        stack_size = function.stack_size,
+        params = function.params.len(),
+        params_size = function.params.iter().sum::<usize>(),
     )?;
     for opcode in function.code {
         print_opcode(opcode, f, 1)?;

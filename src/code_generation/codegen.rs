@@ -209,9 +209,9 @@ impl<'ir> Codegen<'ir> {
                             BinopKind::Arithmetic(c) => {
                                 use ArithmeticKind::*;
                                 match c {
-                                    Addition => asm!(self, "  add{p} {lhs}, {rhs}"),
-                                    Subtraction => asm!(self, "  sub{p} {lhs}, {rhs}"),
-                                    Multiplication => asm!(self, "  imul{p} {lhs}, {rhs}"),
+                                    Addition => asm!(self, "  add{p} {rhs}, {lhs}"),
+                                    Subtraction => asm!(self, "  sub{p} {rhs}, {lhs}"),
+                                    Multiplication => asm!(self, "  imul{p} {rhs}, {lhs}"),
                                     Division => {
                                         asm!(self, "  cqto");
                                         asm!(self, "  idiv{p} {rhs}");
@@ -223,12 +223,12 @@ impl<'ir> Codegen<'ir> {
                                 asm!(self, "  cmp{p} {rhs}, {lhs}");
                                 use OrderingKind::*;
                                 match c {
-                                    Equality => asm!(self, "  sete %al"),
-                                    Inequality => asm!(self, "  setne %al"),
-                                    GreaterThan => asm!(self, "  setg %al"),
-                                    GreaterEq => asm!(self, "  setge %al"),
-                                    LessThan => asm!(self, "  setl %al"),
-                                    LessEq => asm!(self, "  setle %al"),
+                                    Equality => asm!(self, "  sete {Al}"),
+                                    Inequality => asm!(self, "  setne {Al}"),
+                                    GreaterThan => asm!(self, "  setg {Al}"),
+                                    GreaterEq => asm!(self, "  setge {Al}"),
+                                    LessThan => asm!(self, "  setl {Al}"),
+                                    LessEq => asm!(self, "  setle {Al}"),
                                 }
                                 self.store_reg_to_lvalue(Al, result);
                             }
