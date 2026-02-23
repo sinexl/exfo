@@ -237,6 +237,7 @@ fn check_tests(
             }
             // the last case left: if test was expected to fail, but it executed successfully or vice versa.
             (expected, got) => {
+                failed += 1;  
                 println!("{RED}ERR{RESET}:");
                 println!(
                     "{total_tab}expected {} but got {}",
