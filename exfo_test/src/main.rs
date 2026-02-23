@@ -1,16 +1,17 @@
-mod util;
 mod command;
+mod util;
 
 use crate::command::Subcommand;
-use crate::util::{ensure_compiler_exists, remove_dir_contents, DisplayBox};
+use crate::util::colors::*;
+use crate::util::{DisplayBox, ensure_compiler_exists, remove_dir_contents};
 use serde::{Deserialize, Serialize};
 use similar::TextDiff;
-use std::collections::BTreeMap;
-use std::env::Args;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Command, Stdio, exit};
 use std::{cmp, env, fs, io};
 
 #[derive(Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq, Eq, Clone)]
@@ -28,15 +29,49 @@ impl TestResult {
     }
 }
 
-
-pub const RESET: &str = "\x1b[0m";
-pub const GREEN: &str = "\x1b[32m";
-pub const YELLOW: &str = "\x1b[33m";
-pub const GREY: &str = "\x1b[90m";
-pub const RED: &str = "\x1b[31m";
-pub const BLUE: &str = "\x1b[94m";
-
 type TestResults = BTreeMap<String, TestResult>;
+
+pub fn load_test_results_from_file(json_path: impl AsRef<Path>) -> io::Result<TestResults> {
+    let json_path = json_path.as_ref();
+
+    let json = match fs::read_to_string(json_path) {
+        Ok(recorded) => recorded,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(TestResults::new()),
+        Err(e) => return Err(e.into()),
+    };
+    let test_results: TestResults = serde_json::from_str(&json)?;
+    Ok(test_results)
+}
+
+fn write_results(results: &TestResults, json_path: impl AsRef<Path>) -> io::Result<()> {
+    let json = serde_json::to_string(&results)?;
+    fs::write(json_path, json)?;
+    Ok(())
+}
+
+// Returns names of the tests found in "test_folder"
+pub fn scan_tests_from_folder(test_folder: impl AsRef<Path>) -> io::Result<BTreeSet<String>> {
+    let mut result = BTreeSet::new();
+    for e in fs::read_dir(test_folder)? {
+        let Ok(e) = e else {
+            continue;
+        };
+        if e.path().extension() == Some(OsStr::new("exfo")) {
+            let path = e.path();
+            let test_case = path
+                .file_stem()
+                .ok_or(io::ErrorKind::NotFound)?
+                .to_string_lossy()
+                .into_owned();
+            assert!(
+                result.insert(test_case),
+                "Each test case must be inserted uniquely"
+            );
+        }
+    }
+
+    Ok(result)
+}
 
 fn main() -> io::Result<()> {
     let json_path = Path::new("./src/tests.json");
@@ -53,73 +88,116 @@ fn main() -> io::Result<()> {
     let program_name = args.next().unwrap();
     let command = Subcommand::parse(&mut args);
 
-    let mut tests: Vec<String> = Vec::new();
-    let dir = fs::read_dir(test_folder)?;
-    // Iterate only over files
-    for e in dir {
-        let Ok(e) = e else {
-            continue;
-        };
-        if e.path().extension() == Some(OsStr::new("exfo")) {
-            let path = e.path();
-            let test_case = path
-                .file_stem()
-                .ok_or(io::ErrorKind::NotFound)?
-                .to_string_lossy()
-                .into_owned();
-            tests.push(test_case);
-        }
+    let all_found = scan_tests_from_folder(test_folder)?;
+
+    if !command.is_record_all() {
+        ensure_exists!(
+            json_path,
+            "Could not find recorded test results",
+            "Use `{program_name} record all` to record tests first"
+        )?;
     }
 
-    ensure_exists!(json_path, "Could not find recorded test results", "Use `{program_name}` to record tests first")?;
+    let mut test_results = load_test_results_from_file(json_path)?;
+    let recorded = test_results
+        .keys()
+        .map(|k| k.clone())
+        .collect::<BTreeSet<_>>();
 
-    let recorded = fs::read_to_string(json_path)?;
-    let recorded: TestResults = serde_json::from_str(&recorded)?;
+    // CASE: There are more tests in the json file then in the folder.
+    if all_found.len() < recorded.len() {
+        info!(
+            "There are more tests recorded than found in the {}. Removing the tests",
+            test_folder.display()
+        );
+        let set_difference = recorded.difference(&all_found);
+        for i in set_difference {
+            info!("\tREMOVING test case {BLUE}{i}{RESET}");
+            test_results.remove(i).unwrap();
+        }
+
+        write_results(&test_results, json_path)?;
+        exit(0);
+    }
+
+    assert!(recorded.len() <= all_found.len());
+    let difference = all_found
+        .difference(&recorded)
+        .map(|e| e.clone())
+        .collect::<BTreeSet<_>>();
     match &command {
-        Subcommand::Record => {
-            println!("Recording tests...");
-            let results = record_tests(compiler_path, &tests, test_folder, test_bin)?;
-            let json = serde_json::to_string(&results)?;
-            fs::write(json_path, json)?;
+        Subcommand::Record { all } => {
+            let new = !*all;
 
-            let message = format!(
-                "Recorded {n} test case(s) into {path}",
-                n = results.len(),
-                path = json_path.display()
-            );
-            print!("{message}", message = DisplayBox(&message));
+            println!("Recording tests...");
+            let to_record = if new { &difference } else { &all_found };
+
+            let mut results = evaluate_tests(compiler_path, to_record, test_folder, test_bin)?;
+            assert_eq!(results.len(), to_record.len());
+            for test in &difference {
+                let value = results.get(test).unwrap();
+                print!("{}", DisplayBox(&format!("New test: {test}"), None));
+                match value {
+                    TestResult::CompilerFailure => println!("Compilation Failed"),
+                    TestResult::SuccessfulExecution {
+                        stdout,
+                        return_code,
+                    } => {
+                        println!("< ─── {BLUE}Return code{RESET}: {return_code} ─── >");
+                        println!("{stdout}");
+                    }
+                }
+            }
+
+            if new {
+                test_results.extend(results);
+                results = test_results;
+            }
+
+            write_results(&results, json_path)?;
+
+            let len = to_record.len();
+            let message = if new {
+                format!("Saved {len} new test case(s) into {}", json_path.display())
+            } else {
+                format!("Recorded {len} test case(s) into {}", json_path.display())
+            };
+
+            print!("{message}", message = DisplayBox(&message, Some(BLUE)));
         }
         Subcommand::Check => {
-            if !json_path.exists() {
-                eprintln!(
-                    "Error: Could not find recorded test results at: {json_path}",
-                    json_path = json_path.display()
-                );
-                eprintln!("Use `{program_name} record` to record tests first");
-                Err(io::ErrorKind::NotFound)?;
-            }
-            let got: TestResults = record_tests(compiler_path, &tests, test_folder, test_bin)?;
-            let failed = check_tests(&recorded, &got, &diff_folder)?;
+            let got: TestResults = evaluate_tests(compiler_path, &recorded, test_folder, test_bin)?;
+            let failed = check_tests(&test_results, &got, &diff_folder)?;
 
             if failed == 0 {
                 remove_dir_contents(diff_folder)?;
             }
-
-            let message = if failed != 0 {
-                format!("{failed} test(s) failed...")
+            let (message, color) = if failed != 0 {
+                (format!("{failed} test(s) failed..."), RED)
             } else {
-                "All tests succeeded...".to_string()
+                ("All tests succeeded...".to_string(), GREEN)
             };
-            print!("{message}", message = DisplayBox(&message));
+            print!("{message}", message = DisplayBox(&message, Some(color)));
+
+            if recorded.len() < all_found.len() {
+                let diff = difference.len();
+
+                warning!(
+                    "Found {diff} test{} which {} not recorded {:?}",
+                    if diff == 1 { "" } else { "s" }, // Plural
+                    if diff == 1 { "is" } else { "are" },
+                    difference
+                );
+            }
         }
     };
 
     Ok(())
 }
 
-fn record_tests<P: AsRef<Path>>(
+fn evaluate_tests<P: AsRef<Path>>(
     compiler_path: P,
-    tests: &[String],
+    tests: &BTreeSet<String>,
     test_folder: P,
     test_bin: P,
 ) -> io::Result<TestResults> {
