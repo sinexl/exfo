@@ -1,0 +1,141 @@
+extern "C" func puts(char_ptr): void;
+extern "C" func printf(char_ptr, ...): void;
+func main(): int {
+    puts("< --- Basic Case: no iterations. --- >");
+    puts("expect: after");
+    while false {
+        puts("UNREACHABLE");
+    }
+    puts("<after>");
+
+    puts("< --- Basic Case #2: three iterations. --- >");
+    puts("expect: 0 1 2 ");
+    i := 0;
+    while i < 3 {
+        printf("%d ", i);
+        i = i + 1;
+    }
+    puts("");
+
+    checksum := 0;
+    puts("< --- Basic Case #3: nested. --- >");
+    i = 0;
+    while i < 3 {
+        j := 0;
+        while j < 3 {
+            checksum = (checksum * 2) + (i + j);
+            printf("(%d, %d) ", i, j);
+            j = j + 1;
+        }
+        printf("%c", 10);
+        i = i + 1;
+    }
+    printf("Checksum: %d (Expected: %d)%c", checksum, 362, 10);
+
+    puts("< --- Basic Case #3: nested. --- >");
+    puts("expect: pairs of digits with j < 1, 4, 9 in series");
+    checksum = 0;
+    i = 0;
+    while i < 3 {
+        j := 0;
+        bound := (i + 1) * (i + 1);
+        printf("j < %d: ", bound);
+        while j < bound {
+            checksum = (checksum / 6 * 5) + (i + j);
+            printf("(%d, %d) ", i, j);
+            j = j + 1;
+        }
+        printf("%c", 10);
+        i = i + 1;
+    }
+    printf("Checksum: %d (Expected: %d)%c", checksum, 30, 10);
+
+    puts("< --- Basic Case #3: Cartesian product: {0, 1, 2}^3 --- >");
+    puts("expect: (81, 81, 81)");
+    x := 0; y := 0; z := 0;
+    checksum = 0;
+    i = 0; while i < 3 {
+        j := 0; while j < 3 {
+            k := 0; while k < 3 {
+                checksum = (checksum * 3 / 2) + (i + j + k);
+                i3 := i * i * i;
+                j3 := j * j * j;
+                k3 := k * k * k;
+                x = x + i3;
+                y = y + j3;
+                z = z + k3;
+                printf("(%d %d %d) ", i, j, k);
+                k = k + 1;
+            }
+            j = j + 1;
+        }
+        printf("%c", 10);
+        i = i + 1;
+    }
+    printf("(%d %d %d)%c", x, y, z, 10);
+    printf("Checksum: %d (Expected: 104122)%c", checksum, 10);
+
+    puts("< --- Edge Case: Unlabeled Break and Continue --- >");
+    puts("expect: 1 3 5 6 7");
+    sum := 0;
+    i = 0; while i < 10 {
+        i = i + 1;
+        if i == 2 continue;
+        if i == 4 continue;
+
+        if i > 7 {
+            break;
+        }
+        printf("%d ", i);
+        sum = sum + i;
+    }
+    printf("%cSum: %d (Expected: 22)%c", 10, sum, 10);
+
+    puts("< --- Edge Case: Variable Scoping inside Loop --- >");
+    puts("expect: shadow variable resetting correctly");
+    i = 0;
+    accum := 0;
+    while i < 3 {
+        temp := i * 10;
+        accum = accum + temp;
+        i = i + 1;
+    }
+    printf("Accum: %d (Expected: 30)%c", accum, 10);
+
+
+    puts("< --- Basic Case nested loops & linear combinations of primes --- >");
+    checksum = 0;
+    i = 0;
+    outer: while i < 4 {
+        j := 0;
+        bound := (i + 1) * (i + 1);
+        printf("j < %d: ", bound);
+        inner: while j < bound {
+            checksum = (checksum * 11 / 7) + (i + j);
+            // will continue from outer loop on (i, j) == (2, 7)
+            if i * 457 + j * 37 == 1173 {
+                printf("[%d, %d]%c", i, j, 10);
+                i = i + 1;
+                continue outer;
+            }
+            // Will draw brackets for (i, j) = 3, 7
+            if i * 19 + j * 59 == 470 {
+                printf("<%d, %d> ", i, j);
+                j = j + 1;
+                continue;
+            }
+            printf("(%d, %d) ", i, j);
+            // will break from outer on (i, j) = (3, 11)
+            if 9 * i + 7 * j == 104 break outer;
+            j = j + 1;
+        }
+        printf("%c", 10);
+        i = i + 1;
+    }
+    printf("%cChecksum: %d (Expected: %d)%c", 10, 173623, 0, 10);
+
+
+
+
+    return 0;
+}

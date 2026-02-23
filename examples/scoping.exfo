@@ -11,7 +11,9 @@ func main(): int {
     // Variables are declared / shadowed (see below) using := operator.
     a := 1;
     printf("before shadowing: a = %d%c", a, 10);
-    a := a + 1; // Shadowing. `a` now points to another variable on the stack.
+    // Shadowing. `a` now points to another variable on the stack.
+    // Note that you can also use the previous value in the initializer as it is still reachable.
+    a := a + 1;
     printf("after shadowing:  a = %d (a is still integer)%c", a, 10); // prints "2"
     
     // Changing type via shadowing. Exfo is statically typed language, but a single name can point 
@@ -23,14 +25,21 @@ func main(): int {
     a := 2; 
     a = a + 1; // Mutation. Update add "1" to the memory pointed by "a" 
     printf("after mutation & shadowing: a = %d%c", a, 10);
-    
+
+    // Scopes.
     b := 10;
-    printf("Outer scope: b = %d%c", b, 10);
-    { 
+    c := 15;
+    printf("Outer scope: b = %d, c = %d%c", b, c, 10);
+    {
+        // After being declared in inner scope,
+        // the "b" variable is now bounded to the different value (just as previously with shadowing),
+        // but this is only until the end of this scope.
         b := b + 1;
-        printf("Inner scope: b = %d%c", b, 10);
+        // scopes also can mutate variables from outer scopes like this:
+        c = c * c; // This statement affects outer scope (squares "c")
+        printf("  Inner scope: b = %d, c = %d%c", b, c, 10);
     }
-    printf("Outer scope: b = %d (left unchanged) %c", b, 10);
+    printf("Outer scope: b = %d, c = %d (b left unchanged) %c", b, c, 10);
     
     return 0; 
 } 

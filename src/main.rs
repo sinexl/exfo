@@ -83,7 +83,7 @@ fn main() -> io::Result<()> {
         for e in static_errors {
             eprintln!("{e}");
         }
-        exit(1);
+        exit(-1);
     }
 
     // Compilation to IR.

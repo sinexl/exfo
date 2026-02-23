@@ -1,3 +1,5 @@
 target/
 .exfo_build/
 src/bin/
+/tests/diff/
+/tests/bin/

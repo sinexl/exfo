@@ -14,7 +14,7 @@ func swap_ptrs(pp1: int**, pp2: int**): void {
     *pp2 = temp;
 }
 
-func main(): void {
+func main(): int {
     a := 111;
     b := 222;
 
@@ -56,4 +56,6 @@ func main(): void {
     swap_ptrs(ppa, ppb);
     printf("After swap_ptrs(ppa, ppb):%c", 10);
     printf("*pa = %d, *pb = %d%c", *pa, *pb, 10);
+
+    return 0;
 }

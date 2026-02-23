@@ -1,0 +1,56 @@
+extern "C" func printf(char_ptr, ...): void;
+extern "C" func puts(char_ptr): void;
+
+func factorial(n: int): int {
+    if n == 0 return 1;
+    return n * factorial(n - 1);
+}
+
+func fib(n: int): int {
+    if n == 0 return 0;
+    if n == 1 return 1;
+
+    return fib(n-1) + fib(n-2);
+
+}
+
+func hanoi(n: int): int {
+    if n == 1 return 1;
+    return 2 * hanoi (n - 1) + 1;
+}
+
+
+// TODO: Mutually recursive functions. Either would require resolver work or implementing some forward declaration
+// func is_even(n: int): bool {
+//     if n == 0 return true;
+//     else return is_odd(n - 1);
+// }
+
+// func is_odd(n: int): bool {
+//     if n == 0 return false;
+//     else return is_even(n - 1);
+// }
+
+
+
+func main(): int {
+    puts("< --- Basic: Fibonacci --- >");
+    printf("fib(7): %d (Expected: 13)%c", fib(7), 10);
+
+    puts("< --- Basic: Factorial --- >");
+    printf("factorial(11): %d (Expected: 39916800)%c", factorial(11), 10);
+
+    puts("< --- Basic: Hanoi Towers --- >");
+    i := 1; while i < 10 {
+        printf("hanoi(%d) = %d%c", i, hanoi(i), 10);
+        i = i + 1;
+    }
+
+    // puts("< --- Mutually recursive: is_even, is_odd: --- >");
+    // i := 0; while i < 17 {
+    //     printf("%d: %s%c", i, get_string(is_even(i)), 10);
+    //     i = i + 1;
+    // }
+
+    return 0;
+}
