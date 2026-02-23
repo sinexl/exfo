@@ -17,52 +17,43 @@ func main(): int {
     }
     puts("");
 
+    checksum := 0;
     puts("< --- Basic Case #3: nested. --- >");
     i = 0;
     while i < 3 {
         j := 0;
         while j < 3 {
+            checksum = (checksum * 2) + (i + j);
             printf("(%d, %d) ", i, j);
             j = j + 1;
         }
         printf("%c", 10);
         i = i + 1;
     }
+    printf("Checksum: %d (Expected: %d)%c", checksum, 362, 10);
 
     puts("< --- Basic Case #3: nested. --- >");
     puts("expect: pairs of digits with j < 1, 4, 9 in series");
+    checksum = 0;
     i = 0;
     while i < 3 {
         j := 0;
         bound := (i + 1) * (i + 1);
         printf("j < %d: ", bound);
         while j < bound {
+            checksum = (checksum / 6 * 5) + (i + j);
             printf("(%d, %d) ", i, j);
             j = j + 1;
         }
         printf("%c", 10);
         i = i + 1;
     }
-
-    puts("< --- Basic Case #3: nested. --- >");
-    puts("expect: pairs of digits with j < 1, 4, 9 in series");
-    i = 0;
-    while i < 3 {
-        j := 0;
-        bound := (i + 1) * (i + 1);
-        printf("j < %d: ", bound);
-        while j < bound {
-            printf("(%d, %d) ", i, j);
-            j = j + 1;
-        }
-        printf("%c", 10);
-        i = i + 1;
-    }
+    printf("Checksum: %d (Expected: %d)%c", checksum, 30, 10);
 
     puts("< --- Basic Case #3: Cartesian product: {0, 1, 2}^3 --- >");
     puts("expect: (81, 81, 81)");
     x := 0; y := 0; z := 0;
-    checksum := 0;
+    checksum = 0;
     i = 0; while i < 3 {
         j := 0; while j < 3 {
             k := 0; while k < 3 {
@@ -113,12 +104,14 @@ func main(): int {
 
 
     puts("< --- Basic Case nested loops & linear combinations of primes --- >");
+    checksum = 0;
     i = 0;
     outer: while i < 4 {
         j := 0;
         bound := (i + 1) * (i + 1);
         printf("j < %d: ", bound);
         inner: while j < bound {
+            checksum = (checksum * 11 / 7) + (i + j);
             // will continue from outer loop on (i, j) == (2, 7)
             if i * 457 + j * 37 == 1173 {
                 printf("[%d, %d]%c", i, j, 10);
@@ -139,6 +132,7 @@ func main(): int {
         printf("%c", 10);
         i = i + 1;
     }
+    printf("%cChecksum: %d (Expected: %d)%c", 10, 173623, 0, 10);
 
 
 
