@@ -248,17 +248,3 @@ fn check_tests(
     }
     Ok(failed)
 }
-
-fn parse_command(args: &mut Args) -> Subcommand {
-    let arg = args.next();
-    if arg.is_none() {
-        return Subcommand::Check;
-    }
-    let arg = arg.unwrap();
-
-    match arg.as_ref() {
-        "record" => Subcommand::Record,
-        "check" => Subcommand::Check,
-        _ => Subcommand::Check,
-    }
-}

@@ -23,5 +23,12 @@ impl Subcommand {
             _ => Subcommand::Check,
         }
     }
+    
+    pub fn is_record_all(&self) -> bool { 
+        match self {
+            Subcommand::Record { all } => *all, 
+            _ => false, 
+        }
+    }
 }
 
