@@ -63,10 +63,12 @@ pub fn scan_tests_from_folder(test_folder: impl AsRef<Path>) -> io::Result<BTree
                 .ok_or(io::ErrorKind::NotFound)?
                 .to_string_lossy()
                 .into_owned();
-            assert!(
-                result.insert(test_case),
-                "Each test case must be inserted uniquely"
-            );
+            if !test_case.starts_with("__") {
+                assert!(
+                    result.insert(test_case),
+                    "Each test case must be inserted uniquely"
+                );
+            }
         }
     }
 

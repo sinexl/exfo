@@ -47,8 +47,8 @@ macro_rules! err {
 macro_rules! info {
     ($($arg:tt)*) => {{
         use $crate::util::colors::*;
-        eprint!("{BLUE}INFO{RESET}: ");
-        eprintln!($($arg)*);
+        print!("{BLUE}INFO{RESET}: ");
+        println!($($arg)*);
     }};
 }
 
