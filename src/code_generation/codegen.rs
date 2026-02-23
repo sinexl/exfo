@@ -3,11 +3,27 @@ use crate::code_generation::register::Register::*;
 use crate::compiling::ir::binop::{ArithmeticKind, Binop, BinopKind, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::binop::{IntegerBinop, OrderingKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
-use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode};
+use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
 use std::cmp;
-use std::fmt::Write;
+use std::fmt::{Display, Formatter, Write};
 
 const CALL_REGISTERS: &[Register] = &[Rdi, Rsi, Rdx, Rcx, R8, R9];
+
+macro_rules! assert_same {
+    ($msg:expr, $first:expr $(, $rest:expr)+ $(,)?) => {{
+        let first = $first;
+        $(
+            assert!(
+                $first == $rest,
+                "COMPILER BUG: Codegen: {} ({} != {})",
+                $msg,
+                $first,
+                $rest
+            );
+        )+
+        first
+    }};
+}
 
 macro_rules! asm {
     ($dst:expr, $($fmt:tt)*) => {
@@ -31,7 +47,8 @@ pub struct Codegen<'ir> {
     pic: bool,
     output: String,
 
-    current_function_args_offsets: Option<Vec<usize>>,
+    // Stores parameters' offsets of the function
+    arg_offsets: Option<Vec<usize>>,
 }
 
 //noinspection SpellCheckingInspection
@@ -41,7 +58,7 @@ impl<'ir> Codegen<'ir> {
             ir,
             output: String::new(),
             pic,
-            current_function_args_offsets: None,
+            arg_offsets: None,
         }
     }
 
@@ -85,13 +102,15 @@ impl<'ir> Codegen<'ir> {
         for (i, arg_size) in reg_params.iter().enumerate() {
             let arg_size = *arg_size;
             arg_offset += arg_size;
-            let p = Register::prefix_from_size(arg_size);
-            asm!(
-                self,
-                "  mov{p} {}, -{}(%rbp)",
-                CALL_REGISTERS[i].lower_bytes_register(arg_size),
-                arg_offset
-            );
+            if arg_size != 0 {
+                let p = Register::prefix_from_size(arg_size);
+                asm!(
+                    self,
+                    "  mov{p} {}, -{}(%rbp)",
+                    CALL_REGISTERS[i].lower_bytes_register(arg_size),
+                    arg_offset
+                );
+            }
             function_args_offsets.push(arg_offset);
         }
 
@@ -117,11 +136,11 @@ impl<'ir> Codegen<'ir> {
 
         comment!(self);
 
-        self.current_function_args_offsets = Some(function_args_offsets);
+        self.arg_offsets = Some(function_args_offsets);
         for opcode in function.code {
             self.compile_opcode(opcode);
         }
-        self.current_function_args_offsets = None;
+        self.arg_offsets = None;
         comment!(self, "Function Epilogue");
         asm!(self, "  movq %rbp, %rsp");
         asm!(self, "  popq %rbp");
@@ -135,6 +154,7 @@ impl<'ir> Codegen<'ir> {
                 result,
                 is_variadic,
             } => {
+                // TODO: Check for the function return value size.
                 comment!(self, "Function call");
                 let register_args = args.iter().take(CALL_REGISTERS.len());
 
@@ -151,46 +171,66 @@ impl<'ir> Codegen<'ir> {
                     asm!(self, "  movb $0, %al"); // SysV requires to put amount of floating point arguments into %al when calling variadic function
                 }
                 self.call_arg(callee);
-                asm!(self, "  movq %rax, -{}(%rbp)", result);
+                if let Some(result) = result {
+                    let ret_arg = Rax.lower_bytes_register(result.size());
+                    self.store_reg_to_lvalue(ret_arg, result);
+                }
             }
             Opcode::Binop {
                 left,
                 right,
-                destination: result,
+                result,
                 kind,
             } => {
                 comment!(self, "Binop ({})", kind.to_ast_binop().operator());
 
                 match kind {
                     Binop::Integer(IntegerBinop { signed, size, kind }) => {
-                        self.load_arg_to_reg(left, Rax);
-                        self.load_arg_to_reg(right, Rcx);
+                        if !*signed {
+                            todo!("Unsigned integer binop")
+                        }
+                        assert_same!(
+                            "Binop::Integer: Result size and operation size must be the same",
+                            *size,
+                            result.size()
+                        );
+                        let size = assert_same!(
+                            "Binop::Integer: Operands' sizes must be the same",
+                            left.size(),
+                            right.size(),
+                        );
+                        // Left hand side: Rax appropriate bytes, Right hand side: Rcx appropriate bytes.
+                        let lhs = Rax.lower_bytes_register(size);
+                        let rhs = Rcx.lower_bytes_register(size);
+                        let p = lhs.prefix();
+                        self.load_arg_to_reg(left, lhs);
+                        self.load_arg_to_reg(right, rhs);
                         match kind {
                             BinopKind::Arithmetic(c) => {
                                 use ArithmeticKind::*;
                                 match c {
-                                    Addition => asm!(self, "  addq %rcx, %rax"),
-                                    Subtraction => asm!(self, "  subq %rcx, %rax"),
-                                    Multiplication => asm!(self, "  imulq %rcx, %rax"),
+                                    Addition => asm!(self, "  add{p} {rhs}, {lhs}"),
+                                    Subtraction => asm!(self, "  sub{p} {rhs}, {lhs}"),
+                                    Multiplication => asm!(self, "  imul{p} {rhs}, {lhs}"),
                                     Division => {
                                         asm!(self, "  cqto");
-                                        asm!(self, "  idivq %rcx");
+                                        asm!(self, "  idiv{p} {rhs}");
                                     }
                                 }
-                                asm!(self, "  movq %rax, -{result}(%rbp)");
+                                self.store_reg_to_lvalue(lhs, result);
                             }
                             BinopKind::Ordering(c) => {
-                                asm!(self, "  cmpq %rcx, %rax");
+                                asm!(self, "  cmp{p} {rhs}, {lhs}");
                                 use OrderingKind::*;
                                 match c {
-                                    Equality => asm!(self, "  sete %al"),
-                                    Inequality => asm!(self, "  setne %al"),
-                                    GreaterThan => asm!(self, "  setg %al"),
-                                    GreaterEq => asm!(self, "  setge %al"),
-                                    LessThan => asm!(self, "  setl %al"),
-                                    LessEq => asm!(self, "  setle %al"),
+                                    Equality => asm!(self, "  sete {Al}"),
+                                    Inequality => asm!(self, "  setne {Al}"),
+                                    GreaterThan => asm!(self, "  setg {Al}"),
+                                    GreaterEq => asm!(self, "  setge {Al}"),
+                                    LessThan => asm!(self, "  setl {Al}"),
+                                    LessEq => asm!(self, "  setle {Al}"),
                                 }
-                                asm!(self, "  movb %al, -{result}(%rbp)");
+                                self.store_reg_to_lvalue(Al, result);
                             }
                         }
                     }
@@ -208,37 +248,39 @@ impl<'ir> Codegen<'ir> {
                             BitwiseKind::Or => asm!(self, "  or{p} {Al}, {Bl}"),
                             BitwiseKind::And => asm!(self, "  and{p} {Al}, {Bl}"),
                         }
-                        asm!(self, "mov{p} {Bl}, -{result}(%rbp)");
+                        self.store_reg_to_lvalue(Bl, result);
                     }
                 }
             }
 
-            Opcode::Negate {
-                destination: result,
-                item,
-            } => {
+            Opcode::Negate { result, item } => {
+                let size = assert_same!(
+                    "Opcode::Negate: destination and source cannot have different sizes",
+                    result.size(),
+                    item.size()
+                );
                 comment!(self, "Negate");
-                self.load_arg_to_reg(item, Rax);
-                asm!(self, "  negq %rax");
-                asm!(self, "  movq %rax, -{result}(%rbp)");
+                let reg = Rax.lower_bytes_register(size);
+                let p = reg.prefix();
+                self.load_arg_to_reg(item, reg);
+                asm!(self, "  neg{p} {reg}");
+                self.store_reg_to_lvalue(reg, result);
             }
-            Opcode::Assign {
-                destination: result,
-                source: item,
-            } => {
+            Opcode::Assign { result, source } => {
+                let size = assert_same!(
+                    "Opcode::Asign: result & source must have the same size",
+                    result.size(),
+                    source.size(),
+                );
                 comment!(self, "Assign");
-                let register = match item.size() {
-                    8 => Rax, // TODO: introduce function for this.
-                    1 => Al,
-                    _ => unreachable!("unsupported size of operation"),
-                };
-                let p = register.prefix();
-                self.load_arg_to_reg(item, register);
-                asm!(self, "  mov{p} {register}, -{result}(%rbp)");
+                let reg = Rax.lower_bytes_register(size);
+                self.load_arg_to_reg(source, reg);
+                self.store_reg_to_lvalue(reg, result);
             }
             Opcode::Return(ret) => {
                 if let Some(ret) = ret {
-                    self.load_arg_to_reg(ret, Rax);
+                    let reg = Rax.lower_bytes_register(ret.size());
+                    self.load_arg_to_reg(ret, reg);
                 }
                 asm!(self, "  movq %rbp, %rsp");
                 asm!(self, "  popq %rbp");
@@ -249,11 +291,7 @@ impl<'ir> Codegen<'ir> {
             }
             Opcode::JmpIfNot { label, condition } => {
                 comment!(self, "JmpIfNot");
-                let reg = match condition.size() {
-                    8 => Rax,
-                    1 => Al,
-                    _ => unreachable!("unsupported size of operation"),
-                };
+                let reg = Rax.lower_bytes_register(condition.size());
                 let p = reg.prefix();
                 self.load_arg_to_reg(condition, reg);
                 asm!(self, "  test{p} {reg}, {reg}");
@@ -263,55 +301,46 @@ impl<'ir> Codegen<'ir> {
                 comment!(self, "Jmp");
                 asm!(self, "  jmp .label_{label}");
             }
-            Opcode::AddressOf {
-                destination: result,
-                lvalue,
-            } => {
+            Opcode::AddressOf { result, source } => {
+                assert_same!(
+                    "Opcode::AddressOf: Could not store adress into lvalue with size different from 8",
+                    result.size(),
+                    8
+                );
                 comment!(self, "AddressOf");
-                match lvalue {
-                    Arg::Bool(_) | Arg::Int64 { .. } | Arg::String { .. } => panic!(
-                        "COMPILER BUG: Could not take address of r-value. Typechecker failed."
-                    ),
-                    Arg::ExternalFunction(_) => todo!("Indirect functions"),
-
-                    Arg::StackOffset { offset, size } => {
-                        asm!(self, "  leaq -{offset}(%rbp), {Rax}");
-                        self.store_reg_to_lvalue(*result, Rax)
-                    }
-                    Arg::Argument { index, size } => {
-                        let offset = self.current_function_args_offsets.as_ref().unwrap()[*index];
-                        asm!(self, "  leaq -{offset}(%rbp), {Rax}");
-                        self.store_reg_to_lvalue(*result, Rax)
-                    }
-                }
+                asm!(
+                    self,
+                    "  leaq {lvalue}, {Rax}",
+                    lvalue = DisplayLValue(
+                        *source,
+                        &self
+                            .arg_offsets
+                            .as_ref()
+                            .expect("COMPILER BUG: Codegen: no current function")
+                    )
+                );
+                self.store_reg_to_lvalue(Rax, result)
             }
-            Opcode::Store {
-                destination,
-                source,
-            } => {
+            Opcode::Store { result, source } => {
                 comment!(self, "Store");
                 let val_reg = Rax.lower_bytes_register(source.size());
                 let p = val_reg.prefix();
                 self.load_arg_to_reg(source, val_reg);
-                self.load_arg_to_reg(&destination.to_arg(), Rcx);
+                self.load_arg_to_reg(&Arg::LValue(*result), Rcx);
                 asm!(self, "  mov{p} {val_reg}, ({Rcx})");
             }
-            Opcode::Load {
-                destination,
-                source,
-            } => {
+            Opcode::Load { result, source } => {
                 comment!(self, "Load");
-                assert_eq!(
+                let size = assert_same!(
+                    format!("Could not dereference {e} byte adress", e = source.size()),
                     source.size(),
-                    8,
-                    "COMPILER BUG: Could not dereference {e} byte address",
-                    e = source.size()
+                    8
                 );
-                let reg = Rax.lower_bytes_register(source.size());
+                let reg = Rax.lower_bytes_register(size);
                 let p = reg.prefix();
                 self.load_arg_to_reg(source, Rax);
                 asm!(self, "  mov{p} ({Rax}), {reg}");
-                self.store_reg_to_lvalue(*destination, reg);
+                self.store_reg_to_lvalue(reg, result);
             }
         }
         comment!(self);
@@ -324,6 +353,12 @@ impl<'ir> Codegen<'ir> {
         }
         self.generate_data();
         self.output
+    }
+
+    fn arg_offsets(&self) -> &Vec<usize> {
+        self.arg_offsets
+            .as_ref()
+            .expect("COMPILER BUG: Codegen: trying to access unexisting function argument.")
     }
 
     fn generate_data(&mut self) {
@@ -342,7 +377,7 @@ impl<'ir> Codegen<'ir> {
 
     fn call_arg(&mut self, arg: &Arg<'ir>) {
         match arg {
-            Arg::ExternalFunction(name) => {
+            Arg::RValue(Rvalue::ExternalFunction(name)) => {
                 let name = if self.pic {
                     format!("{}@PLT", name.name)
                 } else {
@@ -359,92 +394,116 @@ impl<'ir> Codegen<'ir> {
 }
 
 impl<'ir> Codegen<'ir> {
-    // TODO: Factor out common logic between load_arg_to_reg() and push_arg()
-
-    pub fn store_reg_to_lvalue(&mut self, lvalue: Lvalue, reg: Register) {
-        let p = reg.prefix();
-        match lvalue {
-            Lvalue::StackOffset { offset, size } => {
-                asm!(self, "  mov{p} {reg},  -{offset}(%rbp)")
-            }
-            Lvalue::Argument { index, size } => {
-                let offset = self
-                    .current_function_args_offsets
-                    .as_ref()
-                    .expect("COMPILER BUG: Invalid Argument Lvalue")[index];
-                asm!(self, "  mov{p} {reg},  -{offset}(%rbp)")
-            }
+    pub fn store_reg_to_lvalue(&mut self, reg: Register, lvalue: &Lvalue) {
+        if reg.size() == 0 || lvalue.size() == 0 {
+            assert_same!("", reg.size(), lvalue.size(), 0);
+            return;
         }
+        let p = reg.prefix();
+        let lvalue = DisplayLValue(*lvalue, self.arg_offsets()).to_string();
+        asm!(self, "  mov{p} {reg}, {lvalue}");
     }
     pub fn load_arg_to_reg(&mut self, arg: &Arg<'ir>, reg: Register) {
+        if arg.size() == 0 || reg == VoidReg {
+            assert!(arg.size() == 0 && reg == VoidReg);
+            return;
+        };
+
         let p = reg.prefix();
+        let offsets = self.arg_offsets();
         match arg {
-            Arg::Int64 { bits, signed } => {
-                assert!(signed, "TODO: Unsigned."); // TODO
-                let value = i64::from_le_bytes(*bits);
-                asm!(self, "  mov{p} ${}, {reg}", value);
-            }
-            Arg::Bool(bool) => {
-                asm!(self, "  mov{p} ${}, {reg}", *bool as i32);
-            }
-            Arg::ExternalFunction(name) => {
-                if self.pic {
-                    asm!(self, "  mov{p} {}@GOTPCREL(%rip), {reg}", name.name)
+            Arg::RValue(rvalue) => {
+                let display = DisplayRValue(rvalue, self.pic);
+
+                // Unfortunately strings are annoying in PIC and need to be handled separately.
+                let instruction = if rvalue.is_string() && self.pic {
+                    "lea"
                 } else {
-                    asm!(self, "  mov{p} {}, {reg}", name.name,);
-                }
+                    "mov"
+                };
+                asm!(self, "  {instruction}{p} {display}, {reg}");
             }
-            Arg::StackOffset { offset, size } => {
-                asm!(self, "  mov{p} -{offset}(%rbp), {reg}");
-            }
-            Arg::String { index } => {
-                if self.pic {
-                    asm!(self, "  lea{p} .STR{index}(%rip), {reg}")
-                } else {
-                    asm!(self, "  mov{p} $.STR{index}, {reg}")
-                }
-            }
-            Arg::Argument { index, size } => {
-                let offset = self.current_function_args_offsets.as_ref().unwrap()[*index];
-                asm!(self, "  mov{p} -{offset}(%rbp), {reg}");
+            Arg::LValue(lvalue) => {
+                let display = DisplayLValue(*lvalue, offsets).to_string();
+                asm!(self, "  mov{p} {display}, {reg}")
             }
         }
     }
 
     fn push_arg(&mut self, arg: &Arg<'ir>) {
+        if arg.size() == 0 {
+            return;
+        };
         let p = Register::prefix_from_size(arg.size());
+        let offsets = self.arg_offsets();
         match arg {
-            Arg::Int64 { bits, signed } => {
-                assert!(signed, "TODO: Unsigned."); // TODO
-                let value = i64::from_le_bytes(*bits);
-                asm!(self, "  push{p} ${}", value);
-            }
-            Arg::Bool(bool) => {
-                asm!(self, "  push{p} ${}", *bool as i32);
-            }
-            Arg::ExternalFunction(name) => {
-                let name = name.name;
-                if self.pic {
-                    asm!(self, "  push{p} {name}@GOTPCREL(%rip)")
-                } else {
-                    asm!(self, "  push{p} {name}");
+            Arg::RValue(rvalue) => {
+                let display = DisplayRValue(rvalue, self.pic);
+                match rvalue {
+                    // Unfortunately strings are annoying in PIC and need to be handled separately.
+                    Rvalue::String { .. } => {
+                        if self.pic {
+                            asm!(self, "  lea{p} {display}, {Rax}");
+                            asm!(self, "  push{p} {Rax}")
+                        } else {
+                            asm!(self, "  push{p} {display}");
+                        }
+                    }
+                    _ => {
+                        asm!(self, "  push{p} {display}");
+                    }
                 }
             }
-            Arg::StackOffset { offset, size } => {
-                asm!(self, "  push{p} -{offset}(%rbp)");
-            }
-            Arg::String { index } => {
-                if self.pic {
-                    asm!(self, "  lea{p} .STR{index}(%rip), {Rax}");
-                    asm!(self, "  push{p} {Rax}")
-                } else {
-                    asm!(self, "  push{p} $.STR{index}")
-                }
-            }
-            Arg::Argument { index, size } => {
-                let offset = self.current_function_args_offsets.as_ref().unwrap()[*index];
-                asm!(self, "  push{p} -{offset}(%rbp)");
+            Arg::LValue(lvalue) => {
+                let display = DisplayLValue(*lvalue, offsets).to_string();
+                asm!(self, "  push{p} {display}");
             }
         }
+    }
+}
+
+struct DisplayLValue<'a>(pub Lvalue, pub &'a Vec<usize>);
+
+// Bool: PIC
+impl<'a> Display for DisplayLValue<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let DisplayLValue(lvalue, offsets) = self;
+        let offset = match lvalue {
+            Lvalue::StackOffset { offset, .. } => *offset,
+            Lvalue::Argument { index, .. } => offsets[*index],
+        };
+        write!(f, "-{offset}(%rbp)")?;
+        Ok(())
+    }
+}
+
+struct DisplayRValue<'a>(&'a Rvalue<'a>, bool);
+impl<'a> Display for DisplayRValue<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let Self(rvalue, pic) = self;
+        match rvalue {
+            Rvalue::Void => panic!(
+                "COMPILER BUG: Codegen: DisplayRValue should never be called on Rvalue::Void"
+            ),
+            Rvalue::Bool(bool) => write!(f, "${}", *bool as i32)?,
+            Rvalue::Int64 { bits, signed } => {
+                match *signed {
+                    true => write!(f, "${}", i64::from_le_bytes(*bits))?,
+                    false => write!(f, "${}", u64::from_le_bytes(*bits))?,
+                };
+            }
+            Rvalue::String { index } => {
+                match *pic {
+                    true => write!(f, ".STR{index}(%rip)")?,
+                    false => write!(f, "$.STR{index}")?,
+                };
+            }
+            Rvalue::ExternalFunction(name) => match *pic {
+                true => write!(f, "{}@GOTPCREL(%rip)", name.name)?,
+                false => write!(f, "{}", name.name)?,
+            },
+        };
+
+        Ok(())
     }
 }

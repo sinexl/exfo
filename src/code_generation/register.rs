@@ -2,8 +2,10 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Register {
+    // Imaginary "void" register
+    VoidReg,
     // General purpose registers
-    // Call registers
+    // Function Parameter registers
     Rdi,
     Rsi,
     Rdx,
@@ -46,6 +48,7 @@ impl Register {
                 offset: _offset,
                 size,
             } => *size,
+            VoidReg => 0
         }
     }
     pub fn prefix(&self) -> &'static str {
@@ -57,12 +60,14 @@ impl Register {
         match size {
             8 => "q",
             1 => "b",
+
             _ => panic!("invalid register size"),
         }
     }
     // TODO: Smarter way of declaring registers and their lower bits registers
     pub fn lower_bytes_register(&self, bytes: usize) -> Register {
         use Register::*;
+        if bytes == 0  { return VoidReg; }
         if self.size() != 8 {
             panic!("Only general-purpose 64-bit registers (excluding Rbp are supported)")
         }
@@ -100,7 +105,7 @@ impl Register {
                 1 => R9b,
                 _ => panic!("invalid register size"),
             }, // Al | Bl | Rbp =>
-            Dil | Sil | Dl | Cl | R8b | R9b | Al | Bl | Rbp { .. } => {
+            Dil | Sil | Dl | Cl | R8b | R9b | Al | Bl | Rbp { .. } | VoidReg => {
                 panic!("Only general-purpose 64-bit registers (excluding Rbp are supported)")
             }
         }
@@ -137,6 +142,7 @@ impl Display for Register {
                 Register::Cl => "%cl".into(),
                 Register::R8b => "%r8b".into(),
                 Register::R9b => "%r9b".into(),
+                Register::VoidReg => panic!("COMPILER BUG: Display should never be called on void 'register'")
             }
         )
     }

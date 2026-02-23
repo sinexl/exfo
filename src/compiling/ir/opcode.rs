@@ -7,22 +7,22 @@ pub enum Opcode<'ir> {
     Binop {
         left: Arg<'ir>,
         right: Arg<'ir>,
-        destination: usize,
+        result: Lvalue,
         kind: Binop,
     },
     Negate {
-        destination: usize,
+        result: Lvalue,
         item: Arg<'ir>,
     },
     AddressOf {
-        destination: Lvalue,
-        // Must be lvalue
-        lvalue: Arg<'ir>,
+        result: Lvalue,
+        source: Lvalue,
     },
 
     // Control Flow
     FunctionCall {
-        result: usize,
+        // Return value of the function (None means function returns void)
+        result: Option<Lvalue>,
         callee: Arg<'ir>,
         args: &'ir [Arg<'ir>],
         is_variadic: bool,
@@ -39,70 +39,86 @@ pub enum Opcode<'ir> {
     },
     Return(Option<Arg<'ir>>),
 
-
     // Writes
+    // a = b.
     Assign {
-        destination: usize,
+        result: Lvalue,
         source: Arg<'ir>,
     },
-    // Dereference assign
+    // Dereference assign (Store)
+    // *result = source;
     Store {
         // Offset in memory containing address.
-        destination: Lvalue,
+        result: Lvalue,
         source: Arg<'ir>,
     },
+    // Load.
+    // result = *source;
     Load {
-        destination: Lvalue,
+        result: Lvalue,
         source: Arg<'ir>,
-    }
-}
-
-// TODO #3: Split the Arg enum into Rvalue & Lvalue. For now, there will be extra redundant "copy" of StackOffset & Argument
-#[derive(Clone, Copy, Debug)]
-pub enum Lvalue {
-    StackOffset { offset: usize, size: usize } ,
-    Argument{ index: usize,  size: usize },
+    },
 }
 
 impl<'ir> Lvalue {
-    pub fn to_arg(self) -> Arg<'ir> {
-        match self {
-            Lvalue::StackOffset { offset, size } => Arg::StackOffset { offset, size },
-            Lvalue::Argument { index, size } => Arg::Argument {index, size },
-        }
-    }
-
     pub fn size(self) -> usize {
         match self {
             Lvalue::StackOffset { size, .. } => size,
-            Lvalue::Argument { size, .. } => size
+            Lvalue::Argument { size, .. } => size,
+        }
+    }
+}
+
+impl Rvalue<'_> {
+    pub fn size(&self) -> usize {
+        match self {
+            Rvalue::Void => 0,
+            Rvalue::Bool(_) => 1,
+            Rvalue::Int64 { .. } => 8,
+            Rvalue::String { .. } => 8,
+            Rvalue::ExternalFunction(_) => 8,
+        }
+    }
+    // needed because strings differ from other args depending on PIC/non-pic, just to make code simpler.
+    pub fn is_string(&self) -> bool {
+        if let Rvalue::String { .. } = self {
+            true
+        } else {
+            false
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum Arg<'ir> {
+    LValue(Lvalue),
+    RValue(Rvalue<'ir>),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Lvalue {
+    StackOffset { offset: usize, size: usize },
+    //         Index in Codegen::arg_offsets.
+    Argument { index: usize, size: usize },
+}
+
+#[derive(Clone, Debug)]
+pub enum Rvalue<'ir> {
+    // Nothing. Needed for the functions returning void.
+    Void,
+
     Bool(bool),
     Int64 { bits: [u8; 8], signed: bool },
     String { index: usize }, // Index is in ir.strings
     ExternalFunction(Identifier<'ir>),
-
-    // TODO: Utilize StackOffset::size and Argument::size
-    StackOffset { offset: usize, size: usize },
-
-    // Stores argument index (counting from 0) and size of the argument
-    Argument { index: usize, size: usize },
 }
 
 impl Arg<'_> {
     pub fn size(&self) -> usize {
         match self {
-            Arg::Bool(_) => 1,
-            Arg::Int64 { .. } => 8,
-            Arg::String { .. } => 8,
-            Arg::ExternalFunction(_) => 8,
-            Arg::StackOffset { size, .. } => *size,
-            Arg::Argument { index: _, size } => *size,
+            Arg::RValue(rvalue) => rvalue.size(),
+
+            Arg::LValue(lvalue) => lvalue.size(),
         }
     }
 }

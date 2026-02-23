@@ -1,6 +1,6 @@
 use crate::analysis::get_at::GetAt;
-use crate::analysis::r#type::{FunctionType, Type, TypeId};
 use crate::analysis::resolver::Resolutions;
+use crate::analysis::r#type::{FunctionType, Type, TypeId};
 use crate::analysis::type_context::TypeCtx;
 use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
@@ -11,9 +11,9 @@ use crate::common::{BumpVec, Stack};
 use crate::compiling::ir::binop;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
-use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode};
-use bumpalo::collections::CollectIn;
+use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
 use bumpalo::Bump;
+use bumpalo::collections::CollectIn;
 use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'ast, 'types> {
@@ -23,7 +23,7 @@ pub struct Compiler<'ir, 'ast, 'types> {
 
     // Compiler state
     current_function: Option<BumpVec<'ir, Opcode<'ir>>>,
-    variables: Stack<HashMap<&'ast str, Variable>>,
+    entities: Stack<HashMap<&'ast str, Entity>>,
     loops: HashMap<usize, While>,
     stack_size: StackSize,
     label_count: usize,
@@ -37,10 +37,15 @@ pub struct Compiler<'ir, 'ast, 'types> {
 }
 
 #[derive(Debug, Copy, Clone)]
-struct Variable {
+struct Entity {
     ty: TypeId,
-    stack_offset: usize, // TODO #2: variable location should not be strictly tied to stack offset.
-    param_index: Option<usize>,
+    kind: EntityKind,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum EntityKind {
+    Local(Lvalue),
+    Function,
 }
 
 #[derive(Copy, Clone)]
@@ -74,7 +79,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
             current_function: None,
             stack_size: StackSize::zero(),
             resolutions,
-            variables: Stack::new(),
+            entities: Stack::new(),
             label_count: 0,
             loops: Default::default(),
             bucket: None,
@@ -86,12 +91,22 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
 }
 
 impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
-    pub fn allocate_on_stack(&mut self, size: usize) -> usize {
+    pub fn allocate(&mut self, size: usize) -> Lvalue {
+        if let Some(bucket) = self.bucket.take_if(|e| e.size() == size) {
+            return bucket;
+        }
+
+        self.allocate_on_stack(size)
+    }
+    pub fn allocate_on_stack(&mut self, size: usize) -> Lvalue {
         self.stack_size.count += size;
         if self.stack_size.count >= self.stack_size.max {
             self.stack_size.max = self.stack_size.count;
         }
-        self.stack_size.count
+        Lvalue::StackOffset {
+            offset: self.stack_size.count,
+            size,
+        }
     }
     // This functions allocates a label but doesn't place it anywhere.
     // To place label, Op::Label is used.
@@ -104,125 +119,119 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
     pub fn compile_expression(&mut self, expression: &Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind }
-                if kind.family() == BinopFamily::Logical =>
-            {
-                let size = expression.ty.get(self.types()).size();
-                assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
-                let left = self.compile_expression(left);
-                let destination = self.allocate_on_stack(size);
-                match kind {
-                    BinopKind::And => {
-                        /*
-                        Scheme of AND in IR that is implemented below.
-                        suppose pseudocode: res = a && b; after;
-                        generated pseudo-IR:
-                          a.
-                          if !a jump FALSE:
-                             b;
-                             res = a && b;
-                             jump out
-                          FALSE:
-                             res = false
-                          out:
-                            after;
-                        */
-                        let short_circuit = self.allocate_label();
-                        // Cases: if lhs is false, jump to do_check.
-                        self.push_opcode(Opcode::JmpIfNot {
-                            label: short_circuit,
-                            condition: left.clone(),
-                        });
+            if kind.family() == BinopFamily::Logical =>
+                {
+                    let size = expression.ty.get(self.types()).size();
+                    assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
+                    let left = self.compile_expression(left);
+                    let result = self.allocate(size);
+                    match kind {
+                        BinopKind::And => {
+                            /*
+                            Scheme of AND in IR that is implemented below.
+                            suppose pseudocode: res = a && b; after;
+                            generated pseudo-IR:
+                              a.
+                              if !a jump FALSE:
+                                 b;
+                                 res = a && b;
+                                 jump out
+                              FALSE:
+                                 res = false
+                              out:
+                                after;
+                            */
+                            let short_circuit = self.allocate_label();
+                            // Cases: if lhs is false, jump to do_check.
+                            self.push_opcode(Opcode::JmpIfNot {
+                                label: short_circuit,
+                                condition: left.clone(),
+                            });
 
-                        // Case 1: `a` is true, so b should be evaluated.
-                        let right = self.compile_expression(right);
-                        self.push_opcode(Opcode::Binop {
-                            left,
-                            right,
-                            destination,
-                            kind: Binop::Bitwise(BitwiseBinop {
-                                kind: BitwiseKind::And,
-                                is_logical_with_short_circuit: true,
-                            }),
-                        });
-                        let out_label = self.allocate_label();
-                        self.push_opcode(Opcode::Jmp { label: out_label });
+                            // Case 1: `a` is true, so b should be evaluated.
+                            let right = self.compile_expression(right);
+                            self.push_opcode(Opcode::Binop {
+                                left,
+                                right,
+                                result,
+                                kind: Binop::Bitwise(BitwiseBinop {
+                                    kind: BitwiseKind::And,
+                                    is_logical_with_short_circuit: true,
+                                }),
+                            });
+                            let out_label = self.allocate_label();
+                            self.push_opcode(Opcode::Jmp { label: out_label });
 
-                        // Case 2: `a` is false, so && is false.
-                        self.push_opcode(Opcode::Label {
-                            index: short_circuit,
-                        });
-                        self.push_opcode(Opcode::Assign {
-                            destination,
-                            source: Arg::Bool(false),
-                        });
-                        self.push_opcode(Opcode::Label { index: out_label });
+                            // Case 2: `a` is false, so && is false.
+                            self.push_opcode(Opcode::Label {
+                                index: short_circuit,
+                            });
+                            self.push_opcode(Opcode::Assign {
+                                result,
+                                source: Arg::RValue(Rvalue::Bool(false)),
+                            });
+                            self.push_opcode(Opcode::Label { index: out_label });
 
-                        Arg::StackOffset {
-                            offset: destination,
-                            size,
+                            Arg::LValue(result)
                         }
-                    }
-                    BinopKind::Or => {
-                        /*
-                        Scheme of OR in IR:
-                        suppose pseudocode: res = a || b; after;
-                        generated pseudo-IR:
-                          a.
-                          if !a jump check
-                             res = true
-                             jump out
-                          check:
-                             b;
-                             res = a || b;
-                          out:
-                            after;
-                        */
-                        let do_check = self.allocate_label();
-                        // Cases: if lhs is false, jump to do_check.
-                        self.push_opcode(Opcode::JmpIfNot {
-                            label: do_check,
-                            condition: left.clone(),
-                        });
-                        // Case one: The lhs is true, so entire || is true.
-                        self.push_opcode(Opcode::Assign {
-                            destination,
-                            source: Arg::Bool(true),
-                        });
-                        let out_label = self.allocate_label();
-                        self.push_opcode(Opcode::Jmp { label: out_label });
+                        BinopKind::Or => {
+                            /*
+                            Scheme of OR in IR:
+                            suppose pseudocode: res = a || b; after;
+                            generated pseudo-IR:
+                              a.
+                              if !a jump check
+                                 res = true
+                                 jump out
+                              check:
+                                 b;
+                                 res = a || b;
+                              out:
+                                after;
+                            */
+                            let do_check = self.allocate_label();
+                            // Cases: if lhs is false, jump to do_check.
+                            self.push_opcode(Opcode::JmpIfNot {
+                                label: do_check,
+                                condition: left.clone(),
+                            });
+                            // Case one: The lhs is true, so entire || is true.
+                            self.push_opcode(Opcode::Assign {
+                                result,
+                                source: Arg::RValue(Rvalue::Bool(true)),
+                            });
+                            let out_label = self.allocate_label();
+                            self.push_opcode(Opcode::Jmp { label: out_label });
 
-                        // Case two: The lhs is false, so rhs should be also evaluated to complete ||.
-                        self.push_opcode(Opcode::Label { index: do_check });
-                        let right = self.compile_expression(right);
-                        self.push_opcode(Opcode::Binop {
-                            left,
-                            right,
-                            destination,
-                            kind: Binop::Bitwise(BitwiseBinop {
-                                kind: BitwiseKind::Or,
-                                is_logical_with_short_circuit: true,
-                            }),
-                        });
+                            // Case two: The lhs is false, so rhs should be also evaluated to complete ||.
+                            self.push_opcode(Opcode::Label { index: do_check });
+                            let right = self.compile_expression(right);
+                            self.push_opcode(Opcode::Binop {
+                                left,
+                                right,
+                                result,
+                                kind: Binop::Bitwise(BitwiseBinop {
+                                    kind: BitwiseKind::Or,
+                                    is_logical_with_short_circuit: true,
+                                }),
+                            });
 
-                        self.push_opcode(Opcode::Label { index: out_label });
-                        Arg::StackOffset {
-                            offset: destination,
-                            size,
+                            self.push_opcode(Opcode::Label { index: out_label });
+                            Arg::LValue(result)
                         }
+                        _ => unreachable!("Unknown binary operation"),
                     }
-                    _ => unreachable!("Unknown binary operation"),
                 }
-            }
 
             ExpressionKind::Binop { left, right, kind } => {
                 let size = expression.ty.get(self.types()).size();
                 let left = self.compile_expression(left);
                 let right = self.compile_expression(right);
-                let offset = self.allocate_on_stack(size);
+                let result = self.allocate(size);
                 self.push_opcode(Opcode::Binop {
                     left,
                     right,
-                    destination: offset,
+                    result,
                     kind: match kind.family() {
                         BinopFamily::Arithmetic | BinopFamily::Ordering => {
                             //                         TODO: Unsigned
@@ -233,7 +242,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                         }
                     },
                 });
-                Arg::StackOffset { offset, size }
+                Arg::LValue(result)
             }
 
             ExpressionKind::Unary { item, operator } => {
@@ -242,106 +251,88 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 match operator {
                     UnaryKind::Negation => {
                         let size = ty.get(self.types()).size();
-                        let result = self.allocate_on_stack(size);
-                        self.push_opcode(Opcode::Negate {
-                            item,
-                            destination: result,
-                        });
-                        Arg::StackOffset {
-                            offset: result,
-                            size,
-                        }
+                        let result = self.allocate(size);
+                        self.push_opcode(Opcode::Negate { item, result });
+                        Arg::LValue(result)
                     }
                     UnaryKind::Dereferencing => {
                         let size = ty.get(self.types()).size();
-                        let result = self.allocate_on_stack(size);
-                        let result = Lvalue::StackOffset {
-                            offset: result,
-                            size,
-                        };
+                        let result = self.allocate(size);
                         self.push_opcode(Opcode::Load {
-                            destination: result,
+                            result,
                             source: item,
                         });
-
-                        result.to_arg()
+                        Arg::LValue(result)
                     }
                     UnaryKind::AddressOf => {
                         let size = 8;
-                        let result: Lvalue =
-                            if let Some(lvalue) = self.bucket.take_if(|e| e.size() == 8) {
-                                lvalue
-                            } else {
-                                Lvalue::StackOffset {
-                                    offset: self.allocate_on_stack(size),
-                                    size,
-                                }
-                            };
+                        let result = self.allocate(size);
+                        let item = match item {
+                            Arg::LValue(e) => e,
+                            Arg::RValue(_) => panic!(
+                                "COMPILER BUG: Could not take address of rvalue. This should have been handled by Type Checker."
+                            ),
+                        };
                         self.push_opcode(Opcode::AddressOf {
-                            destination: result,
-                            lvalue: item.clone(),
+                            result,
+                            source: item,
                         });
 
-                        result.to_arg()
+                        Arg::LValue(result)
                     }
                 }
             }
             ExpressionKind::Assignment { target, value } => {
                 // Deref assignment.
+                // *target = value
                 if let ExpressionKind::Unary { item, operator } = &target.kind
                     && *operator == UnaryKind::Dereferencing
                 {
-                    let size = item.ty.get(self.types()).size();
-
-                    // TODO: see TODO #3 (opcode.rs)
                     let result = match self.compile_expression(item) {
-                        Arg::Bool(_)
-                        | Arg::Int64 { .. }
-                        | Arg::String { .. }
-                        | Arg::ExternalFunction(_) => todo!("Proper error handling"),
-                        Arg::StackOffset { offset, size } => Lvalue::StackOffset { offset, size },
-                        Arg::Argument { index, size } => Lvalue::Argument { index, size },
+                        Arg::LValue(e) => e,
+                        Arg::RValue(_) => panic!(
+                            "Could not assign to an rvalue. This should have been handled by Type Checker."
+                        ),
                     };
                     let arg = self.compile_expression(value);
                     self.push_opcode(Opcode::Store {
-                        destination: result,
+                        result,
                         source: arg,
                     });
 
-                    return result.to_arg();
+                    return Arg::LValue(result);
                 }
 
                 // Normal assignment
                 let target = self.compile_expression(target);
                 match target {
-                    Arg::StackOffset { offset, size } => {
-                        let arg = self.compile_expression(value);
-                        self.push_opcode(Opcode::Assign {
-                            destination: offset,
-                            source: arg,
-                        });
-                        Arg::StackOffset { offset, size }
+                    Arg::LValue(result) => {
+                        let source = self.compile_expression(value);
+                        self.push_opcode(Opcode::Assign { result, source });
+                        Arg::LValue(result)
                     }
-                    _ => todo!(),
+                    _ => panic!(
+                        "Could not assign to an rvalue. This should have been handled by Type Checker."
+                    ),
                 }
             }
             ExpressionKind::Literal(l) => {
                 match l {
                     AstLiteral::Integral(i) => {
-                        Arg::Int64 {
+                        Arg::RValue(Rvalue::Int64 {
                             signed: true, // TODO
                             bits: i.to_le_bytes(),
-                        }
+                        })
                     }
                     AstLiteral::FloatingPoint(_) => {
                         todo!("Floats are not supported by compiler yet")
                     }
-                    AstLiteral::Boolean(b) => Arg::Bool(*b),
+                    AstLiteral::Boolean(b) => Arg::RValue(Rvalue::Bool(*b)),
                     AstLiteral::String(s) => {
                         let index = self.ir.strings.len();
                         self.ir.strings.push(self.ir_bump.alloc_str(s));
 
-                        Arg::String { index }
+                        Arg::RValue(Rvalue::String { index })
                     }
                 }
             }
@@ -350,29 +341,19 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     .resolutions
                     .get(expression)
                     .expect("COMPILER BUG: Analysis failed");
-                let var = self.variables.get_at(&n.name, depth);
-                let var_type = var.ty.get(self.types());
-                if let Type::Function(fn_type) = var_type {
-                    Arg::ExternalFunction(n.clone_into(self.ir_bump))
-                } else {
-                    let size = var_type.size();
-                    if let Some(index) = var.param_index {
-                        assert_eq!(var.stack_offset, usize::MAX); // See TODO #2
-                        return Arg::Argument { index, size };
-                    }
-                    Arg::StackOffset {
-                        offset: var.stack_offset,
-                        size,
-                    }
+                let entity = self.entities.get_at(&n.name, depth);
+                match entity.kind {
+                    EntityKind::Local(lvalue) => Arg::LValue(lvalue),
+                    EntityKind::Function => Arg::RValue(Rvalue::ExternalFunction(n.clone_into(self.ir_bump)))
                 }
             }
 
             ExpressionKind::FunctionCall { callee, arguments } => {
                 let (is_variadic, return_size) = if let Type::Function(FunctionType {
-                    is_variadic,
-                    return_type,
-                    ..
-                }) = callee.ty.get(self.types())
+                                                                           parameters,
+                                                                           is_variadic,
+                                                                           return_type,
+                                                                       }) = callee.ty.get(self.types())
                 {
                     (*is_variadic, return_type.inner().get(self.types()).size())
                 } else {
@@ -389,7 +370,11 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     })
                     .collect_in::<BumpVec<_>>(b)
                     .into_bump_slice();
-                let result = self.allocate_on_stack(8); // TODO: Return value size
+                let result = if return_size != 0 {
+                    Some(self.allocate(return_size))
+                } else {
+                    None
+                };
 
                 self.push_opcode(Opcode::FunctionCall {
                     callee,
@@ -397,10 +382,10 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     result,
                     is_variadic,
                 });
-                Arg::StackOffset {
-                    offset: result,
-                    size: 8, // TODO: Return value size
+                if let Some(result) = result {
+                    return Arg::LValue(result);
                 }
+                Arg::RValue(Rvalue::Void)
             }
         }
     }
@@ -423,23 +408,23 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 self.stack_size.count = stack_size;
             }
             StatementKind::FunctionDeclaration(FunctionDeclaration {
-                name,
-                body,
-                parameters,
-                return_type,
-            }) => {
+                                                   name,
+                                                   body,
+                                                   parameters,
+                                                   return_type,
+                                               }) => {
                 self.current_function = Some(BumpVec::new_in(self.ir_bump));
 
-                let parent_scope = self.variables.len() - 1;
+                let parent_scope = self.entities.len() - 1;
 
                 let parameters_types = parameters
                     .iter()
                     .map(|p| p.ty.clone())
                     .collect_in::<BumpVec<_>>(self.types().bump())
                     .into_bump_slice();
-                self.variables[parent_scope].insert(
+                self.entities[parent_scope].insert(
                     name.name,
-                    Variable {
+                    Entity {
                         ty: unsafe {
                             (*self.types).allocate(Type::Function(FunctionType {
                                 return_type: return_type.clone(),
@@ -447,21 +432,23 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                                 is_variadic: false,
                             }))
                         },
-                        stack_offset: 0,
-                        param_index: None,
+                        kind: EntityKind::Function,
                     },
                 );
 
                 let mut sizes = BumpVec::with_capacity_in(parameters.len(), self.ir_bump);
-                self.variables.push(HashMap::new());
-                let function_scope = self.variables.len() - 1;
+                self.entities.push(HashMap::new());
+                let function_scope = self.entities.len() - 1;
                 for (i, param) in parameters.iter().enumerate() {
-                    self.variables[function_scope].insert(
+                    let param_size = param.ty.get(self.types()).size();
+                    self.entities[function_scope].insert(
                         param.name.name,
-                        Variable {
+                        Entity {
                             ty: param.ty.inner(),
-                            stack_offset: usize::MAX,
-                            param_index: Some(i),
+                            kind: EntityKind::Local(Lvalue::Argument {
+                                index: i,
+                                size: param_size,
+                            }),
                         },
                     );
                     sizes.push(param.ty.get(self.types()).size());
@@ -483,18 +470,18 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 );
 
                 self.current_function = None;
-                self.variables.pop();
+                self.entities.pop();
                 self.stack_size = StackSize::zero();
             }
 
             StatementKind::Extern(ExternalFunction {
-                name,
-                kind: _kind,
-                parameters,
-                return_type,
-                is_variadic,
-            }) => {
-                let var = Variable {
+                                      name,
+                                      kind: _kind,
+                                      parameters,
+                                      return_type,
+                                      is_variadic,
+                                  }) => {
+                let var = Entity {
                     ty: unsafe {
                         (*self.types).allocate(Type::Function(FunctionType {
                             return_type: return_type.clone(),
@@ -502,28 +489,27 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                             is_variadic: *is_variadic,
                         }))
                     },
-                    stack_offset: usize::MAX,
-                    param_index: None,
+                    kind: EntityKind::Function,
                 };
-                self.variables
+                self.entities
                     .last_mut()
                     .expect("Compiler bug: there should be at least global scope")
                     .insert(name.name, var);
             }
             StatementKind::Block(statements) => {
-                self.variables.push(HashMap::new());
+                self.entities.push(HashMap::new());
                 let stack_size = self.stack_size.count;
                 for i in *statements {
                     self.compile_statement(i);
                 }
                 self.stack_size.count = stack_size;
-                self.variables.pop();
+                self.entities.pop();
             }
             StatementKind::VariableDeclaration(VariableDeclaration {
-                name,
-                initializer,
-                ty,
-            }) => {
+                                                   name,
+                                                   initializer,
+                                                   ty,
+                                               }) => {
                 let size = ty.get(self.types()).size();
                 let stack_offset = self.allocate_on_stack(size);
                 // To allow shadowing, initializers are compiled before variable is inserted in the compiler tables.
@@ -531,25 +517,21 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 // a := 10;
                 // a := a + 15;
                 if let Some(initializer) = initializer {
-                    self.bucket = Some(Lvalue::StackOffset {
-                        size,
-                        offset: stack_offset,
-                    });
+                    self.bucket = Some(stack_offset);
                     let arg = self.compile_expression(initializer);
                     if self.bucket.is_some() {
                         self.push_opcode(Opcode::Assign {
-                            destination: stack_offset,
+                            result: stack_offset,
                             source: arg,
                         });
                     }
                     self.bucket = None;
                 }
-                let var = Variable {
-                    stack_offset,
+                let var = Entity {
                     ty: ty.inner(),
-                    param_index: None,
+                    kind: EntityKind::Local(stack_offset),
                 };
-                self.variables
+                self.entities
                     .last_mut()
                     .expect("Compiler bug: there should be at least global scope")
                     .insert(name.name, var);
@@ -649,7 +631,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
     }
 
     pub fn compile_statements(&mut self, statements: &[&'ast Statement<'ast, 'types>]) {
-        self.variables.push(HashMap::new());
+        self.entities.push(HashMap::new());
         for statement in statements {
             self.compile_statement(statement);
         }

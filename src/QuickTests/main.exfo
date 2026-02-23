@@ -1,29 +1,82 @@
 extern "C" func printf(char_ptr, ...): void;
-
-func print_i64(a: int): void {
-    printf("%d%c", a, 10);
+extern "C" func memcmp(bool*, bool*, int): int;
+func side(b: bool, message: char_ptr): bool {
+    printf("%s%c", message, 10);
+    return b;
 }
 
 
-func print_bool(b: bool): void {
-    if b printf("true");
-    else printf("false");
-    printf("%c", 10);
+func to_bool(a: int): bool {
+    if a == 0 return false;
+    return true;
+}
+
+func get_string(a: bool): char_ptr {
+    if a { return "true"; }
+    return "false";
 }
 
 
+// This test is meta program-ish but i think it should be like this.
 func main(): int {
-    a := 1;
-    print_i64(a);
-    a := a + 1; // Shadowing
-    print_i64(a);
+    never := "YOU SHOULD NEVER SEE THIS!";
+    always := "you should see this";
+    True := true;
+    False := false;
 
-    a := false; // Changing type
-    print_bool(a);
+    printf("< --- OR Operation (Rhs side effect) --- >%c", 10);
+    i := 0;
+    while i <= 1 {
+        j := 0;
+        while j <= 1 {
+            a := to_bool(i);
+            b := to_bool(j);
 
-    a := 2;
-    a = a + 1; // Mutation
-    print_i64(a);
+            expected := false;
+            if memcmp(&a, &True, 1) == 0 { expected = true; }
+            if memcmp(&b, &True, 1) == 0 { expected = true; }
+
+            message := always;
+            if memcmp(&a, &True, 1) == 0 { message = never; }
+
+            result := a || side(b, message);
+
+            printf("%5s || %5s = %5s (expected %s)%c", get_string(a), get_string(b), get_string(result), get_string(expected), 10);
+
+
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+
+    printf("%c< --- AND Operation (Rhs side effect) --- >%c", 10, 10);
+    i := 0;
+    while i <= 1 {
+        j := 0;
+        while j <= 1 {
+            a := to_bool(i);
+            b := to_bool(j);
+
+            expected := true;
+            if memcmp(&a, &False, 1) == 0 { expected = false; }
+            if memcmp(&b, &False, 1) == 0 { expected = false; }
+
+            message := always;
+            if memcmp(&a, &False, 1) == 0 { message = never; }
+
+            result := a && side(b, message);
+
+            printf("%5s && %5s = %5s (expected %s)%c", get_string(a), get_string(b), get_string(result), get_string(expected), 10);
+
+
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+
+
 
     return 0;
 }
