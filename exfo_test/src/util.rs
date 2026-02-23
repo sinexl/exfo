@@ -2,17 +2,31 @@ use std::fmt::Formatter;
 use std::path::Path;
 use std::{fmt, fs, io};
 
+#[macro_export]
+macro_rules! ensure_exists {
+    ($path:expr, $failure:expr, $($fmt:tt)*) => {
+        $crate::util::ensure_exists_fmt(
+            $path,
+            $failure,
+            format!($($fmt)*),
+        )
+    };
+}
+
 pub fn ensure_compiler_exists<P: AsRef<Path>>(compiler_path: P) -> io::Result<()> {
     let compiler_path = compiler_path.as_ref();
-    if !compiler_path.exists() {
+    ensure_exists!(compiler_path, "Could not find compiler", "Ensure that exfo was built & is located at {}", compiler_path.display())?;
+    Ok(())
+}
+
+pub fn ensure_exists_fmt<P: AsRef<Path>>(path: P, failure: &str, hint: impl Display) -> io::Result<()> {
+    let path = path.as_ref();
+    if !path.exists() {
         eprintln!(
-            "Could not find compiler at {}",
-            compiler_path.to_str().unwrap(),
+            "Error: {failure} at {}",
+            path.to_str().ok_or(io::ErrorKind::NotFound)?,
         );
-        eprintln!(
-            "Ensure that exfo was built and is located at {}",
-            compiler_path.display()
-        );
+        eprintln!("{}", hint);
         Err(io::ErrorKind::NotFound)?;
     }
     Ok(())

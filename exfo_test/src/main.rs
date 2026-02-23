@@ -1,6 +1,8 @@
 mod util;
+mod command;
 
-use crate::util::{DisplayBox, ensure_compiler_exists, remove_dir_contents};
+use crate::command::Subcommand;
+use crate::util::{ensure_compiler_exists, remove_dir_contents, DisplayBox};
 use serde::{Deserialize, Serialize};
 use similar::TextDiff;
 use std::collections::BTreeMap;
@@ -26,11 +28,6 @@ impl TestResult {
     }
 }
 
-#[derive(Debug, Clone)]
-enum Subcommand {
-    Record,
-    Check,
-}
 
 pub const RESET: &str = "\x1b[0m";
 pub const GREEN: &str = "\x1b[32m";
@@ -54,7 +51,7 @@ fn main() -> io::Result<()> {
 
     let mut args = env::args();
     let program_name = args.next().unwrap();
-    let command = parse_command(&mut args);
+    let command = Subcommand::parse(&mut args);
 
     let mut tests: Vec<String> = Vec::new();
     let dir = fs::read_dir(test_folder)?;
@@ -73,6 +70,8 @@ fn main() -> io::Result<()> {
             tests.push(test_case);
         }
     }
+
+    ensure_exists!(json_path, "Could not find recorded test results", "Use `{program_name}` to record tests first")?;
 
     let recorded = fs::read_to_string(json_path)?;
     let recorded: TestResults = serde_json::from_str(&recorded)?;
