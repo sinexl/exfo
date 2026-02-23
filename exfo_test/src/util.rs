@@ -1,7 +1,9 @@
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::{fmt, fs, io};
+use crate::util::colors::RESET;
 
+#[allow(unused)]
 pub mod colors {
     pub const RESET: &str = "\x1b[0m";
     pub const GREEN: &str = "\x1b[32m";
@@ -33,11 +35,11 @@ macro_rules! warning {
 }
 
 #[macro_export]
-macro_rules! error {
+macro_rules! err {
     ($($arg:tt)*) => {{
         use $crate::util::colors::*;
-        eprint!("{RED}ERROR{RESET}: ");
-        eprintln!($($arg)*);
+        print!("{RED}ERR{RESET}: ");
+        println!($($arg)*);
     }};
 }
 
@@ -53,7 +55,7 @@ macro_rules! info {
 pub fn ensure_exists_fmt<P: AsRef<Path>>(path: P, failure: &str, hint: impl Display) -> io::Result<()> {
     let path = path.as_ref();
     if !path.exists() {
-        error!(
+        err!(
             "{failure} at {}",
             path.to_str().ok_or(io::ErrorKind::NotFound)?,
         );
@@ -85,16 +87,20 @@ pub fn remove_dir_contents(path: impl AsRef<Path>) -> io::Result<()> {
     Ok(())
 }
 
-pub struct DisplayBox<T>(pub T) where T: Display;
+pub struct DisplayBox<T>(pub T, pub Option<&'static str>) where T: Display;
 
 impl<T> Display for DisplayBox<T>  where T: Display {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let Self(message) = self;
+        let Self(message, color) = self;
+        let (color, reset) = match color {
+            None => ("", ""),
+            Some(color) => (*color, RESET),
+        };
         let message = message.to_string();
         let len = message.len() * 3 / 2;
-        writeln!(f, "\t┌{}┐", "─".repeat(len))?;
-        writeln!(f, "\t│{:^width$}│", message, width = len)?;
-        writeln!(f, "\t└{}┘", "─".repeat(len))?;
+        writeln!(f, "\t{color}┌{}┐{reset}", "─".repeat(len))?;
+        writeln!(f, "\t{color}│{:^width$}│{reset}", message, width = len)?;
+        writeln!(f, "\t{color}└{}┘{reset}", "─".repeat(len))?;
         Ok(())
     }
 }
