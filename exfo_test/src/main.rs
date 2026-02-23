@@ -167,18 +167,6 @@ fn check_tests(
     diff_folder: impl AsRef<Path>,
 ) -> io::Result<usize> {
     let diff_folder = diff_folder.as_ref();
-    if recorded.len() != got.len() {
-        println!(
-            "{YELLOW}WARNING{RESET}: found {a} testcases than recorded\n\tRecorded: {}\n\tGot: {}",
-            recorded.len(),
-            got.len(),
-            a = if got.len() > recorded.len() {
-                "more"
-            } else {
-                "less"
-            },
-        )
-    }
 
     let max_name_length = recorded.keys().map(|e| e.len()).max().unwrap() + 1;
     let mut failed = 0;
@@ -210,15 +198,20 @@ fn check_tests(
                     remove_dir_contents(diff_folder)?;
                 }
                 failed += 1;
+
+                // needed for pretty-printing on same padding
+                let mut tabulation = "";
                 if expected_code != got_code {
-                    println!("{RED}ERR{RESET}: RETURN CODES DIFFER:");
+                    err!("RETURN CODES DIFFER:");
+                    tabulation = total_tab.as_str();
                     println!(
-                        "{total_tab}GOT({RED}{}{RESET}) != EXPECTED({GREEN}{}{RESET})",
-                        expected_code, got_code,
+                        "{total_tab}{tabulation}GOT({RED}{got_code}{RESET}) != EXPECTED({GREEN}{expected_code}{RESET})",
+                        tabulation = total_tab,
                     );
                 }
                 if expected_stdout != got_stdout {
-                    println!("{RED}ERR{RESET}: OUTPUTS DIFFER");
+                    print!("{tabulation}");
+                    err!("OUTPUTS DIFFER");
                     let path = diff_folder.join(case).with_extension("diff");
                     {
                         let lines =
@@ -231,16 +224,19 @@ fn check_tests(
                         let mut file = OpenOptions::new().create(true).write(true).open(&path)?;
                         file.write_all(diff.as_bytes())?;
                     }
-                    // Put :0:0 because some editors/terminals only recognize <filepath>:<line>:<column>-kind-of format
-                    println!("{total_tab}at {}:1:1", path.display());
+                    // Put :1:1 because some editors/terminals only recognize <filepath>:<line>:<column>-kind-of format
+                    println!("{total_tab}{tabulation}at {}:1:1", path.display());
                 }
             }
             // the last case left: if test was expected to fail, but it executed successfully or vice versa.
             (expected, got) => {
-                failed += 1;  
-                println!("{RED}ERR{RESET}:");
+                if failed == 0 {
+                    remove_dir_contents(diff_folder)?;
+                }
+                failed += 1;
+                err!("");
                 println!(
-                    "{total_tab}expected {} but got {}",
+                    "{total_tab}expected {GREEN}{}{RESET} but got {RED}{}{RESET}",
                     expected.descriptive(),
                     got.descriptive()
                 );
