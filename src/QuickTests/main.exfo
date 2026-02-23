@@ -1,9 +1,58 @@
 extern "C" func printf(char_ptr, ...): void;
-func void(): void {
-    return;
+func get_string(a: bool) {
+    if a return "true";
+    else return "false";
 }
 
-func main(): void {
-    b := void();
-    c := void();
+func reading(
+    _0: int ,
+    _1: int,
+    _2: char_ptr,
+    _3: int,
+    _4: bool,
+    _5: bool*
+): void {
+    // "Spill" all the arguments onto the stack (even though internally compiler already did that)
+    r0 := _0; r1 := _1; r2 := _2;
+    r3 := _3; r4 := _4; r5 := _5;
+    t := true;
+
+
+    printf("  In the function (reading from arguments)%c", 10);
+    printf("    _0 = %d, _1 = %d,    _2 = `%s`%c", _0, _1, _2, 10);
+    printf("    _3 = %d, _4 = %s, _5 = %p (%s)%c", _3, get_string(_4), _5, get_string(*_5), 10);
+
+    // some mutations
+    _0 = (7 + _0) * 2;
+    _1 = _1 - _0;
+    _2 = "X";
+    _3 = _3 * _3 * _3;
+    _4 = _4 && false;
+    _5 = &t;
+
+    printf("  In the function (after mutating)%c", 10);
+    printf("    _0 = %d, _1 = %d,    _2 = `%s`%c", _0, _1, _2, 10);
+    printf("    _3 = %d, _4 = %s, _5 = %p (%s)%c", _3, get_string(_4), _5, get_string(*_5), 10);
+
+    printf("  In the function (copied to the stack)%c", 10);
+    printf("    r0 = %d, r1 = %d,    r2 = `%s`%c", r0, r1, r2, 10);
+    printf("    r3 = %d, r4 = %s, r5 = %p (%s)%c", r3, get_string(r4), r5, get_string(*r5), 10);
+
+}
+
+func main(): int {
+    f := false;
+    m0 := 0; m1 := 1; m2 := "2";
+    m3 := 3; m4 := true; m5 := &f;
+
+    printf("Before function call (main's stack)%c", 10);
+    printf("    m0 = %d, m1 = %d,    m2 = `%s`%c", m0, m1, m2, 10);
+    printf("    m3 = %d, m4 = %s, m5 = %p (%s)%c", m3, get_string(m4), m5, get_string(*m5), 10);
+    printf("{ ---%c", 10);
+    reading(m0, m1, m2, m3, m4, m5);
+    printf("} ---%c", 10);
+    printf("After function call (main's stack) (left unchanged)%c", 10);
+    printf("    m0 = %d, m1 = %d,    m2 = `%s`%c", m0, m1, m2, 10);
+    printf("    m3 = %d, m4 = %s, m5 = %p (%s)%c", m3, get_string(m4), m5, get_string(*m5), 10);
+    return 0;
 }
