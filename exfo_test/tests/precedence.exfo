@@ -1,0 +1,46 @@
+extern "C" func printf(char_ptr, ...): void;
+
+func main(): int {
+    a := 2;
+    b := 3;
+    c := 4;
+    d := 5;
+
+    // multiply & add precedence
+    res1 := a + b * c;
+    printf("a + b * c       -> 2 + 3 * 4       = %d (Expected: 14)%c", res1, 10);
+
+    // parens
+    // (2 + 3) * 4 = 20
+    res2 := (a + b) * c;
+    printf("(a + b) * c     -> (2 + 3) * 4     = %d (Expected: 20)%c", res2, 10);
+
+    // div & sub precedence
+    // 5 - (4 / 2) = 3
+    res3 := d - c / a;
+    printf("d - c / a       -> 5 - 4 / 2       = %d  (Expected: 3)%c", res3, 10);
+
+    // associativity
+    // (5 - 3) - 2 = 0
+    res4 := d - b - a;
+    printf("d - b - a       -> 5 - 3 - 2       = %d  (Expected: 0)%c", res4, 10);
+
+    // associativity (different operators)
+    // (4 * 5) / 2 = 10
+    res5 := c * d / a;
+    printf("c * d / a       -> 4 * 5 / 2       = %d (Expected: 10)%c", res5, 10);
+
+    // complex
+    // 2 + (3 * 5) - (4 / 2) = 2 + 15 - 2 = 15
+    res6 := a + b * d - c / a;
+    printf("a + b * d - c/a -> 2 + 3 * 5 - 4/2 = %d (Expected: 15)%c", res6, 10);
+
+    // complex 2
+    // ((5 + 3) * (4 - 2)) / 2 = (8 * 2) / 2 = 8
+    res7 := ((d + b) * (c - a)) / a;
+    printf("((d+b)*(c-a))/a -> ((5+3)*(4-2))/2 = %d  (Expected: 8)%c", res7, 10);
+
+    printf("%c", 10);
+
+    return 0;
+}
