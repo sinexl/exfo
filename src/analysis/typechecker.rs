@@ -159,9 +159,8 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
             ExpressionKind::VariableAccess(n) => {
                 let depth = self
                     .resolutions
-                    .get(expression)
-                    .expect("Compiler bug: resolution failed");
-                let var = self.locals.get_at(&n.name, *depth);
+                    .get(expression);
+                let var = self.locals.get_at(&n.name, depth);
 
                 expression.ty.set(var.ty);
             }

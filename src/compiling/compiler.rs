@@ -116,7 +116,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
         index
     }
 
-    pub fn compile_expression(&mut self, expression: &Expression<'ast>) -> Arg<'ir> {
+    pub fn compile_expression(&mut self, expression: &'ast Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind }
                 if kind.family() == BinopFamily::Logical =>
@@ -337,10 +337,9 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 }
             }
             ExpressionKind::VariableAccess(n) => {
-                let depth = *self
+                let depth = self
                     .resolutions
-                    .get(expression)
-                    .expect("COMPILER BUG: Analysis failed");
+                    .get(expression);
                 let entity = self.entities.get_at(&n.name, depth);
                 match entity.kind {
                     EntityKind::Local(lvalue) => Arg::LValue(lvalue),

@@ -13,7 +13,27 @@ type Scope<'ast> = HashMap<
     Variable<'ast>,
 >;
 
-pub type Resolutions<'ast> = HashMap<&'ast Expression<'ast>, usize>;
+pub struct Resolutions<'ast> {
+    inner: HashMap<&'ast Expression<'ast>, usize>,
+}
+
+impl<'ast> Resolutions<'ast> {
+    pub fn new() -> Self {
+        Self {
+            inner: Default::default(),
+        }
+    }
+
+    pub fn get(&self, expr: &'ast Expression<'ast>) -> usize {
+        self.inner
+            .get(expr)
+            .copied()
+            .expect("Compiler bug: Resolutions::get(): Invalid expression was provided.")
+    }
+    pub fn insert(&mut self, expr: &'ast Expression<'ast>, val: usize) {
+        self.inner.insert(expr, val);
+    }
+}
 
 pub struct Resolver<'ast> {
     locals: Stack<Scope<'ast>>,
@@ -54,7 +74,7 @@ macro_rules! current_scope {
 impl<'ast> Resolver<'ast> {
     pub fn new() -> Resolver<'ast> {
         Resolver {
-            resolutions: HashMap::new(),
+            resolutions: Resolutions::new(),
             current_initializer: None,
             locals: vec![HashMap::new()],
             in_function: false,
@@ -254,17 +274,17 @@ impl<'ast, 'types> Resolver<'ast> {
             }
             ExpressionKind::VariableAccess(read) => {
                 self.resolve_local_variable(expression, read)?;
-                let depth = self
-                    .resolutions
-                    .get(expression)
-                    .expect("COMPILER BUG: resolve_local_variable failed");
-                let var = self.locals.get_at_mut(&read.name, *depth);
+                let depth = self.resolutions.get(expression);
+                let var = self.locals.get_at_mut(&read.name, depth);
                 var.state = VariableState::Read;
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
                 self.resolve_expression(callee)?;
                 for arg in *arguments {
-                    self.resolve_expression(unsafe { arg.as_ref().expect("Expression::FunctionCall: null argument") })?;
+                    self.resolve_expression(unsafe {
+                        arg.as_ref()
+                            .expect("Expression::FunctionCall: null argument")
+                    })?;
                 }
             }
             ExpressionKind::Literal(_) => { /* nothing */ }
@@ -391,7 +411,6 @@ impl<'ast, 'types> Resolver<'ast> {
         index
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolverError {
