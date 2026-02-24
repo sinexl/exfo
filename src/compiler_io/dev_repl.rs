@@ -33,6 +33,8 @@ pub fn dev_repl() {
         let (statements, errors) = parser.parse_program();
         crate::push_errors!(static_errors, errors);
 
+        let entity_count = parser.count_symbols();
+
         let mut resolver = Resolver::new();
         let errors = resolver.resolve_statements(statements);
         crate::push_errors!(static_errors, errors);
@@ -45,7 +47,7 @@ pub fn dev_repl() {
         }
 
         if static_errors.is_empty() {
-            let mut comp = Compiler::new(&ir_alloc, types_ptr, resolver.resolutions);
+            let mut comp = Compiler::new(&ir_alloc, types_ptr, entity_count);
             comp.compile_statements(statements);
             println!("{ir}", ir = comp.ir);
         } else {

@@ -59,7 +59,7 @@ fn main() -> io::Result<()> {
         eprintln!("{}", w);
     }
     push_errors!(static_errors, errors);
-    let resolutions = resolver.resolutions;
+    let symbols_count = parser.count_symbols();
 
     // Error reporting
     // TODO: Currently, compiler exits if are any errors at resolution pass, which is not correct.
@@ -72,7 +72,7 @@ fn main() -> io::Result<()> {
         exit(1);
     }
 
-    let mut type_checker = Typechecker::new(types_ptr, resolutions);
+    let mut type_checker = Typechecker::new(types_ptr, symbols_count);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {
         push_errors!(static_errors, r);
@@ -87,7 +87,7 @@ fn main() -> io::Result<()> {
     }
 
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator, types_ptr, type_checker.resolutions);
+    let mut compiler = Compiler::new(&ir_allocator, types_ptr, symbols_count);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
 
