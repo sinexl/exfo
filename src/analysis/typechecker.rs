@@ -1,43 +1,40 @@
-use crate::analysis::get_at::GetAt;
 use crate::analysis::r#type::{
     BasicType, DisplayType, FunctionType, PointerType, Type, TypeId, TypeIdCell,
 };
-use crate::analysis::resolver::Resolutions;
 use crate::analysis::type_context::TypeCtx;
+use crate::ast;
 use crate::ast::binop::BinopFamily;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
-use crate::common::{BumpVec, CompilerError, SourceLocation, Stack};
-use crate::ast;
+use crate::common::{BumpVec, CompilerEntity, CompilerError, SourceLocation, SymbolTable};
 use bumpalo::collections::CollectIn;
-use std::collections::HashMap;
 
-pub struct Typechecker<'ast, 'types> {
+pub struct Typechecker<'types> {
     current_function_type: Option<TypeId>,
     types: *mut TypeCtx<'types>,
 
-    pub resolutions: Resolutions<'ast>,
-    locals: Stack<HashMap<&'ast str, Variable>>,
+    symbols: SymbolTable<Variable>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct Variable {
     ty: TypeId,
 }
 
-impl<'ast, 'types> Typechecker<'ast, 'types> {
-    pub fn new(types: *mut TypeCtx<'types>, resolutions: Resolutions<'ast>) -> Self {
+impl CompilerEntity for Variable {}
+
+impl<'types> Typechecker<'types> {
+    pub fn new(types: *mut TypeCtx<'types>, symbols_count: usize) -> Self {
         Self {
             current_function_type: None,
             types,
-            resolutions,
-            locals: vec![HashMap::new()],
+            symbols: SymbolTable::new(symbols_count),
         }
     }
 }
 
-impl<'ast, 'types> Typechecker<'ast, 'types> {
+impl<'ast, 'types> Typechecker<'types> {
     pub fn types(&self) -> &'types TypeCtx<'types> {
         unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") }
     }
@@ -102,7 +99,7 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
             ExpressionKind::Unary { item, operator } => {
                 self.typecheck_expression(item)?;
                 let ty = match operator {
-                    // TODO: ensure that the expression really could be negated. 
+                    // TODO: ensure that the expression really could be negated.
                     UnaryKind::Negation => item.ty.inner(),
                     UnaryKind::Dereferencing => {
                         use Type::*;
@@ -156,11 +153,8 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     "Compiler bug: literals should always have a type."
                 );
             }
-            ExpressionKind::VariableAccess(n) => {
-                let depth = self
-                    .resolutions
-                    .get(expression);
-                let var = self.locals.get_at(&n.name, depth);
+            ExpressionKind::VariableAccess(_n, id) => {
+                let var = self.symbols[id.get()];
 
                 expression.ty.set(var.ty);
             }
@@ -255,12 +249,15 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                 self.typecheck_expression(expression)?
             }
 
-            StatementKind::FunctionDeclaration(FunctionDeclaration {
-                name,
-                parameters,
-                body,
-                return_type,
-            }) => {
+            StatementKind::FunctionDeclaration(
+                FunctionDeclaration {
+                    name: _name,
+                    parameters,
+                    body,
+                    return_type,
+                },
+                id,
+            ) => {
                 // if return_type.get() == Type::Unknown {
                 //     let actual = self.try_infer_type(body)?;
                 //     return_type.set(actual);
@@ -283,34 +280,33 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     is_variadic: false,
                 };
                 let ty = unsafe { (*self.types).allocate(Type::Function(fn_type)) };
-                self.locals
-                    .last_mut()
-                    .expect("Compiler bug: there should be at least a global scope")
-                    .insert(name.name, Variable { ty });
-                self.current_function_type =
-                    Some(self.locals.last().unwrap().get(name.name).unwrap().ty);
-                self.locals.push(HashMap::new());
+                self.symbols.insert(*id, Variable { ty });
+
+                self.current_function_type = Some(ty);
                 for param in *parameters {
-                    self.locals.last_mut().unwrap().insert(
-                        param.name.name,
+                    self.symbols.insert(
+                        param.id,
                         Variable {
                             ty: param.ty.inner(),
                         },
                     );
                 }
+
                 for statement in body.iter() {
                     self.typecheck_statement(statement)?;
                 }
                 self.current_function_type = None;
 
-                self.locals.pop();
                 // TODO: If there are no return in function and no return type is specified, treat it as returning void
             }
-            StatementKind::VariableDeclaration(VariableDeclaration {
-                name,
-                initializer,
-                ty,
-            }) => {
+            StatementKind::VariableDeclaration(
+                VariableDeclaration {
+                    name: _,
+                    initializer,
+                    ty,
+                },
+                id,
+            ) => {
                 let variable_type = ty;
                 let mut initializer_type = TypeId::Unknown;
                 if let Some(init) = initializer {
@@ -326,17 +322,12 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                         kind: TypeErrorKind::Todo("Coercions are not implemented yet".to_owned()), // TODO
                     });
                 }
-                self.locals
-                    .last_mut()
-                    .expect("Compiler bug: there should be at least a global scope")
-                    .insert(name.name, Variable { ty: ty.inner() });
+                self.symbols.insert(*id, Variable { ty: ty.inner() });
             }
             StatementKind::Block(statements) => {
-                self.locals.push(HashMap::new());
                 for statement in *statements {
                     self.typecheck_statement(statement)?;
                 }
-                self.locals.pop();
             }
             StatementKind::Return(val) => {
                 if let Some(val) = val {
@@ -360,28 +351,28 @@ impl<'ast, 'types> Typechecker<'ast, 'types> {
                     }
                 }
             }
-            StatementKind::Extern(ExternalFunction {
-                name,
-                kind: _kind,
-                parameters,
-                return_type,
-                is_variadic,
-            }) => {
-                self.locals
-                    .last_mut()
-                    .expect("Compiler bug: there should be at least a global scope.")
-                    .insert(
-                        name.name,
-                        Variable {
-                            ty: unsafe {
-                                (*self.types).allocate(Type::Function(FunctionType {
-                                    return_type: return_type.clone(),
-                                    parameters,
-                                    is_variadic: *is_variadic,
-                                }))
-                            },
+            StatementKind::Extern(
+                ExternalFunction {
+                    name: _,
+                    kind: _kind,
+                    parameters,
+                    return_type,
+                    is_variadic,
+                },
+                id,
+            ) => {
+                self.symbols.insert(
+                    *id,
+                    Variable {
+                        ty: unsafe {
+                            (*self.types).allocate(Type::Function(FunctionType {
+                                return_type: return_type.clone(),
+                                parameters,
+                                is_variadic: *is_variadic,
+                            }))
                         },
-                    );
+                    },
+                );
             }
             StatementKind::If {
                 condition,

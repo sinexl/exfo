@@ -1,5 +1,3 @@
-use crate::analysis::get_at::GetAt;
-use crate::analysis::resolver::Resolutions;
 use crate::analysis::r#type::{FunctionType, Type, TypeId};
 use crate::analysis::type_context::TypeCtx;
 use crate::ast::binop::{BinopFamily, BinopKind};
@@ -7,23 +5,23 @@ use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
     ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
 };
-use crate::common::{BumpVec, Stack};
+use crate::common::{BumpVec, CompilerEntity, SymbolTable};
 use crate::compiling::ir::binop;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
-use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
+use bumpalo::Bump;
 use std::collections::HashMap;
 
-pub struct Compiler<'ir, 'ast, 'types> {
+pub struct Compiler<'ir, 'types> {
     // allocators
     ir_bump: &'ir Bump,
     types: *mut TypeCtx<'types>,
 
     // Compiler state
     current_function: Option<BumpVec<'ir, Opcode<'ir>>>,
-    entities: Stack<HashMap<&'ast str, Entity>>,
+    entities: SymbolTable<Entity>,
     loops: HashMap<usize, While>,
     stack_size: StackSize,
     label_count: usize,
@@ -32,8 +30,6 @@ pub struct Compiler<'ir, 'ast, 'types> {
 
     // Compiler output
     pub ir: &'ir mut IntermediateRepresentation<'ir>,
-
-    resolutions: Resolutions<'ast>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -41,6 +37,8 @@ struct Entity {
     ty: TypeId,
     kind: EntityKind,
 }
+
+impl CompilerEntity for Entity {}
 
 #[derive(Clone, Copy, Debug)]
 enum EntityKind {
@@ -66,20 +64,19 @@ impl StackSize {
     }
 }
 
-impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
+impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
     pub fn new(
         ir_bump: &'ir Bump,
         types: *mut TypeCtx<'types>,
-        resolutions: Resolutions<'ast>,
-    ) -> Compiler<'ir, 'ast, 'types> {
+        symbol_count: usize,
+    ) -> Compiler<'ir, 'types> {
         Self {
             ir_bump,
             types,
             ir: ir_bump.alloc(IntermediateRepresentation::new(ir_bump)),
             current_function: None,
             stack_size: StackSize::zero(),
-            resolutions,
-            entities: Stack::new(),
+            entities: SymbolTable::new(symbol_count),
             label_count: 0,
             loops: Default::default(),
             bucket: None,
@@ -90,7 +87,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
     }
 }
 
-impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
+impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
     pub fn allocate(&mut self, size: usize) -> Lvalue {
         if let Some(bucket) = self.bucket.take_if(|e| e.size() == size) {
             return bucket;
@@ -336,11 +333,8 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     }
                 }
             }
-            ExpressionKind::VariableAccess(n) => {
-                let depth = self
-                    .resolutions
-                    .get(expression);
-                let entity = self.entities.get_at(&n.name, depth);
+            ExpressionKind::VariableAccess(n, id) => {
+                let entity = self.entities[id.get()];
                 match entity.kind {
                     EntityKind::Local(lvalue) => Arg::LValue(lvalue),
                     EntityKind::Function => {
@@ -408,23 +402,25 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 self.compile_expression(expr);
                 self.stack_size.count = stack_size;
             }
-            StatementKind::FunctionDeclaration(FunctionDeclaration {
-                name,
-                body,
-                parameters,
-                return_type,
-            }) => {
+            StatementKind::FunctionDeclaration(
+                FunctionDeclaration {
+                    name,
+                    body,
+                    parameters,
+                    return_type,
+                },
+                id,
+            ) => {
                 self.current_function = Some(BumpVec::new_in(self.ir_bump));
 
-                let parent_scope = self.entities.len() - 1;
 
                 let parameters_types = parameters
                     .iter()
                     .map(|p| p.ty.clone())
                     .collect_in::<BumpVec<_>>(self.types().bump())
                     .into_bump_slice();
-                self.entities[parent_scope].insert(
-                    name.name,
+                self.entities.insert(
+                    *id,
                     Entity {
                         ty: unsafe {
                             (*self.types).allocate(Type::Function(FunctionType {
@@ -438,12 +434,10 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 );
 
                 let mut sizes = BumpVec::with_capacity_in(parameters.len(), self.ir_bump);
-                self.entities.push(HashMap::new());
-                let function_scope = self.entities.len() - 1;
                 for (i, param) in parameters.iter().enumerate() {
                     let param_size = param.ty.get(self.types()).size();
-                    self.entities[function_scope].insert(
-                        param.name.name,
+                    self.entities.insert(
+                        param.id,
                         Entity {
                             ty: param.ty.inner(),
                             kind: EntityKind::Local(Lvalue::Argument {
@@ -471,17 +465,19 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 );
 
                 self.current_function = None;
-                self.entities.pop();
                 self.stack_size = StackSize::zero();
             }
 
-            StatementKind::Extern(ExternalFunction {
-                name,
-                kind: _kind,
-                parameters,
-                return_type,
-                is_variadic,
-            }) => {
+            StatementKind::Extern(
+                ExternalFunction {
+                    name: _,
+                    kind: _kind,
+                    parameters,
+                    return_type,
+                    is_variadic,
+                },
+                id,
+            ) => {
                 let var = Entity {
                     ty: unsafe {
                         (*self.types).allocate(Type::Function(FunctionType {
@@ -492,25 +488,23 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     },
                     kind: EntityKind::Function,
                 };
-                self.entities
-                    .last_mut()
-                    .expect("Compiler bug: there should be at least global scope")
-                    .insert(name.name, var);
+                self.entities.insert(*id, var);
             }
             StatementKind::Block(statements) => {
-                self.entities.push(HashMap::new());
                 let stack_size = self.stack_size.count;
                 for i in *statements {
                     self.compile_statement(i);
                 }
                 self.stack_size.count = stack_size;
-                self.entities.pop();
             }
-            StatementKind::VariableDeclaration(VariableDeclaration {
-                name,
-                initializer,
-                ty,
-            }) => {
+            StatementKind::VariableDeclaration(
+                VariableDeclaration {
+                    name: _,
+                    initializer,
+                    ty,
+                },
+                id,
+            ) => {
                 let size = ty.get(self.types()).size();
                 let stack_offset = self.allocate_on_stack(size);
                 // To allow shadowing, initializers are compiled before variable is inserted in the compiler tables.
@@ -520,12 +514,14 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 if let Some(initializer) = initializer {
                     self.bucket = Some(stack_offset);
                     let source = self.compile_expression(initializer);
-                    if source != Arg::LValue(stack_offset)
-                    {
-                        self.push_opcode(Opcode::Assign {
-                            result: stack_offset,
-                            source: source.clone(),
-                        }.clone());
+                    if source != Arg::LValue(stack_offset) {
+                        self.push_opcode(
+                            Opcode::Assign {
+                                result: stack_offset,
+                                source: source.clone(),
+                            }
+                            .clone(),
+                        );
                     }
                     self.bucket = None;
                 }
@@ -533,10 +529,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                     ty: ty.inner(),
                     kind: EntityKind::Local(stack_offset),
                 };
-                self.entities
-                    .last_mut()
-                    .expect("Compiler bug: there should be at least global scope")
-                    .insert(name.name, var);
+                self.entities.insert(*id, var);
             }
             StatementKind::Return(val) => {
                 let ret_arg = val.as_ref().map(|arg| self.compile_expression(arg));
@@ -633,7 +626,6 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
     }
 
     pub fn compile_statements(&mut self, statements: &[&'ast Statement<'ast, 'types>]) {
-        self.entities.push(HashMap::new());
         for statement in statements {
             self.compile_statement(statement);
         }

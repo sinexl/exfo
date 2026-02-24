@@ -51,6 +51,14 @@ impl RefId {
             inner: Cell::new(Some(id)),
         }
     }
+
+    pub fn get(&self) -> SymId  {
+        self.inner.get().expect("COMPILER BUG: RefId::get should never be called on initialized reference")
+    }
+    
+    pub fn set(&self, id: SymId)  { 
+        self.inner.set(Some(id));
+    }
 }
 
 impl Display for RefId {
@@ -153,7 +161,7 @@ impl Hash for AstLiteral<'_> {
 }
 
 impl<'a> Display for AstLiteral<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
             AstLiteral::Integral(i) => write!(f, "{}", i),
             AstLiteral::FloatingPoint(fl) => write!(f, "{}", fl),
