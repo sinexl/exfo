@@ -1,0 +1,13 @@
+func void(): void {
+    return;
+}
+
+func main(): int {
+    a := void();
+    b := void();
+    a = b;
+    b;
+    a;
+    b = a;
+    return 0;
+}

@@ -90,19 +90,20 @@ impl Rvalue<'_> {
 }
 
 #[derive(Clone, Debug)]
+#[derive(PartialEq)]
 pub enum Arg<'ir> {
     LValue(Lvalue),
     RValue(Rvalue<'ir>),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Lvalue {
     StackOffset { offset: usize, size: usize },
     //         Index in Codegen::arg_offsets.
     Argument { index: usize, size: usize },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Rvalue<'ir> {
     // Nothing. Needed for the functions returning void.
     Void,

@@ -106,9 +106,12 @@ func main(): int {
     }
 
     puts("------------");
-    puts("short circuit in condition (basic) (expect: short-circuit works, side-true executed, short-circuit works)");
+    puts("short circuit in condition (basic) (expect: short-circuit works, side-true executed, short-circuit works, short-circuit works)");
 
     if true || side_true() {
+        puts("short-circuit works");
+    }
+    if side_true() || side_true() {
         puts("short-circuit works");
     }
     if false || side_true() {

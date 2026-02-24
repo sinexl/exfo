@@ -95,8 +95,8 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
         if let Some(bucket) = self.bucket.take_if(|e| e.size() == size) {
             return bucket;
         }
-
-        self.allocate_on_stack(size)
+        let i = self.allocate_on_stack(size);
+        i
     }
     pub fn allocate_on_stack(&mut self, size: usize) -> Lvalue {
         self.stack_size.count += size;
@@ -119,109 +119,109 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
     pub fn compile_expression(&mut self, expression: &Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind }
-            if kind.family() == BinopFamily::Logical =>
-                {
-                    let size = expression.ty.get(self.types()).size();
-                    assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
-                    let left = self.compile_expression(left);
-                    let result = self.allocate(size);
-                    match kind {
-                        BinopKind::And => {
-                            /*
-                            Scheme of AND in IR that is implemented below.
-                            suppose pseudocode: res = a && b; after;
-                            generated pseudo-IR:
-                              a.
-                              if !a jump FALSE:
-                                 b;
-                                 res = a && b;
-                                 jump out
-                              FALSE:
-                                 res = false
-                              out:
-                                after;
-                            */
-                            let short_circuit = self.allocate_label();
-                            // Cases: if lhs is false, jump to do_check.
-                            self.push_opcode(Opcode::JmpIfNot {
-                                label: short_circuit,
-                                condition: left.clone(),
-                            });
+                if kind.family() == BinopFamily::Logical =>
+            {
+                let size = expression.ty.get(self.types()).size();
+                assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
+                let left = self.compile_expression(left);
+                let result = self.allocate(size);
+                match kind {
+                    BinopKind::And => {
+                        /*
+                        Scheme of AND in IR that is implemented below.
+                        suppose pseudocode: res = a && b; after;
+                        generated pseudo-IR:
+                          a.
+                          if !a jump FALSE:
+                             b;
+                             res = a && b;
+                             jump out
+                          FALSE:
+                             res = false
+                          out:
+                            after;
+                        */
+                        let short_circuit = self.allocate_label();
+                        // Cases: if lhs is false, jump to do_check.
+                        self.push_opcode(Opcode::JmpIfNot {
+                            label: short_circuit,
+                            condition: left.clone(),
+                        });
 
-                            // Case 1: `a` is true, so b should be evaluated.
-                            let right = self.compile_expression(right);
-                            self.push_opcode(Opcode::Binop {
-                                left,
-                                right,
-                                result,
-                                kind: Binop::Bitwise(BitwiseBinop {
-                                    kind: BitwiseKind::And,
-                                    is_logical_with_short_circuit: true,
-                                }),
-                            });
-                            let out_label = self.allocate_label();
-                            self.push_opcode(Opcode::Jmp { label: out_label });
+                        // Case 1: `a` is true, so b should be evaluated.
+                        let right = self.compile_expression(right);
+                        self.push_opcode(Opcode::Binop {
+                            left,
+                            right,
+                            result,
+                            kind: Binop::Bitwise(BitwiseBinop {
+                                kind: BitwiseKind::And,
+                                is_logical_with_short_circuit: true,
+                            }),
+                        });
+                        let out_label = self.allocate_label();
+                        self.push_opcode(Opcode::Jmp { label: out_label });
 
-                            // Case 2: `a` is false, so && is false.
-                            self.push_opcode(Opcode::Label {
-                                index: short_circuit,
-                            });
-                            self.push_opcode(Opcode::Assign {
-                                result,
-                                source: Arg::RValue(Rvalue::Bool(false)),
-                            });
-                            self.push_opcode(Opcode::Label { index: out_label });
+                        // Case 2: `a` is false, so && is false.
+                        self.push_opcode(Opcode::Label {
+                            index: short_circuit,
+                        });
+                        self.push_opcode(Opcode::Assign {
+                            result,
+                            source: Arg::RValue(Rvalue::Bool(false)),
+                        });
+                        self.push_opcode(Opcode::Label { index: out_label });
 
-                            Arg::LValue(result)
-                        }
-                        BinopKind::Or => {
-                            /*
-                            Scheme of OR in IR:
-                            suppose pseudocode: res = a || b; after;
-                            generated pseudo-IR:
-                              a.
-                              if !a jump check
-                                 res = true
-                                 jump out
-                              check:
-                                 b;
-                                 res = a || b;
-                              out:
-                                after;
-                            */
-                            let do_check = self.allocate_label();
-                            // Cases: if lhs is false, jump to do_check.
-                            self.push_opcode(Opcode::JmpIfNot {
-                                label: do_check,
-                                condition: left.clone(),
-                            });
-                            // Case one: The lhs is true, so entire || is true.
-                            self.push_opcode(Opcode::Assign {
-                                result,
-                                source: Arg::RValue(Rvalue::Bool(true)),
-                            });
-                            let out_label = self.allocate_label();
-                            self.push_opcode(Opcode::Jmp { label: out_label });
-
-                            // Case two: The lhs is false, so rhs should be also evaluated to complete ||.
-                            self.push_opcode(Opcode::Label { index: do_check });
-                            let right = self.compile_expression(right);
-                            self.push_opcode(Opcode::Binop {
-                                left,
-                                right,
-                                result,
-                                kind: Binop::Bitwise(BitwiseBinop {
-                                    kind: BitwiseKind::Or,
-                                    is_logical_with_short_circuit: true,
-                                }),
-                            });
-
-                            self.push_opcode(Opcode::Label { index: out_label });
-                            Arg::LValue(result)
-                        }
-                        _ => unreachable!("Unknown binary operation"),
+                        Arg::LValue(result)
                     }
+                    BinopKind::Or => {
+                        /*
+                        Scheme of OR in IR:
+                        suppose pseudocode: res = a || b; after;
+                        generated pseudo-IR:
+                          a.
+                          if !a jump check
+                             res = true
+                             jump out
+                          check:
+                             b;
+                             res = a || b;
+                          out:
+                            after;
+                        */
+                        let do_check = self.allocate_label();
+                        // Cases: if lhs is false, jump to do_check.
+                        self.push_opcode(Opcode::JmpIfNot {
+                            label: do_check,
+                            condition: left.clone(),
+                        });
+                        // Case one: The lhs is true, so entire || is true.
+                        self.push_opcode(Opcode::Assign {
+                            result,
+                            source: Arg::RValue(Rvalue::Bool(true)),
+                        });
+                        let out_label = self.allocate_label();
+                        self.push_opcode(Opcode::Jmp { label: out_label });
+
+                        // Case two: The lhs is false, so rhs should be also evaluated to complete ||.
+                        self.push_opcode(Opcode::Label { index: do_check });
+                        let right = self.compile_expression(right);
+                        self.push_opcode(Opcode::Binop {
+                            left,
+                            right,
+                            result,
+                            kind: Binop::Bitwise(BitwiseBinop {
+                                kind: BitwiseKind::Or,
+                                is_logical_with_short_circuit: true,
+                            }),
+                        });
+
+                        self.push_opcode(Opcode::Label { index: out_label });
+                        Arg::LValue(result)
+                    }
+                    _ => unreachable!("Unknown binary operation"),
                 }
+            }
 
             ExpressionKind::Binop { left, right, kind } => {
                 let size = expression.ty.get(self.types()).size();
@@ -344,16 +344,18 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 let entity = self.entities.get_at(&n.name, depth);
                 match entity.kind {
                     EntityKind::Local(lvalue) => Arg::LValue(lvalue),
-                    EntityKind::Function => Arg::RValue(Rvalue::ExternalFunction(n.clone_into(self.ir_bump)))
+                    EntityKind::Function => {
+                        Arg::RValue(Rvalue::ExternalFunction(n.clone_into(self.ir_bump)))
+                    }
                 }
             }
 
             ExpressionKind::FunctionCall { callee, arguments } => {
                 let (is_variadic, return_size) = if let Type::Function(FunctionType {
-                                                                           parameters,
-                                                                           is_variadic,
-                                                                           return_type,
-                                                                       }) = callee.ty.get(self.types())
+                    parameters,
+                    is_variadic,
+                    return_type,
+                }) = callee.ty.get(self.types())
                 {
                     (*is_variadic, return_type.inner().get(self.types()).size())
                 } else {
@@ -408,11 +410,11 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 self.stack_size.count = stack_size;
             }
             StatementKind::FunctionDeclaration(FunctionDeclaration {
-                                                   name,
-                                                   body,
-                                                   parameters,
-                                                   return_type,
-                                               }) => {
+                name,
+                body,
+                parameters,
+                return_type,
+            }) => {
                 self.current_function = Some(BumpVec::new_in(self.ir_bump));
 
                 let parent_scope = self.entities.len() - 1;
@@ -475,12 +477,12 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
             }
 
             StatementKind::Extern(ExternalFunction {
-                                      name,
-                                      kind: _kind,
-                                      parameters,
-                                      return_type,
-                                      is_variadic,
-                                  }) => {
+                name,
+                kind: _kind,
+                parameters,
+                return_type,
+                is_variadic,
+            }) => {
                 let var = Entity {
                     ty: unsafe {
                         (*self.types).allocate(Type::Function(FunctionType {
@@ -506,10 +508,10 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 self.entities.pop();
             }
             StatementKind::VariableDeclaration(VariableDeclaration {
-                                                   name,
-                                                   initializer,
-                                                   ty,
-                                               }) => {
+                name,
+                initializer,
+                ty,
+            }) => {
                 let size = ty.get(self.types()).size();
                 let stack_offset = self.allocate_on_stack(size);
                 // To allow shadowing, initializers are compiled before variable is inserted in the compiler tables.
@@ -518,12 +520,13 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'ast, 'types> {
                 // a := a + 15;
                 if let Some(initializer) = initializer {
                     self.bucket = Some(stack_offset);
-                    let arg = self.compile_expression(initializer);
-                    if self.bucket.is_some() {
+                    let source = self.compile_expression(initializer);
+                    if source != Arg::LValue(stack_offset)
+                    {
                         self.push_opcode(Opcode::Assign {
                             result: stack_offset,
-                            source: arg,
-                        });
+                            source: source.clone(),
+                        }.clone());
                     }
                     self.bucket = None;
                 }

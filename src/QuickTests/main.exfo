@@ -1,80 +1,44 @@
+extern "C" func memcmp(int*, int*, int): int;
 extern "C" func printf(char_ptr, ...): void;
-extern "C" func memcmp(bool*, bool*, int): int;
-func side(b: bool, message: char_ptr): bool {
-    printf("%s%c", message, 10);
-    return b;
-}
-
-
-func to_bool(a: int): bool {
-    if a == 0 return false;
-    return true;
-}
 
 func get_string(a: bool): char_ptr {
-    if a { return "true"; }
-    return "false";
+    if a == false return "false";
+    else if a == true return "true";
 }
 
-
-// This test is meta program-ish but i think it should be like this.
 func main(): int {
-    never := "YOU SHOULD NEVER SEE THIS!";
-    always := "you should see this";
     True := true;
     False := false;
+    size := 8;
 
-    printf("< --- OR Operation (Rhs side effect) --- >%c", 10);
-    i := 0;
-    while i <= 1 {
-        j := 0;
-        while j <= 1 {
-            a := to_bool(i);
-            b := to_bool(j);
+    i := 0; while i < 3 {
+        j := 0; while j < 3 {
+            le  := i < j;
+            ge  := i > j;
+            leq := i <= j;
+            geq := i >= j;
 
-            expected := false;
-            if memcmp(&a, &True, 1) == 0 { expected = true; }
-            if memcmp(&b, &True, 1) == 0 { expected = true; }
+            // Expected
+            cmp := memcmp(&i, &j, size);
+            e_eq  := cmp == 0;
+            e_neq := cmp != 0;
 
-            message := always;
-            if memcmp(&a, &True, 1) == 0 { message = never; }
-
-            result := a || side(b, message);
-
-            printf("%5s || %5s = %5s (expected %s)%c", get_string(a), get_string(b), get_string(result), get_string(expected), 10);
-
-
+            // TODO: this is technically dumb to verify how ordering operators work using themselves.
+            //   Introduce  better way to do this.
+            //   Expected orders.
+            e_le  := cmp < 0;
+            e_ge  := cmp > 0;
+            e_leq := cmp < 0 || e_eq;
+            e_geq := cmp > 0 || e_eq;
+            printf("< --- (i, j) = (%d%d) --- >%c", i, j, 10);
+            printf("%d <  %d: %5s (expected: %5s)%c", i, j, get_string(le),  get_string(e_le),  10);
+            printf("%d >  %d: %5s (expected: %5s)%c", i, j, get_string(ge),  get_string(e_ge),  10);
+            printf("%d <= %d: %5s (expected: %5s)%c", i, j, get_string(leq), get_string(e_leq), 10);
+            printf("%d >= %d: %5s (expected: %5s)%c", i, j, get_string(geq), get_string(e_geq), 10);
             j = j + 1;
         }
         i = i + 1;
     }
-
-
-    printf("%c< --- AND Operation (Rhs side effect) --- >%c", 10, 10);
-    i := 0;
-    while i <= 1 {
-        j := 0;
-        while j <= 1 {
-            a := to_bool(i);
-            b := to_bool(j);
-
-            expected := true;
-            if memcmp(&a, &False, 1) == 0 { expected = false; }
-            if memcmp(&b, &False, 1) == 0 { expected = false; }
-
-            message := always;
-            if memcmp(&a, &False, 1) == 0 { message = never; }
-
-            result := a && side(b, message);
-
-            printf("%5s && %5s = %5s (expected %s)%c", get_string(a), get_string(b), get_string(result), get_string(expected), 10);
-
-
-            j = j + 1;
-        }
-        i = i + 1;
-    }
-
 
 
 

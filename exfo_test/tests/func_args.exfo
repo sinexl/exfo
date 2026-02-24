@@ -23,17 +23,16 @@ func reading(
     printf("    _3 = %d, _4 = %s, _5 = <ptr> (%s)%c", _3, get_string(_4), get_string(*_5), 10);
 
     // some mutations
-    // _0 = (7 + _0) * 2;
-    // TODO: Check mutations when implemented. here they are
-    // _1 = _1 - _0;
-    // _2 = "X";
-    // _3 = _3 * _3 * _3;
-    // _4 = _4 && false;
-    // _5 = &t;
+    _0 = (7 + _0) * 2;
+    _1 = _1 - _0;
+    _2 = "X";
+    _3 = _3 * _3 * _3;
+    _4 = _4 && false;
+    _5 = &t;
 
-    // printf("  In the function (after mutating)%c", 10);
-    // printf("    _0 = %d, _1 = %d,    _2 = `%s`%c", _0, _1, _2, 10);
-    // printf("    _3 = %d, _4 = %s, _5 = <ptr> (%s)%c", _3, get_string(_4), get_string(*_5), 10);
+    printf("  In the function (after mutating)%c", 10);
+    printf("    _0 = %d, _1 = %d,    _2 = `%s`%c", _0, _1, _2, 10);
+    printf("    _3 = %d, _4 = %s, _5 = <ptr> (%s)%c", _3, get_string(_4), get_string(*_5), 10);
 
     printf("  In the function (copied to the stack)%c", 10);
     printf("    r0 = %d, r1 = %d,    r2 = `%s`%c", r0, r1, r2, 10);

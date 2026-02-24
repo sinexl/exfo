@@ -8,52 +8,57 @@ func main(): int {
 
     // multiply & add precedence
     res := a + b * c;
-    printf("a + b * c       -> 2 + 3 * 4       =  %3d   (Expected: 14)%c", res, 10);
+    printf("a + b * c       -> 2 + 3 * 4        =  %3d   (Expected: 14)%c", res, 10);
+
+    // Another precedence test (ensure that stack allocation works well)
+    res = b * c; // 12
+    res = (a + a + res / 4) * (b + c * d + res); // 70;
+    printf("(a + a + 12 / 4) * (b + c * d + 12) =  %3d   (Expected: 245)%c", res, 10);
 
     // parens
     // (2 + 3) * 4 = 20
     res = (a + b) * c;
-    printf("(a + b) * c     -> (2 + 3) * 4     =  %3d   (Expected: 20)%c", res, 10);
+    printf("(a + b) * c     -> (2 + 3) * 4      =  %3d   (Expected: 20)%c", res, 10);
 
     // div & sub precedence
     // 5 - (4 / 2) = 3
     res = d - c / a;
-    printf("d - c / a       -> 5 - 4 / 2       =  %3d   (Expected: 3)%c", res, 10);
+    printf("d - c / a       -> 5 - 4 / 2        =  %3d   (Expected: 3)%c", res, 10);
 
     // associativity
     // (5 - 3) - 2 = 0
     res = d - b - a;
-    printf("d - b - a       -> 5 - 3 - 2       =  %3d   (Expected: 0)%c", res, 10);
+    printf("d - b - a       -> 5 - 3 - 2        =  %3d   (Expected: 0)%c", res, 10);
 
     // associativity (different operators)
     // (4 * 5) / 2 = 10
     res = c * d / a;
-    printf("c * d / a       -> 4 * 5 / 2       =  %3d   (Expected: 10)%c", res, 10);
+    printf("c * d / a       -> 4 * 5 / 2        =  %3d   (Expected: 10)%c", res, 10);
 
     // complex
     // 2 + (3 * 5) - (4 / 2) = 2 + 15 - 2 = 15
     res = a + b * d - c / a;
-    printf("a + b * d - c/a -> 2 + 3 * 5 - 4/2 =  %3d   (Expected: 15)%c", res, 10);
+    printf("a + b * d - c/a -> 2 + 3 * 5 - 4/2  =  %3d   (Expected: 15)%c", res, 10);
 
     // complex 2
     // ((5 + 3) * (4 - 2)) / 2 = (8 * 2) / 2 = 8
     res = ((d + b) * (c - a)) / a;
-    printf("((d+b)*(c-a))/a -> ((5+3)*(4-2))/2 =  %3d   (Expected: 8)%c", res, 10);
+    printf("((d+b)*(c-a))/a -> ((5+3)*(4-2))/2  =  %3d   (Expected: 8)%c", res, 10);
 
     // negation
     // 2 + (-3) + ((-5) / 4) = -2
 
     res = a + -b + -d / c;
-    printf("2 + (-3) + ((-5)/4)                =  %3d   (Expected: -2)%c", res, 10);
+    printf("2 + (-3) + ((-5)/4)                 =  %3d   (Expected: -2)%c", res, 10);
 
     // negatio
     // (4 * (-5)) / 2 = -10
     res = c * -d / 2;
-    printf("c * -d / 2                         =  %3d   (Expected -10)%c", res, 10);
+    printf("c * -d / 2                          =  %3d   (Expected -10)%c", res, 10);
 
     // negation
     // (-(-5)) = 5
-    printf("d -> %3d, -d -> %3d, -(-d) =  %3d           (Expected: 5, -5, 5)%c", d, -d, --d, 10);
+    printf("d -> %3d, -d -> %3d, -(-d) =  %3d            (Expected: 5, -5, 5)%c", d, -d, --d, 10);
 
 
     printf("%c", 10);
