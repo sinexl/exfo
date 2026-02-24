@@ -1,7 +1,8 @@
+use std::cell::Cell;
 use crate::analysis::r#type::TypeIdCell;
 use crate::ast::binop::BinopKind;
 use crate::common::{Identifier, SourceLocation};
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -15,6 +16,49 @@ pub struct Expression<'ast> {
 impl<'a> Hash for Expression<'a> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id.hash(state);
+    }
+}
+
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+// Symbol ID.
+// Each symbol (i.e function declaration, variable declaration, etc)
+// has a unique ID which is assigned by parser.
+pub struct SymId(pub usize);
+impl Display for SymId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{}", self.0)
+    }
+}
+
+// Reference ID
+// Encapsulates an internally mutable SymbolId, which initially is unknown (None).
+// On later compiler passes, Resolver assigns such id for each variable.
+#[derive(Debug, Eq, PartialEq)]
+pub struct RefId {
+    inner: Cell<Option<SymId>>,
+}
+
+impl RefId {
+    pub fn unknown() -> Self {
+        Self {
+            inner: Cell::new(None),
+        }
+    }
+
+    pub fn from_id(id: SymId) -> Self {
+        Self {
+            inner: Cell::new(Some(id)),
+        }
+    }
+}
+
+impl Display for RefId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.inner.get() {
+            Some(id) => write!(f, "{}", id),
+            None => write!(f, "#?"),
+        }
     }
 }
 
@@ -34,7 +78,7 @@ pub enum ExpressionKind<'ast> {
         value: &'ast mut Expression<'ast>,
     },
     Literal(AstLiteral<'ast>),
-    VariableAccess(Identifier<'ast>),
+    VariableAccess(Identifier<'ast>, RefId),
     FunctionCall {
         callee: &'ast mut Expression<'ast>,
         arguments: &'ast [*mut Expression<'ast>],
@@ -45,7 +89,7 @@ impl ExpressionKind<'_> {
     pub fn lvalue(&self) -> bool {
         match self {
             ExpressionKind::Assignment { .. } => true,
-            ExpressionKind::VariableAccess(_) => true,
+            ExpressionKind::VariableAccess(_, ..) => true,
             ExpressionKind::Binop { .. } => false,
             ExpressionKind::Unary { operator, ..} =>
                 match operator {
@@ -62,7 +106,7 @@ impl ExpressionKind<'_> {
             ExpressionKind::Unary { .. } => "unary operation".to_string(),
             ExpressionKind::Assignment { .. } => "assignment".to_string(),
             ExpressionKind::Literal(_) => "literal".to_string(),
-            ExpressionKind::VariableAccess(_) => "variable access".to_string(),
+            ExpressionKind::VariableAccess(_, ..) => "variable access".to_string(),
             ExpressionKind::FunctionCall { .. } => "function call".to_string(),
         }
     }

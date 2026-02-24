@@ -26,7 +26,7 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
         }
         ExpressionKind::Assignment { target, value } => parenthesize(f, "=", &[target, value]),
         ExpressionKind::Literal(lit) => write!(f, "{}", lit),
-        ExpressionKind::VariableAccess(name) => write!(f, "{}", name.name),
+        ExpressionKind::VariableAccess(name, id) => write!(f, "{} {id}", name.name),
         ExpressionKind::FunctionCall { callee, arguments } => {
             let mut temp: Vec<&Expression> = Vec::with_capacity(arguments.len() + 1);
             temp.push(*callee);
@@ -54,10 +54,10 @@ pub fn prefix_print_statement<'ast, 'types>(
             body,
             parameters,
             return_type,
-        }) => {
+        }, id) => {
             write!(
                 f,
-                "(func `{}` ({}): {}",
+                "(func `{}`({id}) ({}): {}",
                 name.name,
                 Join(
                     parameters
@@ -82,10 +82,10 @@ pub fn prefix_print_statement<'ast, 'types>(
             parameters,
             return_type,
             is_variadic,
-        }) => {
+        }, id) => {
             write!(
                 f,
-                "(extern \"{kind:?}\" `{}` ({}{}): {}",
+                "(extern \"{kind:?}\" `{}`({id}) ({}{}): {}",
                 name.name,
                 Join(parameters.iter().map(|e| DisplayType(e.inner(), types)), ", "),
                 if *is_variadic { ", ..." } else { "" },
@@ -106,8 +106,8 @@ pub fn prefix_print_statement<'ast, 'types>(
             name,
             initializer,
             ty,
-        }) => {
-            write!(f, "(`{}`: {} ", name.name, DisplayType(ty.inner(), types))?;
+        }, id) => {
+            write!(f, "(`{}`({id}): {} ", name.name, DisplayType(ty.inner(), types))?;
             if let Some(initializer) = initializer {
                 write!(f, "= {}", PrefixPrint(initializer))?;
             }

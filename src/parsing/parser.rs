@@ -5,7 +5,7 @@ use crate::ast::binop::BinopKind;
 use crate::ast::expression::ExpressionKind::{
     Assignment, Binop, FunctionCall, Literal, VariableAccess,
 };
-use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
+use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, RefId, SymId, UnaryKind};
 use crate::ast::statement::{
     ExternKind, ExternalFunction, FunctionDeclaration, FunctionParameter, Statement, StatementKind,
     VariableDeclaration,
@@ -58,7 +58,10 @@ pub struct Parser<'ast, 'types> {
     tokens: Rc<[Token]>,
     ast_bump: &'ast Bump,
     types:  *mut TypeCtx<'types>,
-    nodes_amount: usize,
+    // All expressions are assigned with unique ID's
+    nodes_count: usize,
+    // All references are assigned with unique ID besides the expression ID
+    symbols_count: usize,
 }
 
 impl<'ast, 'types> Parser<'ast, 'types> {
@@ -68,14 +71,21 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             ast_bump,
             types: type_ctx,
             tokens,
-            nodes_amount: 0,
+            nodes_count: 0,
+            symbols_count: 0,
         }
     }
 
     pub fn id(&mut self) -> usize {
-        let current = self.nodes_amount;
-        self.nodes_amount += 1;
+        let current = self.nodes_count;
+        self.nodes_count += 1;
         current
+    }
+
+    pub fn sym_id(&mut self) -> SymId {
+        let current = self.symbols_count;
+        self.symbols_count += 1;
+        SymId(current)
     }
 }
 
@@ -173,7 +183,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 name: Identifier::from_token(name, self.ast_bump),
                 initializer,
                 ty: variable_type.into()
-            }),
+            }, self.sym_id()),
             loc: colon.loc,
         }))
     }
@@ -241,7 +251,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 is_variadic,
                 parameters,
                 return_type: return_type.into(),
-            }),
+            }, self.sym_id()),
             loc: keyword.loc,
         }))
     }
@@ -259,7 +269,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 body,
                 parameters,
                 return_type: return_type.into(),
-            }),
+            }, self.sym_id()),
             loc: func_keyword.loc,
         }))
     }
@@ -602,7 +612,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             let loc = id.loc.clone();
             return Ok(self.ast_bump.alloc(Expression {
                 loc,
-                kind: VariableAccess(Identifier::from_token(id, self.ast_bump)),
+                kind: VariableAccess(Identifier::from_token(id, self.ast_bump), RefId::unknown()),
                 id: self.id(),
                 ty: TypeId::Unknown.into()
             }));
