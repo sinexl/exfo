@@ -306,6 +306,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                     Ok(FunctionParameter {
                         name: Identifier::from_token(id, this.ast_bump),
                         ty: ty.into(),
+                        id: this.sym_id()
                     })
                 })
                 .map_err(|mut e| {
@@ -763,6 +764,9 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 // Machinery for parser.
 #[allow(clippy::result_large_err)]
 impl<'ast, 'types> Parser<'ast, 'types> {
+    pub fn count_symbols(&self) -> usize {
+        self.symbols_count + 1
+    }
     fn next_token(&mut self) -> Result<Token, ParseError> {
         let tk = self
             .tokens

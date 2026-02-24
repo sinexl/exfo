@@ -78,6 +78,7 @@ pub struct VariableDeclaration<'a> {
 pub struct FunctionParameter<'ast> {
     pub name: Identifier<'ast>,
     pub ty: TypeIdCell,
+    pub id: SymId
 }
 
 pub struct DisplayFunctionParameter<'ast, 'types>(
