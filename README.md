@@ -40,13 +40,17 @@ After compilation is done, the compiler will be located in `./target/release/exf
 ## Running tests
 Exfo comes with its own "testing framework" which is located at [exfo_test crate](./exfo_test)
 
-To run the tests, ensure that debug version of compiler is build 
+To run the tests, ensure that debug version of compiler is built 
 ```shell
 cargo build --debug
 ```
 Go to exfo_test directory, and run 
 ```shell
 cargo run -- check
+```
+If you want to add a test, put the test code into `exfo_test/tests` folder and run 
+```shell
+cargo run -- record # or `record all` if you want to override all test results (not recommended unless you change a test).
 ```
 
 ## Resources I found useful while developing this project 
