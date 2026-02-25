@@ -94,6 +94,7 @@ fn main() -> io::Result<()> {
     let codegen = Codegen::new(ir, args.pic());
     let generated_assembly = codegen.generate();
     dprintln!(args, "{generated_assembly}");
+    dprintln!(args, "{types:?}");
     for i in ast {
         dprintln!(args, "{}", DisplayStatement(i, &types));
     }

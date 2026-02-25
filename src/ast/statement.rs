@@ -91,8 +91,9 @@ impl<'ast, 'types> Display for DisplayFunctionParameter<'ast, 'types> {
         let Self(param, types) = self;
         write!(
             f,
-            "{}: {}",
+            "{}({}): {}",
             param.name.name,
+            param.id,
             DisplayType(param.ty.clone().inner(), types)
         )
     }

@@ -243,7 +243,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
             }
 
             ExpressionKind::Unary { item, operator } => {
-                let ty = item.ty.clone();
+                let ty = expression.ty.clone();
                 let item = self.compile_expression(item);
                 match operator {
                     UnaryKind::Negation => {

@@ -19,7 +19,7 @@ pub fn print_ast<'ast, 'types>(
     match &expr.kind {
         ExpressionKind::Literal(value) => writeln!(f, "Literal({})", value),
         ExpressionKind::VariableAccess(identifier, id) => {
-            writeln!(f, "Access({}, {id})", identifier.name)
+            writeln!(f, "Access({}({id}))", identifier.name)
         }
         ExpressionKind::Binop { left, right, kind } => {
             writeln!(f, "{}", kind.name())?;
