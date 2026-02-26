@@ -84,56 +84,9 @@ impl<'ir> Codegen<'ir> {
         if !function.params.is_empty() {
             comment!(self, "Function Arguments");
         }
-        // Fucntion argument initialization.
-
-        // Function argument allocation.
-        // Arguments are received at the end of function stack frame.
-        // first argument counting from the right is last passed parameter
-        // second argument counting from the right is second-to-last parameter.
-        // etc.
-
-        let mut function_args_offsets = Vec::with_capacity(function.params.len());
-        let mut arg_offset = total_stack_size - total_param_size;
-        let reg_arg_count = cmp::min(function.params.len(), CALL_REGISTERS.len()); // Amount of parameters passed by register.
-
-        let reg_params = &function.params[..reg_arg_count];
-
-        // Register parameters.
-        for (i, arg_size) in reg_params.iter().enumerate() {
-            let arg_size = *arg_size;
-            arg_offset += arg_size;
-            if arg_size != 0 {
-                let p = Register::prefix_from_size(arg_size);
-                asm!(
-                    self,
-                    "  mov{p} {}, -{}(%rbp)",
-                    CALL_REGISTERS[i].lower_bytes_register(arg_size),
-                    arg_offset
-                );
-            }
-            function_args_offsets.push(arg_offset);
-        }
-
-        // Stack Parameters.
-        let stack_params = &function.params[reg_arg_count..];
-        // X86-64 Stack layout:
-        // -16       -8         0         8         16
-        //  | * * * * | * * * * | * * * * | * * * * | * * * * | * * * * ...
-        //                      ^         ^         ^
-        //                   rbp       old rbp   ret addr
-        //                             [0 - 8]   arg_read_offset
-        //                                       [8 - 16]
-        let mut arg_read_offset = 16;
-        for arg_size in stack_params {
-            arg_offset += arg_size;
-            asm!(self, "  movq {arg_read_offset}(%rbp), {Rax}",);
-
-            asm!(self, "  movq {Rax}, -{}(%rbp)", arg_offset);
-
-            function_args_offsets.push(arg_offset);
-            arg_read_offset += arg_size;
-        }
-
+        // Fucntion argument initialization. (spilling on the stack)
+        let function_args_offsets =
+            self.spill_function_arguments(function.params, function.stack_size);
         comment!(self);
 
         self.arg_offsets = Some(function_args_offsets);
@@ -145,6 +98,69 @@ impl<'ir> Codegen<'ir> {
         asm!(self, "  movq %rbp, %rsp");
         asm!(self, "  popq %rbp");
         asm!(self, "  ret");
+    }
+    fn spill_function_arguments(
+        &mut self,
+        arguments: &[usize],
+        function_stack_size: usize,
+    ) -> Vec<usize> {
+        // Function argument allocation.
+        // Arguments are received at the end of function stack frame.
+        // first argument counting from the right is last passed parameter
+        // second argument counting from the right is second-to-last parameter.
+        // etc.
+        arguments
+            .iter()
+            .for_each(|e| assert_ne!(*e, 0, "Function argument size could not be zero"));
+        let mut offsets = Vec::with_capacity(arguments.len());
+        let mut arg_offset = function_stack_size;
+        let reg_arg_count = cmp::min(arguments.len(), CALL_REGISTERS.len()); // Amount of parameters passed by register.
+
+        let mut i = 0;
+
+        // Register parameters.
+        let reg_params = &arguments[..reg_arg_count];
+        for (_, arg_size) in reg_params.iter().enumerate() {
+            let arg_size = *arg_size;
+            comment!(self, "Argument {i}. size: {arg_size}");
+            arg_offset += arg_size;
+            let p = Register::prefix_from_size(arg_size);
+            asm!(
+                self,
+                "  mov{p} {}, -{}(%rbp)",
+                CALL_REGISTERS[i].lower_bytes_register(arg_size),
+                arg_offset
+            );
+            offsets.push(arg_offset);
+            i += 1;
+        }
+
+        // Stack Parameters.
+        // X86-64 Stack layout:
+        // -16       -8         0         8         16
+        //  | * * * * | * * * * | * * * * | * * * * | * * * * | * * * * ...
+        //                      ^         ^         ^
+        //                   rbp       old rbp   ret addr
+        //                             [0 - 8]   arg_read_offset
+        //                                       [8 - 16]
+        let stack_params = &arguments[reg_arg_count..];
+        let mut arg_read_offset = 16;
+        for arg_size in stack_params {
+            comment!(self, "Argument {i}. size: {arg_size}");
+            arg_offset += arg_size;
+            let reg = Rax.lower_bytes_register(*arg_size);
+            let p = reg.prefix();
+
+            asm!(self, "  mov{p} {arg_read_offset}(%rbp), {reg}",);
+            asm!(self, "  mov{p} {reg}, -{}(%rbp)", arg_offset);
+
+            // According to SysV ABI, stack arguments should take 8 bytes each.
+            arg_read_offset += 8;
+            offsets.push(arg_offset);
+            i += 1;
+        }
+
+        offsets
     }
     fn compile_opcode(&mut self, opcode: &Opcode<'ir>) {
         match opcode {
@@ -396,6 +412,7 @@ impl<'ir> Codegen<'ir> {
     }
 }
 
+//noinspection SpellCheckingInspection
 impl<'ir> Codegen<'ir> {
     pub fn store_reg_to_lvalue(&mut self, reg: Register, lvalue: &Lvalue) {
         if reg.size() == 0 || lvalue.size() == 0 {
@@ -437,7 +454,16 @@ impl<'ir> Codegen<'ir> {
         if arg.size() == 0 {
             return;
         };
+        // Zero-extend and push if size is not 8
+        if arg.size() == 1 {
+            let display = DisplayArg(arg, self.pic, &self.arg_offsets()).to_string();
+            asm!(self, "  movzbq {display}, {Rax}");
+            asm!(self, "  pushq {Rax}");
+            return;
+        }
         let p = Register::prefix_from_size(arg.size());
+
+        assert_eq!(arg.size(), 8, "4 byte operations are not supported yet");
         let offsets = self.arg_offsets();
         match arg {
             Arg::RValue(rvalue) => {
@@ -465,10 +491,10 @@ impl<'ir> Codegen<'ir> {
     }
 }
 
-struct DisplayLValue<'a>(pub Lvalue, pub &'a Vec<usize>);
+struct DisplayLValue<'ir>(pub Lvalue, pub &'ir Vec<usize>);
 
 // Bool: PIC
-impl<'a> Display for DisplayLValue<'a> {
+impl<'ir> Display for DisplayLValue<'ir> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let DisplayLValue(lvalue, offsets) = self;
         let offset = match lvalue {
@@ -480,8 +506,8 @@ impl<'a> Display for DisplayLValue<'a> {
     }
 }
 
-struct DisplayRValue<'a>(&'a Rvalue<'a>, bool);
-impl<'a> Display for DisplayRValue<'a> {
+struct DisplayRValue<'ir>(&'ir Rvalue<'ir>, bool);
+impl<'ir> Display for DisplayRValue<'ir> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Self(rvalue, pic) = self;
         match rvalue {
@@ -507,6 +533,20 @@ impl<'a> Display for DisplayRValue<'a> {
             },
         };
 
+        Ok(())
+    }
+}
+
+// bool - pic.
+// Vec<usize> - vector of function arguments' offsets
+struct DisplayArg<'ir>(pub &'ir Arg<'ir>, pub bool, pub &'ir Vec<usize>);
+impl<'ir> Display for DisplayArg<'ir> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let DisplayArg(arg, pic, offsets) = self;
+        match arg {
+            Arg::LValue(lvalue) => write!(f, "{}", DisplayLValue(*lvalue, offsets))?,
+            Arg::RValue(rvalue) => write!(f, "{}", DisplayRValue(rvalue, *pic))?,
+        }
         Ok(())
     }
 }

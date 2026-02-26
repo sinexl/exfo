@@ -1,18 +1,18 @@
-use crate::analysis::r#type::{FunctionType, Type, TypeId};
+use crate::analysis::r#type::{FunctionType, Type, TypeId, TypeIdCell};
 use crate::analysis::type_context::TypeCtx;
 use crate::ast::binop::{BinopFamily, BinopKind};
-use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
+use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, SymId, UnaryKind};
 use crate::ast::statement::{
     ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
 };
-use crate::common::symbol_table::{CompilerEntity, SymbolTable};
 use crate::common::BumpVec;
+use crate::common::symbol_table::{CompilerEntity, SymbolTable};
 use crate::compiling::ir::binop;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
-use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
+use bumpalo::collections::CollectIn;
 use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'types> {
@@ -359,10 +359,12 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                 let b = self.ir_bump;
                 let args = arguments
                     .iter()
-                    .map(|a| {
-                        self.compile_expression(unsafe {
-                            a.as_ref().expect("FunctionCall: Null argument")
-                        })
+                    .filter_map(|a| {
+                        let expr = unsafe { a.as_ref().expect("FunctionCall: Null Argument") };
+                        if expr.ty.get(self.types()).size() != 0 {
+                            return Some(self.compile_expression(expr));
+                        }
+                        return None;
                     })
                     .collect_in::<BumpVec<_>>(b)
                     .into_bump_slice();
@@ -412,8 +414,26 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                 },
                 id,
             ) => {
+                struct Param {
+                    ty: TypeIdCell,
+                    id: SymId,
+                };
                 self.current_function = Some(BumpVec::new_in(self.ir_bump));
-
+                // Collect non-zero parameters
+                let parameters = parameters
+                    .iter()
+                    .filter_map(|e| {
+                        let types =
+                            unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") };
+                        if e.ty.get(types).size() != 0 {
+                            return Some(Param {
+                                ty: e.ty.clone(),
+                                id: e.id,
+                            });
+                        }
+                        None
+                    })
+                    .collect::<Vec<_>>();
 
                 let parameters_types = parameters
                     .iter()
@@ -455,14 +475,12 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                 }
 
                 let code = self.current_function.take().unwrap().into_bump_slice();
-                self.ir.functions.push(
-                    Function {
-                        name: name.clone_into(self.ir_bump),
-                        code,
-                        stack_size: self.stack_size.max,
-                        params: sizes.into_bump_slice(),
-                    }
-                );
+                self.ir.functions.push(Function {
+                    name: name.clone_into(self.ir_bump),
+                    code,
+                    stack_size: self.stack_size.max,
+                    params: sizes.into_bump_slice(),
+                });
 
                 self.current_function = None;
                 self.stack_size = StackSize::zero();
