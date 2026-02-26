@@ -351,7 +351,7 @@ impl<'ir> Codegen<'ir> {
 
     pub fn generate(mut self) -> String {
         asm!(self, ".section .text");
-        for v in self.ir.functions.values() {
+        for v in &self.ir.functions {
             self.generate_function(v);
         }
         self.generate_data();

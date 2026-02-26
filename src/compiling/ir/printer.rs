@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter, Write};
 
 pub fn print_ir(ir: &IntermediateRepresentation, f: &mut impl Write) -> std::fmt::Result {
     if !&ir.functions.is_empty() {
-        for (_, func) in &ir.functions {
+        for func in &ir.functions {
             print_function(func, f)?;
         }
     } else {
@@ -106,7 +106,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
 pub fn print_lvalue(lvalue: &Lvalue, f: &mut impl Write) -> std::fmt::Result {
     match lvalue {
         Lvalue::StackOffset { offset, size: _ } => write!(f, "stack[{offset}]")?,
-        Lvalue::Argument { index, size } => write!(f, "argument[{index}]")?,
+        Lvalue::Argument { index, size: _ } => write!(f, "argument[{index}]")?,
     };
     Ok(())
 }

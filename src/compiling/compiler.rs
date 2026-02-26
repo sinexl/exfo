@@ -455,14 +455,13 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                 }
 
                 let code = self.current_function.take().unwrap().into_bump_slice();
-                self.ir.functions.insert(
-                    name.clone_into(self.ir_bump),
-                    self.ir_bump.alloc(Function {
+                self.ir.functions.push(
+                    Function {
                         name: name.clone_into(self.ir_bump),
                         code,
                         stack_size: self.stack_size.max,
                         params: sizes.into_bump_slice(),
-                    }),
+                    }
                 );
 
                 self.current_function = None;
