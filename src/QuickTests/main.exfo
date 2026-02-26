@@ -11,6 +11,16 @@ func not(a: bool): bool {
     return true;
 }
 
+func eq(a: bool, b: bool): bool {
+    if a {
+        if b return true;
+        return false;
+    } else {
+        if b return false;
+        return true;
+    }
+}
+
 func inverse(le: bool*, ge: bool*, leq: bool*, geq: bool*): void {
     s_le  := *le;
     s_ge  := *ge;
@@ -22,7 +32,7 @@ func inverse(le: bool*, ge: bool*, leq: bool*, geq: bool*): void {
     *leq = not(s_le); *geq = not(s_ge);
 }
 
-func main(): int {
+func test_ordering(): void {
     True := true;
     False := false;
     size := 8;
@@ -48,24 +58,27 @@ func main(): int {
             e_geq := cmp > 0 || e_eq;
 
             // Memcmp doesnt take into account the sign.
-            if i < 0 {
+            i_s := i < 0;
+            j_s := j < 0;
+            if not(eq(i_s, j_s)) {
                 inverse(&e_le, &e_ge, &e_leq, &e_geq);
             }
-            //if j < 0 {
-            //    e_le = not(e_leq); e_ge = not(e_geq);
-            //    e_leq = not(e_le); e_geq = not(e_ge);
-            //}
             printf("< --- (i, j) = (%d, %d) --- >%c", i, j, 10);
-            printf("%3d <  %d: %5s (expected: %5s)%c", i, j, get_string(le),  get_string(e_le),  10);
-            printf("%3d >  %d: %5s (expected: %5s)%c", i, j, get_string(ge),  get_string(e_ge),  10);
-            printf("%3d <= %d: %5s (expected: %5s)%c", i, j, get_string(leq), get_string(e_leq), 10);
-            printf("%3d >= %d: %5s (expected: %5s)%c", i, j, get_string(geq), get_string(e_geq), 10);
+            printf("%3d <  %3d: %5s (expected: %5s)%c", i, j, get_string(le),  get_string(e_le),  10);
+            printf("%3d >  %3d: %5s (expected: %5s)%c", i, j, get_string(ge),  get_string(e_ge),  10);
+            printf("%3d <= %3d: %5s (expected: %5s)%c", i, j, get_string(leq), get_string(e_leq), 10);
+            printf("%3d >= %3d: %5s (expected: %5s)%c", i, j, get_string(geq), get_string(e_geq), 10);
             j = j + 1;
         }
         i = i + 1;
     }
 
 
+
+}
+
+func main(): int {
+    test_ordering();
 
     return 0;
 }

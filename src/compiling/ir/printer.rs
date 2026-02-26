@@ -48,7 +48,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
                 Arg::RValue(Rvalue::ExternalFunction(id)) => {
                     write!(f, "{tab}")?;
                     if let Some(result) = result {
-                        write!(f, "stack[{result}] = ")?;
+                        write!(f, "{result} = ")?;
                     }
                     write!(
                         f,
@@ -94,7 +94,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::JmpIfNot { label, condition } => {
             writeln!(f, "{tab}jmp_if_not {condition} -> .label{label}")?
         }
-        Opcode::Jmp { label } => writeln!(f, "{tab}jmp -> {label}")?,
+        Opcode::Jmp { label } => writeln!(f, "{tab}jmp -> .label{label}")?,
         Opcode::AddressOf { result, source } => writeln!(f, "{tab}{result} = &{source}")?,
         Opcode::Store { result, source } => writeln!(f, "{tab}*{result} = {source}")?,
         Opcode::Load { result, source } => writeln!(f, "{tab}{result} = *{source}")?,
