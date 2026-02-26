@@ -18,8 +18,8 @@ pub fn print_ast<'ast, 'types>(
     write!(f, "<{}> ", DisplayType(expr.ty.inner(), types))?;
     match &expr.kind {
         ExpressionKind::Literal(value) => writeln!(f, "Literal({})", value),
-        ExpressionKind::VariableAccess(identifier) => {
-            writeln!(f, "Access({})", identifier.name)
+        ExpressionKind::VariableAccess(identifier, id) => {
+            writeln!(f, "Access({}({id}))", identifier.name)
         }
         ExpressionKind::Binop { left, right, kind } => {
             writeln!(f, "{}", kind.name())?;
@@ -76,10 +76,10 @@ pub fn print_statement<'ast, 'types>(
             body,
             parameters,
             return_type,
-        }) => {
+        }, id) => {
             writeln!(
                 f,
-                "Func `{}` ({}): {}",
+                "Func `{}`({id}) ({}): {}",
                 name.name,
                 Join(
                     parameters
@@ -100,10 +100,10 @@ pub fn print_statement<'ast, 'types>(
             parameters,
             return_type,
             is_variadic,
-        }) => {
+        }, id) => {
             writeln!(
                 f,
-                "Extern \"{kind:?}\" `{}` ({}{}): {}",
+                "Extern \"{kind:?}\" `{}`({id}) ({}{}): {}",
                 name.name,
                 Join(parameters.iter().map(|e| DisplayType(e.inner(), types)), ", "),
                 if *is_variadic { ", ..." } else { "" },
@@ -120,8 +120,8 @@ pub fn print_statement<'ast, 'types>(
             name,
             initializer,
             ty,
-        }) => {
-            writeln!(f, "Variable `{}`: {}", name.name, DisplayType(ty.inner(), types))?;
+        }, id) => {
+            writeln!(f, "Variable `{}`({id}): {}", name.name, DisplayType(ty.inner(), types))?;
             if let Some(init) = initializer {
                 write!(f, "{tab}Initializer = {init}", init = TreePrintExpression(init, types))?;
             }

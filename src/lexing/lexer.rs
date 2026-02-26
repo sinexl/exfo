@@ -1,4 +1,5 @@
-use crate::common::{CompilerError, SourceLocation};
+use crate::common::errors_warnings::CompilerError;
+use crate::common::SourceLocation;
 use crate::lexing::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
 use crate::lexing::lexer::LexerErrorKind::{
     UnexpectedCharacter, UnterminatedComment, UnterminatedString,

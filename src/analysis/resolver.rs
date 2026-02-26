@@ -1,28 +1,21 @@
 use crate::analysis::get_at::GetAt;
-use crate::ast::expression::{Expression, ExpressionKind};
+use crate::analysis::Stack;
+use crate::ast::expression::{Expression, ExpressionKind, RefId, SymId};
 use crate::ast::statement::{ExternalFunction, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
-use crate::common::{
-    CompilerError, CompilerWarning, Identifier, IdentifierBox, IntoBox, SourceLocation, Stack,
-};
+use crate::common::errors_warnings::{CompilerError, CompilerWarning};
+use crate::common::identifier::{Identifier, IdentifierBox};
+use crate::common::{IntoBox, SourceLocation};
 use std::collections::HashMap;
 
-type Scope<'ast> = HashMap<
-    &'ast str,
-    // Exfo allows shadowing, so, each name might relate to several variables in the same scope
-    Variable<'ast>,
->;
-
-pub type Resolutions<'ast> = HashMap<&'ast Expression<'ast>, usize>;
 
 pub struct Resolver<'ast> {
-    locals: Stack<Scope<'ast>>,
+    locals: Stack<HashMap<&'ast str, Variable<'ast>>>,
     current_initializer: Option<Identifier<'ast>>,
     in_function: bool,
     loop_stack: Stack<While<'ast>>,
     loop_count: usize,
 
-    pub resolutions: Resolutions<'ast>,
     pub warnings: Vec<Box<dyn CompilerWarning>>,
 }
 
@@ -30,7 +23,9 @@ pub struct Resolver<'ast> {
 struct Variable<'ast> {
     pub state: VariableState,
     pub name: Identifier<'ast>,
+    pub sym_id: SymId,
 }
+
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum VariableState {
     Declared,
@@ -54,7 +49,6 @@ macro_rules! current_scope {
 impl<'ast> Resolver<'ast> {
     pub fn new() -> Resolver<'ast> {
         Resolver {
-            resolutions: HashMap::new(),
             current_initializer: None,
             locals: vec![HashMap::new()],
             in_function: false,
@@ -74,13 +68,13 @@ impl<'ast, 'types> Resolver<'ast> {
             StatementKind::ExpressionStatement(expression) => {
                 self.resolve_expression(expression).map_err(|e| vec![e])?;
             }
-            StatementKind::FunctionDeclaration(decl) => {
+            StatementKind::FunctionDeclaration(decl, id) => {
                 // TODO: Ensure that in_function is returned to false in cases where function exits early (? operator)
-                self.declare(&decl.name);
+                self.declare(&decl.name, *id);
                 self.define(&decl.name);
                 self.enter_scope();
                 for param in decl.parameters {
-                    self.declare(&param.name);
+                    self.declare(&param.name, param.id);
                     self.define(&param.name);
                 }
                 self.in_function = true;
@@ -98,11 +92,14 @@ impl<'ast, 'types> Resolver<'ast> {
                 }
                 self.exit_scope();
             }
-            StatementKind::VariableDeclaration(VariableDeclaration {
-                name,
-                initializer,
-                ty: _ty,
-            }) => {
+            StatementKind::VariableDeclaration(
+                VariableDeclaration {
+                    name,
+                    initializer,
+                    ty: _ty,
+                },
+                id,
+            ) => {
                 self.current_initializer = Some(name.clone());
                 // In variable shadowing, user might want to read from variable with the same name.
                 // a := 10;
@@ -113,7 +110,7 @@ impl<'ast, 'types> Resolver<'ast> {
                 }
 
                 self.current_initializer = None;
-                self.declare(name);
+                self.declare(name, *id);
                 self.define(name);
             }
             StatementKind::Return(val) => {
@@ -127,14 +124,17 @@ impl<'ast, 'types> Resolver<'ast> {
                     self.resolve_expression(val).map_err(|e| vec![e])?;
                 }
             }
-            StatementKind::Extern(ExternalFunction {
-                name,
-                kind: _kind,
-                parameters: _parameters,
-                return_type: _return_type,
-                is_variadic: _variadic,
-            }) => {
-                self.declare(name);
+            StatementKind::Extern(
+                ExternalFunction {
+                    name,
+                    kind: _kind,
+                    parameters: _parameters,
+                    return_type: _return_type,
+                    is_variadic: _variadic,
+                },
+                id,
+            ) => {
+                self.declare(name, *id);
                 self.define(name);
             }
             StatementKind::If {
@@ -201,28 +201,6 @@ impl<'ast, 'types> Resolver<'ast> {
         Ok(())
     }
 
-    pub fn preresolve_globals(&mut self, statements: &'ast [&'ast Statement<'ast, 'types>]) {
-        for statement in statements {
-            match &statement.kind {
-                StatementKind::FunctionDeclaration(_) => {}
-                StatementKind::VariableDeclaration(VariableDeclaration {
-                    name,
-                    initializer,
-                    ty,
-                }) => {}
-                StatementKind::Extern(_) => {}
-                // Ignored.
-                StatementKind::Block(_)
-                | StatementKind::Break { .. }
-                | StatementKind::Continue { .. }
-                | StatementKind::Return(_)
-                | StatementKind::If { .. }
-                | StatementKind::ExpressionStatement(_)
-                | StatementKind::While { .. } => {}
-            }
-        }
-    }
-
     pub fn resolve_statements(
         &mut self,
         statements: &[&'ast Statement<'ast, 'types>],
@@ -252,26 +230,25 @@ impl<'ast, 'types> Resolver<'ast> {
                 self.resolve_expression(target)?;
                 self.resolve_expression(value)?;
             }
-            ExpressionKind::VariableAccess(read) => {
-                self.resolve_local_variable(expression, read)?;
-                let depth = self
-                    .resolutions
-                    .get(expression)
-                    .expect("COMPILER BUG: resolve_local_variable failed");
-                let var = self.locals.get_at_mut(&read.name, *depth);
+            ExpressionKind::VariableAccess(read, id) => {
+                let depth = self.resolve_local_variable(id, read)?;
+                let var = self.locals.get_at_mut(&read.name, depth);
                 var.state = VariableState::Read;
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
                 self.resolve_expression(callee)?;
                 for arg in *arguments {
-                    self.resolve_expression(unsafe { arg.as_ref().expect("Expression::FunctionCall: null argument") })?;
+                    self.resolve_expression(unsafe {
+                        arg.as_ref()
+                            .expect("Expression::FunctionCall: null argument")
+                    })?;
                 }
             }
             ExpressionKind::Literal(_) => { /* nothing */ }
         }
         Ok(())
     }
-    fn declare(&mut self, name: &Identifier<'ast>) {
+    fn declare(&mut self, name: &Identifier<'ast>, id: SymId) {
         let current_scope = current_scope!(self);
         // Case 1 (Shadowing): there are already variables with that name defined in the scope.
         if let Some(declaration) = current_scope.get_mut(name.name) {
@@ -289,6 +266,7 @@ impl<'ast, 'types> Resolver<'ast> {
             *declaration = Variable {
                 state: VariableState::Declared,
                 name: name.clone(),
+                sym_id: id,
             };
             return;
         }
@@ -298,6 +276,7 @@ impl<'ast, 'types> Resolver<'ast> {
             Variable {
                 state: VariableState::Declared,
                 name: name.clone(),
+                sym_id: id,
             },
         );
     }
@@ -327,13 +306,15 @@ impl<'ast, 'types> Resolver<'ast> {
     }
     fn resolve_local_variable(
         &mut self,
-        expression: &'ast Expression<'ast>,
+        ref_id: &RefId,
         var: &Identifier<'ast>,
-    ) -> Result<(), ResolverError> {
+        // Returns depth
+    ) -> Result<usize, ResolverError> {
         for (i, scope) in self.locals.iter().rev().enumerate() {
-            if scope.contains_key(var.name) {
-                self.resolutions.insert(expression, i);
-                return Ok(());
+            if let Some(e) = scope.get(var.name) {
+                let id = e.sym_id;
+                ref_id.set(id);
+                return Ok(i);
             }
         }
 
@@ -391,7 +372,6 @@ impl<'ast, 'types> Resolver<'ast> {
         index
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolverError {

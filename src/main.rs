@@ -3,7 +3,7 @@ use crate::analysis::type_context::TypeCtx;
 use crate::analysis::typechecker::Typechecker;
 use crate::ast::tree_printer::DisplayStatement;
 use crate::code_generation::codegen::Codegen;
-use crate::common::CompilerError;
+use crate::common::errors_warnings::CompilerError;
 use crate::compiler_io::compiler_arguments::CompilerArguments;
 use crate::compiler_io::dev_repl::dev_repl;
 use crate::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
@@ -59,7 +59,7 @@ fn main() -> io::Result<()> {
         eprintln!("{}", w);
     }
     push_errors!(static_errors, errors);
-    let resolutions = resolver.resolutions;
+    let symbols_count = parser.count_symbols();
 
     // Error reporting
     // TODO: Currently, compiler exits if are any errors at resolution pass, which is not correct.
@@ -72,7 +72,7 @@ fn main() -> io::Result<()> {
         exit(1);
     }
 
-    let mut type_checker = Typechecker::new(types_ptr, resolutions);
+    let mut type_checker = Typechecker::new(types_ptr, symbols_count);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {
         push_errors!(static_errors, r);
@@ -87,13 +87,14 @@ fn main() -> io::Result<()> {
     }
 
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator, types_ptr, type_checker.resolutions);
+    let mut compiler = Compiler::new(&ir_allocator, types_ptr, symbols_count);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
 
     let codegen = Codegen::new(ir, args.pic());
     let generated_assembly = codegen.generate();
     dprintln!(args, "{generated_assembly}");
+    dprintln!(args, "Types = {types:#?}");
     for i in ast {
         dprintln!(args, "{}", DisplayStatement(i, &types));
     }

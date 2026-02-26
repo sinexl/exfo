@@ -1,7 +1,8 @@
 use crate::analysis::r#type::{DisplayType, TypeIdCell};
 use crate::analysis::type_context::TypeCtx;
-use crate::ast::expression::Expression;
-use crate::common::{Identifier, SourceLocation};
+use crate::ast::expression::{Expression, SymId};
+use crate::common::identifier::Identifier;
+use crate::common::SourceLocation;
 use std::cell::Cell;
 use std::fmt::{Display, Formatter};
 
@@ -14,11 +15,11 @@ pub struct Statement<'ast, 'types> {
 #[derive(Debug)]
 pub enum StatementKind<'ast, 'types> {
     ExpressionStatement(&'ast Expression<'ast>),
-    FunctionDeclaration(FunctionDeclaration<'ast, 'types>),
-    VariableDeclaration(VariableDeclaration<'ast>),
+    FunctionDeclaration(FunctionDeclaration<'ast, 'types>, SymId),
+    VariableDeclaration(VariableDeclaration<'ast>, SymId),
     Block(&'ast [&'ast Statement<'ast, 'types>]),
     Return(Option<&'ast Expression<'ast>>),
-    Extern(ExternalFunction<'ast, 'types>),
+    Extern(ExternalFunction<'ast, 'types>, SymId),
     If {
         condition: &'ast Expression<'ast>,
         then: &'ast Statement<'ast, 'types>,
@@ -78,6 +79,7 @@ pub struct VariableDeclaration<'a> {
 pub struct FunctionParameter<'ast> {
     pub name: Identifier<'ast>,
     pub ty: TypeIdCell,
+    pub id: SymId
 }
 
 pub struct DisplayFunctionParameter<'ast, 'types>(
@@ -90,8 +92,9 @@ impl<'ast, 'types> Display for DisplayFunctionParameter<'ast, 'types> {
         let Self(param, types) = self;
         write!(
             f,
-            "{}: {}",
+            "{}({}): {}",
             param.name.name,
+            param.id,
             DisplayType(param.ty.clone().inner(), types)
         )
     }

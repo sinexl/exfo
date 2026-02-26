@@ -1,4 +1,4 @@
-use crate::analysis::r#type::{BASIC_TYPES, DisplayType, PointerType, Type, TypeId};
+use crate::analysis::r#type::{DisplayType, PointerType, Type, TypeId, BASIC_TYPES};
 use crate::common::BumpVec;
 use bumpalo::Bump;
 use std::collections::HashMap;

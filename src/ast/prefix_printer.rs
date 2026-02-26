@@ -26,7 +26,7 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
         }
         ExpressionKind::Assignment { target, value } => parenthesize(f, "=", &[target, value]),
         ExpressionKind::Literal(lit) => write!(f, "{}", lit),
-        ExpressionKind::VariableAccess(name) => write!(f, "{}", name.name),
+        ExpressionKind::VariableAccess(name, id) => write!(f, "{}<{id}>", name.name),
         ExpressionKind::FunctionCall { callee, arguments } => {
             let mut temp: Vec<&Expression> = Vec::with_capacity(arguments.len() + 1);
             temp.push(*callee);
@@ -46,18 +46,20 @@ pub fn prefix_print_statement<'ast, 'types>(
     let tab = PREFIX_TAB;
     match &statement.kind {
         StatementKind::ExpressionStatement(expr) => {
-            prefix_print(expr, f)?;
-            write!(f, ";")?;
+            writeln!(f, "({})", PrefixPrint(expr))?;
         }
-        StatementKind::FunctionDeclaration(FunctionDeclaration {
-            name,
-            body,
-            parameters,
-            return_type,
-        }) => {
+        StatementKind::FunctionDeclaration(
+            FunctionDeclaration {
+                name,
+                body,
+                parameters,
+                return_type,
+            },
+            id,
+        ) => {
             write!(
                 f,
-                "(func `{}` ({}): {}",
+                "(func `{}`({id}) ({}): {}",
                 name.name,
                 Join(
                     parameters
@@ -70,24 +72,30 @@ pub fn prefix_print_statement<'ast, 'types>(
             if !body.is_empty() {
                 writeln!(f)?;
                 for statement in *body {
-                    writeln!(f, "{tab}{}", PrefixPrintStatement(statement, types))?;
+                    write!(f, "{tab}{}", PrefixPrintStatement(statement, types))?;
                 }
             }
             writeln!(f, ")")?;
         }
 
-        StatementKind::Extern(ExternalFunction {
-            name,
-            kind,
-            parameters,
-            return_type,
-            is_variadic,
-        }) => {
+        StatementKind::Extern(
+            ExternalFunction {
+                name,
+                kind,
+                parameters,
+                return_type,
+                is_variadic,
+            },
+            id,
+        ) => {
             write!(
                 f,
-                "(extern \"{kind:?}\" `{}` ({}{}): {}",
+                "(extern \"{kind:?}\" `{}`({id}) ({}{}): {}",
                 name.name,
-                Join(parameters.iter().map(|e| DisplayType(e.inner(), types)), ", "),
+                Join(
+                    parameters.iter().map(|e| DisplayType(e.inner(), types)),
+                    ", "
+                ),
                 if *is_variadic { ", ..." } else { "" },
                 DisplayType(return_type.inner(), types)
             )?;
@@ -95,19 +103,26 @@ pub fn prefix_print_statement<'ast, 'types>(
         StatementKind::Block(body) => {
             writeln!(f, "(block")?;
             if !body.is_empty() {
-                writeln!(f)?;
                 for statement in *body {
-                    writeln!(f, "{tab}{}", PrefixPrintStatement(statement, types))?;
+                    write!(f, "{tab}{}", PrefixPrintStatement(statement, types))?;
                 }
             }
-            writeln!(f, ")")?;
+            writeln!(f, "{tab})")?;
         }
-        StatementKind::VariableDeclaration(VariableDeclaration {
-            name,
-            initializer,
-            ty,
-        }) => {
-            write!(f, "(`{}`: {} ", name.name, DisplayType(ty.inner(), types))?;
+        StatementKind::VariableDeclaration(
+            VariableDeclaration {
+                name,
+                initializer,
+                ty,
+            },
+            id,
+        ) => {
+            write!(
+                f,
+                "(`{}`({id}): {} ",
+                name.name,
+                DisplayType(ty.inner(), types)
+            )?;
             if let Some(initializer) = initializer {
                 write!(f, "= {}", PrefixPrint(initializer))?;
             }

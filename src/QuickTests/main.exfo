@@ -2,17 +2,43 @@ extern "C" func memcmp(int*, int*, int): int;
 extern "C" func printf(char_ptr, ...): void;
 
 func get_string(a: bool): char_ptr {
-    if a == false return "false";
-    else if a == true return "true";
+    if a  return "true";
+    else  return "false";
 }
 
-func main(): int {
+func not(a: bool): bool {
+    if a return false;
+    return true;
+}
+
+func eq(a: bool, b: bool): bool {
+    if a {
+        if b return true;
+        return false;
+    } else {
+        if b return false;
+        return true;
+    }
+}
+
+func inverse(le: bool*, ge: bool*, leq: bool*, geq: bool*): void {
+    s_le  := *le;
+    s_ge  := *ge;
+    s_leq := *leq;
+    s_geq := *geq;
+
+
+    *le = not(s_leq); *ge = not(s_geq);
+    *leq = not(s_le); *geq = not(s_ge);
+}
+
+func test_ordering(): void {
     True := true;
     False := false;
     size := 8;
 
-    i := 0; while i < 3 {
-        j := 0; while j < 3 {
+    i := -1; while i <= 1 {
+        j := -1; while j <= 1 {
             le  := i < j;
             ge  := i > j;
             leq := i <= j;
@@ -30,17 +56,29 @@ func main(): int {
             e_ge  := cmp > 0;
             e_leq := cmp < 0 || e_eq;
             e_geq := cmp > 0 || e_eq;
-            printf("< --- (i, j) = (%d%d) --- >%c", i, j, 10);
-            printf("%d <  %d: %5s (expected: %5s)%c", i, j, get_string(le),  get_string(e_le),  10);
-            printf("%d >  %d: %5s (expected: %5s)%c", i, j, get_string(ge),  get_string(e_ge),  10);
-            printf("%d <= %d: %5s (expected: %5s)%c", i, j, get_string(leq), get_string(e_leq), 10);
-            printf("%d >= %d: %5s (expected: %5s)%c", i, j, get_string(geq), get_string(e_geq), 10);
+
+            // Memcmp doesnt take into account the sign.
+            i_s := i < 0;
+            j_s := j < 0;
+            if not(eq(i_s, j_s)) {
+                inverse(&e_le, &e_ge, &e_leq, &e_geq);
+            }
+            printf("< --- (i, j) = (%d, %d) --- >%c", i, j, 10);
+            printf("%3d <  %3d: %5s (expected: %5s)%c", i, j, get_string(le),  get_string(e_le),  10);
+            printf("%3d >  %3d: %5s (expected: %5s)%c", i, j, get_string(ge),  get_string(e_ge),  10);
+            printf("%3d <= %3d: %5s (expected: %5s)%c", i, j, get_string(leq), get_string(e_leq), 10);
+            printf("%3d >= %3d: %5s (expected: %5s)%c", i, j, get_string(geq), get_string(e_geq), 10);
             j = j + 1;
         }
         i = i + 1;
     }
 
 
+
+}
+
+func main(): int {
+    test_ordering();
 
     return 0;
 }

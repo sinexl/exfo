@@ -1,4 +1,4 @@
-use crate::common::Identifier;
+use crate::common::identifier::Identifier;
 use crate::compiling::ir::binop::Binop;
 
 #[derive(Clone, Debug)]

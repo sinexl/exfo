@@ -1,7 +1,9 @@
 use crate::analysis::resolver::{Resolver, ResolverError, ResolverErrorKind};
+use crate::analysis::tests::machinery::{error, success, PATH};
 use crate::analysis::type_context::TypeCtx;
 use crate::ast::statement::{Statement, StatementKind};
-use crate::common::{Identifier, IdentifierBox, SourceLocation};
+use crate::common::identifier::{Identifier, IdentifierBox};
+use crate::common::SourceLocation;
 use crate::hashmap;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
@@ -10,7 +12,6 @@ use std::collections::HashMap;
 use std::ptr::addr_of_mut;
 use std::rc::Rc;
 
-const PATH: &str = "PATH";
 
 #[test]
 pub fn undeclared_variable() {
@@ -50,38 +51,47 @@ pub fn reading_from_initializer() {
 
 #[test]
 pub fn simple_resolution() {
+    let p =
+r#"(func `main`(#1) (): unknown_t
+ (`a`(#0): unknown_t = 10)
+ (a<#0>)
+)"#;
     assert_eq!(
         success("func main () { a:=10; a; }"),
-        hashmap! {
-            (1, 23)  => 0,
-        }
+        p,
     )
 }
 
 #[test]
 pub fn with_blocks() {
     let resolutions = success("func main () { a := 10; a; { a; a := 15; a;} } ");
+    let p =
+r#"(func `main`(#2) (): unknown_t
+ (`a`(#0): unknown_t = 10)
+ (a<#0>)
+ (block
+ (a<#0>)
+ (`a`(#1): unknown_t = 15)
+ (a<#1>)
+ )
+)"#;
     assert_eq!(
         resolutions,
-        hashmap! {
-            (1,25) => 0,
-            (1, 30) => 1,
-            (1, 42) => 0,
-        }
+        p,
     )
 }
 
 #[test]
 pub fn shadowing() {
     let resolutions = success("func main() { a := 10; a; a := a + 10; a; }");
-    assert_eq!(
-        resolutions,
-        hashmap! {
-            (1, 24) => 0,
-            (1, 32) => 0,
-            (1, 40) => 0,
-        }
-    );
+    let p =
+r#"(func `main`(#2) (): unknown_t
+ (`a`(#0): unknown_t = 10)
+ (a<#0>)
+ (`a`(#1): unknown_t = (+ a<#0> 10))
+ (a<#1>)
+)"#;
+    assert_eq!(resolutions, p)
 }
 
 #[test]
@@ -234,45 +244,3 @@ pub fn proper_label_resolution() {
     );
 }
 
-fn success(src: &str) -> HashMap<(usize, usize), usize> {
-    let (tokens, errors) = Lexer::new(src, PATH).accumulate();
-    assert!(errors.is_empty());
-    let ast_alloc = Bump::new();
-    let type_alloc =  Bump::new();
-    let mut type_ctx = TypeCtx::new(&type_alloc);
-
-    let mut parser = Parser::new(tokens.into(), &ast_alloc, addr_of_mut!(type_ctx));
-    let (ast, errors) = parser.parse_program();
-    assert!(errors.is_empty());
-
-    let mut resolver = Resolver::new();
-    let errors = resolver.resolve_statements(ast);
-    assert_eq!(errors.len(), 0);
-    resolver
-        .resolutions
-        .iter()
-        .map(|(expr, depth)| ((expr.loc.line, expr.loc.offset), *depth))
-        .collect()
-}
-
-fn error(src: &str) -> ResolverError {
-    let errors = errors(src);
-    assert_eq!(errors.len(), 1);
-    errors[0].clone()
-}
-
-fn errors(src: &str) -> Vec<ResolverError> {
-    let (tokens, errors) = Lexer::new(src, PATH).accumulate();
-    assert!(errors.is_empty());
-
-    let ast_alloc = Bump::new();
-    let type_alloc = Bump::new();
-    let mut type_ctx = TypeCtx::new(&type_alloc);
-
-    let mut parser = Parser::new(tokens.into(), &ast_alloc, addr_of_mut!(type_ctx));
-    let (ast, errors) = parser.parse_program();
-    assert!(errors.is_empty());
-
-    let mut resolver = Resolver::new();
-    resolver.resolve_statements(ast).to_vec()
-}

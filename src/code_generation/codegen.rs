@@ -159,7 +159,7 @@ impl<'ir> Codegen<'ir> {
                 let register_args = args.iter().take(CALL_REGISTERS.len());
 
                 for (i, arg) in register_args.enumerate() {
-                    self.load_arg_to_reg(arg, CALL_REGISTERS[i]);
+                    self.load_arg_to_reg(arg, CALL_REGISTERS[i].lower_bytes_register(arg.size()));
                 }
 
                 let stack_args = &args[cmp::min(CALL_REGISTERS.len(), args.len())..];
@@ -331,16 +331,19 @@ impl<'ir> Codegen<'ir> {
             }
             Opcode::Load { result, source } => {
                 comment!(self, "Load");
-                let size = assert_same!(
+                assert_same!(
                     format!("Could not dereference {e} byte adress", e = source.size()),
                     source.size(),
                     8
                 );
-                let reg = Rax.lower_bytes_register(size);
-                let p = reg.prefix();
-                self.load_arg_to_reg(source, Rax);
-                asm!(self, "  mov{p} ({Rax}), {reg}");
-                self.store_reg_to_lvalue(reg, result);
+                let ptr_reg = Rax;
+                let value_reg = ptr_reg.lower_bytes_register(result.size());
+                let p = value_reg.prefix();
+                // Load pointer into the ptr_reg.
+                self.load_arg_to_reg(source, ptr_reg);
+                // Dereference the value from ptr_reg into value_reg.
+                asm!(self, "  mov{p} ({ptr_reg}), {value_reg}");
+                self.store_reg_to_lvalue(value_reg, result);
             }
         }
         comment!(self);
@@ -348,7 +351,7 @@ impl<'ir> Codegen<'ir> {
 
     pub fn generate(mut self) -> String {
         asm!(self, ".section .text");
-        for v in self.ir.functions.values() {
+        for v in &self.ir.functions {
             self.generate_function(v);
         }
         self.generate_data();

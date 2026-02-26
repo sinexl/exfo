@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter, Write};
 
 pub fn print_ir(ir: &IntermediateRepresentation, f: &mut impl Write) -> std::fmt::Result {
     if !&ir.functions.is_empty() {
-        for (_, func) in &ir.functions {
+        for func in &ir.functions {
             print_function(func, f)?;
         }
     } else {
@@ -48,7 +48,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
                 Arg::RValue(Rvalue::ExternalFunction(id)) => {
                     write!(f, "{tab}")?;
                     if let Some(result) = result {
-                        write!(f, "stack[{result}] = ")?;
+                        write!(f, "{result} = ")?;
                     }
                     write!(
                         f,
@@ -94,7 +94,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::JmpIfNot { label, condition } => {
             writeln!(f, "{tab}jmp_if_not {condition} -> .label{label}")?
         }
-        Opcode::Jmp { label } => writeln!(f, "{tab}jmp -> {label}")?,
+        Opcode::Jmp { label } => writeln!(f, "{tab}jmp -> .label{label}")?,
         Opcode::AddressOf { result, source } => writeln!(f, "{tab}{result} = &{source}")?,
         Opcode::Store { result, source } => writeln!(f, "{tab}*{result} = {source}")?,
         Opcode::Load { result, source } => writeln!(f, "{tab}{result} = *{source}")?,
@@ -106,7 +106,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
 pub fn print_lvalue(lvalue: &Lvalue, f: &mut impl Write) -> std::fmt::Result {
     match lvalue {
         Lvalue::StackOffset { offset, size: _ } => write!(f, "stack[{offset}]")?,
-        Lvalue::Argument { index, size } => write!(f, "argument[{index}]")?,
+        Lvalue::Argument { index, size: _ } => write!(f, "argument[{index}]")?,
     };
     Ok(())
 }
