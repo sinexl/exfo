@@ -131,7 +131,7 @@ impl<'ast> Display for DisplayType<'ast> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Self(id, types) = self;
         match id {
-            TypeId::Unknown => write!(f, "unknown")?,
+            TypeId::Unknown => write!(f, "unknown_t")?,
             _ => {
                 let ty = id.get(types);
                 match ty {

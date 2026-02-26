@@ -7,7 +7,9 @@ use crate::ast::binop::BinopFamily;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
-use crate::common::{BumpVec, CompilerEntity, CompilerError, SourceLocation, SymbolTable};
+use crate::common::errors_warnings::CompilerError;
+use crate::common::symbol_table::{CompilerEntity, SymbolTable};
+use crate::common::{BumpVec, SourceLocation};
 use bumpalo::collections::CollectIn;
 
 pub struct Typechecker<'types> {

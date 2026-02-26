@@ -5,7 +5,8 @@ use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
     ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
 };
-use crate::common::{BumpVec, CompilerEntity, SymbolTable};
+use crate::common::symbol_table::{CompilerEntity, SymbolTable};
+use crate::common::BumpVec;
 use crate::compiling::ir::binop;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};

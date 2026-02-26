@@ -3,7 +3,7 @@ use crate::analysis::type_context::TypeCtx;
 use crate::analysis::typechecker::Typechecker;
 use crate::ast::tree_printer::DisplayStatement;
 use crate::code_generation::codegen::Codegen;
-use crate::common::CompilerError;
+use crate::common::errors_warnings::CompilerError;
 use crate::compiler_io::compiler_arguments::CompilerArguments;
 use crate::compiler_io::dev_repl::dev_repl;
 use crate::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};

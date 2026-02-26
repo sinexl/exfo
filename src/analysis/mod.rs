@@ -7,3 +7,4 @@ pub mod get_at;
 pub mod r#type;
 pub mod typechecker;
 pub mod type_context;
+type Stack<T> = Vec<T>;

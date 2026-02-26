@@ -10,8 +10,9 @@ use crate::ast::statement::{
     ExternKind, ExternalFunction, FunctionDeclaration, FunctionParameter, Statement, StatementKind,
     VariableDeclaration,
 };
-use crate::common::BumpVec;
-use crate::common::{CompilerError, Identifier, SourceLocation};
+use crate::common::errors_warnings::CompilerError;
+use crate::common::identifier::Identifier;
+use crate::common::{BumpVec, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
 use crate::parsing::parser::ParseErrorKind::{
     InvalidAssignment, UnbalancedParens, UnexpectedToken, UnknownType,

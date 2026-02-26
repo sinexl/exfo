@@ -1,4 +1,4 @@
-use crate::common::Stack;
+use crate::analysis::Stack;
 use std::collections::HashMap;
 use std::fmt::Display;
 

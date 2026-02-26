@@ -1,7 +1,8 @@
-use std::cell::Cell;
 use crate::analysis::r#type::TypeIdCell;
 use crate::ast::binop::BinopKind;
-use crate::common::{Identifier, SourceLocation};
+use crate::common::identifier::Identifier;
+use crate::common::SourceLocation;
+use std::cell::Cell;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 

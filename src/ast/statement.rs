@@ -1,7 +1,8 @@
 use crate::analysis::r#type::{DisplayType, TypeIdCell};
 use crate::analysis::type_context::TypeCtx;
 use crate::ast::expression::{Expression, SymId};
-use crate::common::{Identifier, SourceLocation};
+use crate::common::identifier::Identifier;
+use crate::common::SourceLocation;
 use std::cell::Cell;
 use std::fmt::{Display, Formatter};
 

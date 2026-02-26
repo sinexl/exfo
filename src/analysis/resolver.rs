@@ -1,10 +1,11 @@
 use crate::analysis::get_at::GetAt;
+use crate::analysis::Stack;
 use crate::ast::expression::{Expression, ExpressionKind, RefId, SymId};
 use crate::ast::statement::{ExternalFunction, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
-use crate::common::{
-    CompilerError, CompilerWarning, Identifier, IdentifierBox, IntoBox, SourceLocation, Stack,
-};
+use crate::common::errors_warnings::{CompilerError, CompilerWarning};
+use crate::common::identifier::{Identifier, IdentifierBox};
+use crate::common::{IntoBox, SourceLocation};
 use std::collections::HashMap;
 
 

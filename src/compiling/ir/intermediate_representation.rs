@@ -1,4 +1,5 @@
-use crate::common::{BumpVec, Identifier};
+use crate::common::identifier::Identifier;
+use crate::common::BumpVec;
 use crate::compiling::ir::opcode::Opcode;
 use bumpalo::Bump;
 use std::collections::HashMap;
