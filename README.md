@@ -16,7 +16,7 @@ logical operations
 - [ ] Other platforms support (including windows)
 - [ ] Pointer Arithmetic
 - [ ] Some basic operations (!, %, == for `bool`, bitwise operations)
-- [ ] Escape sequences, character type
+- [ ] Character type
 - [ ] 32, 16, 8 bit integer, 64, 32-bit floats
 - [ ] User types (structures, etc)
 - [ ] Arrays, slices, sized strings.
@@ -24,7 +24,7 @@ logical operations
 ### Code & Language Semantics: 
 - [ ] Global scope pre-resolution 
 - [ ] Smarter type system 
-- [ ] Better error messages & error recovery in parser. 
+- [ ] Better error messages & error recovery in parser & resolver. 
 
 
 ## Building (x86_64-linux) 

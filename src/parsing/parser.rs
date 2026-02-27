@@ -58,15 +58,19 @@ pub struct Parser<'ast, 'types> {
     current: usize,
     tokens: Rc<[Token]>,
     ast_bump: &'ast Bump,
-    types:  *mut TypeCtx<'types>,
+    types: *mut TypeCtx<'types>,
     // All expressions are assigned with unique ID's
     nodes_count: usize,
-    // All references are assigned with unique ID besides the expression ID
+    // All symbols (declarations) are assigned with unique ID besides the expression ID
     symbols_count: usize,
 }
 
 impl<'ast, 'types> Parser<'ast, 'types> {
-    pub fn new(tokens: Rc<[Token]>, ast_bump: &'ast Bump, type_ctx: *mut TypeCtx<'types>) -> Parser<'ast, 'types> {
+    pub fn new(
+        tokens: Rc<[Token]>,
+        ast_bump: &'ast Bump,
+        type_ctx: *mut TypeCtx<'types>,
+    ) -> Parser<'ast, 'types> {
         Self {
             current: 0,
             ast_bump,
@@ -117,15 +121,6 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 
     pub fn parse_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let state = self.save_state();
-
-        // --- Function declaration ---
-        if self.consume(&[TokenType::Func]).is_some() {
-            self.restore_state(state);
-            return self
-                .parse_function_declaration()
-                .map_err(|e| self.sync_and_return(e));
-        }
-
         // --- Variable declaration / Named while Loop ---
         if self.consume(&[TokenType::Id]).is_some() {
             // Ambiguity #1. ID at the beginning can be either:
@@ -140,26 +135,31 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 let is_named_while = self.consume(&[TokenType::While]).is_some();
                 self.restore_state(state);
                 if !is_named_while {
-                    return self.parse_variable_declaration()
-                        .map_err(|e| self.sync_and_return(e))
+                    return self
+                        .parse_variable_declaration()
+                        .map_err(|e| self.sync_and_return(e));
                 }
             }
             self.restore_state(state);
         }
-
-        // --- External declaration ---
-        if self.consume(&[TokenType::Extern]).is_some() {
-            self.restore_state(state);
-            return self
+        // Fall through to other cases
+        match self.peek_token()?.kind {
+            // --- Function declaration ---
+            TokenType::Func => self
+                .parse_function_declaration()
+                .map_err(|e| self.sync_and_return(e)),
+            // --- External declaration ---
+            TokenType::Extern => self
                 .parse_external_declaration()
-                .map_err(|e| self.sync_and_return(e));
+                .map_err(|e| self.sync_and_return(e)),
+            // --- other: statement ---
+            _ => self.parse_statement().map_err(|e| self.sync_and_return(e)),
         }
-
-        // --- other: statement ---
-        self.parse_statement().map_err(|e| self.sync_and_return(e))
     }
 
-    pub fn parse_variable_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+    pub fn parse_variable_declaration(
+        &mut self,
+    ) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let name = self.expect(&[TokenType::Id], "Expected variable name")?;
         let colon = self.expect(&[TokenType::Colon], "Expected colon")?;
 
@@ -180,16 +180,21 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         )?;
 
         Ok(self.ast_bump.alloc(Statement {
-            kind: StatementKind::VariableDeclaration(VariableDeclaration {
-                name: Identifier::from_token(name, self.ast_bump),
-                initializer,
-                ty: variable_type.into()
-            }, self.sym_id()),
+            kind: StatementKind::VariableDeclaration(
+                VariableDeclaration {
+                    name: Identifier::from_token(name, self.ast_bump),
+                    initializer,
+                    ty: variable_type.into(),
+                },
+                self.sym_id(),
+            ),
             loc: colon.loc,
         }))
     }
 
-    pub fn parse_external_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+    pub fn parse_external_declaration(
+        &mut self,
+    ) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let keyword = self.expect(&[TokenType::Extern], "Expected extern keyword")?;
         let kind = self.expect(
             &[TokenType::String],
@@ -216,12 +221,11 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 
         let mut res: BumpVec<TypeIdCell> = BumpVec::new_in(self.types().bump());
         if self.peek_token()?.kind != TokenType::CloseParen {
-
             let expr = self.parse_type()?;
             res.push(expr.into());
 
             while self.consume(&[TokenType::Comma]).is_some() {
-                if let Some(td) = self.consume(&[TokenType::TripleDot]) {
+                if let Some(_) = self.consume(&[TokenType::TripleDot]) {
                     is_variadic = true;
                     break;
                 }
@@ -231,7 +235,9 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 
         let parameters: &[TypeIdCell] = res.into_bump_slice();
         let mut message = String::from("Expected closing parenthesis.");
-        if is_variadic { message += " Variadic parameters should be last in parameter list." }
+        if is_variadic {
+            message += " Variadic parameters should be last in parameter list."
+        }
         self.expect(&[TokenType::CloseParen], message.as_str())?;
         self.expect(
             &[TokenType::Colon],
@@ -246,31 +252,39 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         )?;
 
         Ok(self.ast_bump.alloc(Statement {
-            kind: StatementKind::Extern(ExternalFunction {
-                name: Identifier::from_token(name, self.ast_bump),
-                kind,
-                is_variadic,
-                parameters,
-                return_type: return_type.into(),
-            }, self.sym_id()),
+            kind: StatementKind::Extern(
+                ExternalFunction {
+                    name: Identifier::from_token(name, self.ast_bump),
+                    kind,
+                    is_variadic,
+                    parameters,
+                    return_type: return_type.into(),
+                },
+                self.sym_id(),
+            ),
             loc: keyword.loc,
         }))
     }
 
     /// func name (args) {} ...
-    pub fn parse_function_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+    pub fn parse_function_declaration(
+        &mut self,
+    ) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
         let func_keyword = self.expect(&[TokenType::Func], "Expected function declaration")?;
         let name = self.expect(&[TokenType::Id], "Expected function name")?;
         debug_assert!(name.kind == TokenType::Id);
         let (parameters, body, return_type) = self.parse_function()?;
 
         Ok(self.ast_bump.alloc(Statement {
-            kind: StatementKind::FunctionDeclaration(FunctionDeclaration {
-                name: Identifier::from_token(name, self.ast_bump),
-                body,
-                parameters,
-                return_type: return_type.into(),
-            }, self.sym_id()),
+            kind: StatementKind::FunctionDeclaration(
+                FunctionDeclaration {
+                    name: Identifier::from_token(name, self.ast_bump),
+                    body,
+                    parameters,
+                    return_type: return_type.into(),
+                },
+                self.sym_id(),
+            ),
             loc: func_keyword.loc,
         }))
     }
@@ -307,7 +321,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                     Ok(FunctionParameter {
                         name: Identifier::from_token(id, this.ast_bump),
                         ty: ty.into(),
-                        id: this.sym_id()
+                        id: this.sym_id(),
                     })
                 })
                 .map_err(|mut e| {
@@ -334,46 +348,44 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     }
 
     pub fn parse_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+        use TokenType::*;
         let state = self.save_state();
-        if self.consume(&[TokenType::OpenBrace]).is_some() {
-            self.restore_state(state);
-            return self.parse_block_statement();
-        } else if self.consume(&[TokenType::Return]).is_some() {
-            self.restore_state(state);
-            return self.parse_return_statement();
-        } else if self.consume(&[TokenType::If]).is_some() {
-            self.restore_state(state);
-            return self.parse_if_statement();
-        } else if self.consume(&[TokenType::While]).is_some() {
-            self.restore_state(state);
-            return self.parse_while_statement();
-        } else if self.consume(&[TokenType::Id]).is_some() {
-            if self.consume(&[TokenType::Colon]).is_some() && self.consume(&[TokenType::While]).is_some() {
+
+        if self.consume(&[Id]).is_some() {
+            if self.consume(&[Colon]).is_some() && self.consume(&[While]).is_some() {
                 self.restore_state(state);
                 return self.parse_while_statement();
             }
-            self.restore_state(state);
-        } else if let Some(flow) = self.consume(&[TokenType::Break, TokenType::Continue]) {
-            let id = 0.into(); // parser doesn't set any ids. it is done by resolver
-            let name = self
-                .consume(&[TokenType::Id])
-                .map(|e| Identifier::from_token(e, self.ast_bump));
-            let (kind, name) = match flow.kind {
-                TokenType::Break => (StatementKind::Break { id, name }, "break"),
-                TokenType::Continue => (StatementKind::Continue { id, name }, "continue"),
-                _ => unreachable!(),
-            };
-            let statement = self.ast_bump.alloc(Statement {
-                kind,
-                loc: flow.loc.clone(),
-            });
-            self.expect(
-                &[TokenType::Semicolon],
-                &format!("expected semicolon after {name} statement"),
-            )?;
-            return Ok(statement);
         }
-        self.parse_expression_statement()
+        self.restore_state(state);
+        let tk = self.peek_token()?;
+        let loc = tk.loc.clone();
+        match tk.kind {
+            OpenBrace => self.parse_block_statement(),
+            Return => self.parse_return_statement(),
+            If => self.parse_if_statement(),
+            While => self.parse_while_statement(),
+            flow if flow == Break || flow == Continue => {
+                self.skip_token();
+                let id = 0.into(); // parser doesn't set any ids. it is done by resolver
+                let name = self
+                    .consume(&[Id])
+                    .map(|e| Identifier::from_token(e, self.ast_bump));
+                let (kind, name) = match flow {
+                    Break => (StatementKind::Break { id, name }, "break"),
+                    Continue => (StatementKind::Continue { id, name }, "continue"),
+                    _ => unreachable!(),
+                };
+
+                let statement = self.ast_bump.alloc(Statement { kind, loc });
+                self.expect(
+                    &[Semicolon],
+                    &format!("expected semicolon after {name} statement"),
+                )?;
+                Ok(statement)
+            }
+            _ => self.parse_expression_statement(),
+        }
     }
 
     pub fn parse_if_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
@@ -491,7 +503,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 location: name.loc.clone(),
             }),
         }?;
-        while self.consume(&[TokenType::Star]).is_some() { 
+        while self.consume(&[TokenType::Star]).is_some() {
             ty = unsafe { (*self.types).monomorph_or_get_pointer(ty) };
         }
         Ok(ty)
@@ -512,7 +524,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 loc: tk.loc,
                 id: self.id(),
                 kind: Assignment { target, value },
-                ty: TypeId::Unknown.into()
+                ty: TypeId::Unknown.into(),
             }));
         }
         Ok(target)
@@ -550,7 +562,8 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     }
 
     fn parse_unary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
-        if let Some(tok) = self.consume(&[TokenType::Minus, TokenType::Star, TokenType::Ampersand]) {
+        if let Some(tok) = self.consume(&[TokenType::Minus, TokenType::Star, TokenType::Ampersand])
+        {
             let item = self.parse_unary()?;
 
             return Ok(self.ast_bump.alloc(Expression {
@@ -560,12 +573,12 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                         TokenType::Star => UnaryKind::Dereferencing,
                         TokenType::Minus => UnaryKind::Negation,
                         TokenType::Ampersand => UnaryKind::AddressOf,
-                        _ => unreachable!()
+                        _ => unreachable!(),
                     },
                 },
                 loc: tok.loc,
                 id: self.id(),
-                ty: TypeId::Unknown.into()
+                ty: TypeId::Unknown.into(),
             }));
         }
 
@@ -582,7 +595,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 },
                 loc: tk.clone().loc,
                 id: self.id(),
-                ty: TypeId::Unknown.into()
+                ty: TypeId::Unknown.into(),
             });
             if self.consume(&[TokenType::CloseParen]).is_none() {
                 return Err(ParseError {
@@ -598,9 +611,9 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     fn parse_args(&mut self) -> Result<&'ast [*mut Expression<'ast>], ParseError> {
         let mut args = BumpVec::<*mut Expression<'ast>>::new_in(self.ast_bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
-            let comma_separated= self.parse_comma_separated::<*mut Expression<'ast>>(|this|
-                 this.parse_expression().map(|e| e as *mut _)
-            )?;
+            let comma_separated = self.parse_comma_separated::<*mut Expression<'ast>>(|this| {
+                this.parse_expression().map(|e| e as *mut _)
+            })?;
             args.extend(comma_separated);
         }
         Ok(args.into_bump_slice())
@@ -609,80 +622,78 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     fn parse_primary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
         use TokenType::*;
         let token = self.peek_token()?;
-
-        if let Some(id) = self.consume(&[Id]) {
-            let loc = id.loc.clone();
-            return Ok(self.ast_bump.alloc(Expression {
-                loc,
-                kind: VariableAccess(Identifier::from_token(id, self.ast_bump), RefId::unknown()),
-                id: self.id(),
-                ty: TypeId::Unknown.into()
-            }));
-        }
-
-        if let Some(integer) = self.consume(&[Integer]) {
-            let value = integer.integer;
-            let id = self.id();
-            return Ok(self.construct_literal(
-                AstLiteral::Integral(value),
-                integer.loc.clone(),
-                id,
-                TypeId::from_basic(BasicType::Int64),
-            ));
-        }
-        if let Some(double) = self.consume(&[Double]) {
-            let value = double.double;
-            let id = self.id();
-            return Ok(self.construct_literal(
-                AstLiteral::FloatingPoint(value),
-                double.loc.clone(),
-                id,
-                TypeId::from_basic(BasicType::Float64)
-            ));
-        }
-        if let Some(boolean) = self.consume(&[False, True]) {
-            let id = self.id();
-            let bool = match boolean.kind {
-                False => false,
-                True => true,
-                _ => unreachable!(),
-            };
-
-            return Ok(self.construct_literal(
-                AstLiteral::Boolean(bool),
-                boolean.loc.clone(),
-                id,
-                TypeId::from_basic(BasicType::Bool),
-            ));
-        }
-        if let Some(string) = self.consume(&[String]) {
-            let id = self.id();
-            let val = self.ast_bump.alloc_str(string.string.as_ref());
-            return Ok(self.construct_literal(
-                AstLiteral::String(val),
-                string.loc.clone(),
-                id,
-                TypeId::from_basic(BasicType::CharPtr)
-            ));
-        }
-
-        if let Some(paren) = self.consume(&[OpenParen]) {
-            let parenthesis_loc = paren.loc;
-            let expr = self.parse_expression()?;
-            if self.consume(&[CloseParen]).is_none() {
-                return Err(ParseError {
-                    location: parenthesis_loc,
-                    kind: UnbalancedParens,
-                });
-            }
-            return Ok(expr);
-        }
-
         self.skip_token();
-        Err(ParseError {
-            kind: ParseErrorKind::UnknownToken(token.clone()),
-            location: token.loc,
-        })
+        let loc = token.loc.clone();
+        let id = self.id();
+        match token.kind {
+            Id => {
+                Ok(self.ast_bump.alloc(Expression {
+                    loc,
+                    kind: VariableAccess(
+                        Identifier::from_token(token, self.ast_bump),
+                        RefId::unknown(),
+                    ),
+                    id,
+                    ty: TypeId::Unknown.into(),
+                }))
+            }
+            Integer => {
+                Ok(self.construct_literal(
+                    AstLiteral::Integral(token.integer),
+                    loc,
+                    id,
+                    TypeId::from_basic(BasicType::Int64),
+                ))
+            }
+            Double => {
+                Ok(self.construct_literal(
+                    AstLiteral::FloatingPoint(token.double),
+                    loc,
+                    id,
+                    TypeId::from_basic(BasicType::Float64),
+                ))
+            }
+            boolean if boolean == True || boolean == False => {
+                let bool = match boolean {
+                    False => false,
+                    True => true,
+                    _ => unreachable!(),
+                };
+                Ok(self.construct_literal(
+                    AstLiteral::Boolean(bool),
+                    loc,
+                    id,
+                    TypeId::from_basic(BasicType::Bool),
+                ))
+            }
+            String => {
+                let val = self.ast_bump.alloc_str(token.string.as_ref());
+                Ok(self.construct_literal(
+                    AstLiteral::String(val),
+                    loc,
+                    id,
+                    TypeId::from_basic(BasicType::CharPtr),
+                ))
+            }
+            OpenParen => {
+                let expr = self.parse_expression()?;
+                if self.consume(&[CloseParen]).is_none() {
+                    return Err(ParseError {
+                        location: loc,
+                        kind: UnbalancedParens,
+                    });
+                }
+                Ok(expr)
+            }
+
+            _ => {
+                self.nodes_count -= 1;
+                Err(ParseError {
+                    kind: ParseErrorKind::UnknownToken(token.clone()),
+                    location: token.loc,
+                })
+            }
+        }
     }
 
     pub fn construct_literal(
@@ -690,7 +701,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         value: AstLiteral<'ast>,
         loc: SourceLocation,
         id: usize,
-        ty: TypeId
+        ty: TypeId,
     ) -> &'ast mut Expression<'ast> {
         self.ast_bump.alloc(Expression {
             loc,
@@ -712,7 +723,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             kind: Binop { left, right, kind },
             loc,
             id,
-            ty: TypeId::Unknown.into()
+            ty: TypeId::Unknown.into(),
         })
     }
 
