@@ -13,6 +13,6 @@ func fibonacci(n: int): int {
 }
 
 func main(): void { 
-    printf("10!     = %d%c", factorial(10), 10);
-    printf("fib(10) = %d%c", fibonacci(10), 10);
+    printf("10!     = %d\n", factorial(10));
+    printf("fib(10) = %d\n", fibonacci(10));
 }

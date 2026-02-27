@@ -1,7 +1,7 @@
 extern "C" func printf(char_ptr, ...): void;
 extern "C" func memcmp(bool*, bool*, int): int;
 func side(b: bool, message: char_ptr): bool {
-    printf("%s%c", message, 10);
+    printf("%s\n", message);
     return b;
 }
 
@@ -24,7 +24,7 @@ func main(): int {
     True := true;
     False := false;
 
-    printf("< --- OR Operation (Rhs side effect) --- >%c", 10);
+    printf("< --- OR Operation (Rhs side effect) --- >\n");
     i := 0;
     while i <= 1 {
         j := 0;
@@ -41,7 +41,7 @@ func main(): int {
 
             result := a || side(b, message);
 
-            printf("%5s || %5s = %5s (expected %s)%c", get_string(a), get_string(b), get_string(result), get_string(expected), 10);
+            printf("%5s || %5s = %5s (expected %s)\n", get_string(a), get_string(b), get_string(result), get_string(expected));
 
 
             j = j + 1;
@@ -50,7 +50,7 @@ func main(): int {
     }
 
 
-    printf("%c< --- AND Operation (Rhs side effect) --- >%c", 10, 10);
+    printf("\n< --- AND Operation (Rhs side effect) --- >%c", 10);
     i := 0;
     while i <= 1 {
         j := 0;
@@ -67,7 +67,7 @@ func main(): int {
 
             result := a && side(b, message);
 
-            printf("%5s && %5s = %5s (expected %s)%c", get_string(a), get_string(b), get_string(result), get_string(expected), 10);
+            printf("%5s && %5s = %5s (expected %s)\n", get_string(a), get_string(b), get_string(result), get_string(expected));
 
 
             j = j + 1;

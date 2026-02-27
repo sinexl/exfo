@@ -24,38 +24,38 @@ func main(): int {
     ppa := &pa;
     ppb := &pb;
 
-    printf("Initial values:%c", 10);
-    printf("a     = %d, b     = %d%c", a, b, 10);
-    printf("*pa   = %d, *pb   = %d%c", *pa, *pb, 10);
-    printf("**ppa = %d, **ppb = %d%c", **ppa, **ppb, 10);
+    printf("Initial values:\n");
+    printf("a     = %d, b     = %d\n", a, b);
+    printf("*pa   = %d, *pb   = %d\n", *pa, *pb);
+    printf("**ppa = %d, **ppb = %d\n", **ppa, **ppb);
 
-    printf("%c", 10);
+    printf("\n");
 
     set_value(pa, 500);
-    printf("After set_value(pa, 500): a = %d%c", a, 10);
+    printf("After set_value(pa, 500): a = %d\n", a);
 
-    printf("%c", 10);
+    printf("\n");
 
     set_value(*ppa, 700);
-    printf("After set_value(*ppa, 700): a = %d%c", a, 10);
+    printf("After set_value(*ppa, 700): a = %d\n", a);
 
-    printf("%c", 10);
+    printf("\n");
 
     set_pointer(ppa, pb);
-    printf("After set_pointer(ppa, pb):%c", 10);
-    printf("  *pa = %d%c", *pa, 10);
+    printf("After set_pointer(ppa, pb):\n");
+    printf("  *pa = %d\n", *pa);
 
-    printf("%c", 10);
+    printf("\n");
 
     set_pointer(ppb, &a);
-    printf("After set_pointer(ppb, &a):%c", 10);
-    printf("  *pb = %d%c", *pb, 10);
+    printf("After set_pointer(ppb, &a):\n");
+    printf("  *pb = %d\n", *pb);
 
-    printf("%c", 10);
+    printf("\n");
 
     swap_ptrs(ppa, ppb);
-    printf("After swap_ptrs(ppa, ppb):%c", 10);
-    printf("*pa = %d, *pb = %d%c", *pa, *pb, 10);
+    printf("After swap_ptrs(ppa, ppb):\n");
+    printf("*pa = %d, *pb = %d\n", *pa, *pb);
 
     return 0;
 }

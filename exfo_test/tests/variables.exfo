@@ -8,26 +8,26 @@ func to_string(a: bool): char_ptr {
 // Copy of scoping example
 func main(): int {
     a := 1;
-    printf("before shadowing: a = %d%c", a, 10);
+    printf("before shadowing: a = %d\n", a);
     a := a + 1;
-    printf("after shadowing:  a = %d (a is still integer)%c", a, 10); // prints "2"
+    printf("after shadowing:  a = %d (a is still integer)\n", a); // prints "2"
 
     a := false;
-    printf("after shadowing:  a = %s (a is boolean now)%c", to_string(a), 10);  // prints "false"
+    printf("after shadowing:  a = %s (a is boolean now)\n", to_string(a));  // prints "false"
 
     a := 2;
     a = a + 1;
-    printf("after mutation & shadowing: a = %d%c", a, 10);
+    printf("after mutation & shadowing: a = %d\n", a);
 
     b := 10;
     c := 15;
-    printf("Outer scope: b = %d, c = %d%c", b, c, 10);
+    printf("Outer scope: b = %d, c = %d\n", b, c);
     {
         b := b + 1;
         c = c * c;
-        printf("Inner scope: b = %d, c = %d%c", b, c, 10);
+        printf("Inner scope: b = %d, c = %d\n", b, c);
     }
-    printf("Outer scope: b = %d, c = %d (b left unchanged) %c", b, c, 10);
+    printf("Outer scope: b = %d, c = %d (b left unchanged)\n", b, c);
 
     return 0;
 }

@@ -7,11 +7,11 @@ func to_string(b: bool): char_ptr {
 func main(): void {
     f := 10;
     s := 15;
-    printf("f = %d , s = %d%c", f, s,   10);
-    printf("f == s : %s%c"    , to_string(f == s), 10);
-    printf("f != s : %s%c"    , to_string(f != s), 10);
-    printf("f > s  : %s%c"    , to_string(f >  s), 10);
-    printf("f >= s : %s%c"    , to_string(f >= s), 10);
-    printf("f < s  : %s%c"    , to_string(f <  s), 10);
-    printf("f <= s : %s%c"    , to_string(f <= s), 10);
+    printf("f = %d , s = %d\n", f, s);
+    printf("f == s : %s\n"    , to_string(f == s));
+    printf("f != s : %s\n"    , to_string(f != s));
+    printf("f > s  : %s\n"    , to_string(f >  s));
+    printf("f >= s : %s\n"    , to_string(f >= s));
+    printf("f < s  : %s\n"    , to_string(f <  s));
+    printf("f <= s : %s\n"    , to_string(f <= s));
 }

@@ -35,20 +35,20 @@ func hanoi(n: int): int {
 
 func main(): int {
     puts("< --- Basic: Fibonacci --- >");
-    printf("fib(7): %d (Expected: 13)%c", fib(7), 10);
+    printf("fib(7): %d (Expected: 13)\n", fib(7));
 
     puts("< --- Basic: Factorial --- >");
-    printf("factorial(11): %d (Expected: 39916800)%c", factorial(11), 10);
+    printf("factorial(11): %d (Expected: 39916800)\n", factorial(11));
 
     puts("< --- Basic: Hanoi Towers --- >");
     i := 1; while i < 10 {
-        printf("hanoi(%d) = %d%c", i, hanoi(i), 10);
+        printf("hanoi(%d) = %d\n", i, hanoi(i));
         i = i + 1;
     }
 
     // puts("< --- Mutually recursive: is_even, is_odd: --- >");
     // i := 0; while i < 17 {
-    //     printf("%d: %s%c", i, get_string(is_even(i)), 10);
+    //     printf("%d: %s\n", i, get_string(is_even(i)));
     //     i = i + 1;
     // }
 

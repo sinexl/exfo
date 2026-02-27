@@ -9,7 +9,7 @@ func swap(a: int*, b: int*): void {
 func main(): void {
     a := 15;
     b := 10;
-    printf("Before swap: a = %d, b = %d%c", a, b, 10);
+    printf("Before swap: a = %d, b = %d\n", a, b);
     swap(&a, &b);
-    printf("After swap:  a = %d, b = %d%c", a, b, 10);
+    printf("After swap:  a = %d, b = %d\n", a, b);
 }

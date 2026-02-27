@@ -29,10 +29,10 @@ func reading(
     r8 := _8; r9 := _9; r10 := _10; r11 := _11;
     t := true; n := 42;
 
-    printf("  In the function (reading from arguments)%c", 10);
-    printf("    _0=%3d    , _1=<ptr>(%3d),  _2=%6s,         _3=<ptr>(%6s)%c",   _0, *_1, get_string(_2), get_string(*_3), 10);
-    printf("    _4=(void) , _5=%3d,         _6=<ptr>(%3d),  _7=(void)%c",  _5, *_6, 10);
-    printf("    _8=%6s    , _9=<ptr>(%6s),  _10=%3d,        _11=<ptr>(%3d)%c", get_string(_8), get_string(*_9), _10, *_11, 10);
+    printf("  In the function (reading from arguments)\n");
+    printf("    _0=%3d    , _1=<ptr>(%3d),  _2=%6s,         _3=<ptr>(%6s)\n",   _0, *_1, get_string(_2), get_string(*_3));
+    printf("    _4=(void) , _5=%3d,         _6=<ptr>(%3d),  _7=(void)\n",  _5, *_6);
+    printf("    _8=%6s    , _9=<ptr>(%6s),  _10=%3d,        _11=<ptr>(%3d)\n", get_string(_8), get_string(*_9), _10, *_11);
 
     // some mutations
     _0  = (_0 + 7) * 2;
@@ -46,17 +46,17 @@ func reading(
     _10 = _10 - 100;
     _11 = &n;
 
-    printf("  In the function (after mutating)%c", 10);
+    printf("  In the function (after mutating)\n");
 
-    printf("    _0=%3d     , _1=<ptr>(%3d),      _2=%5s,       _3=<ptr>(%5s)%c",   _0, *_1, get_string(_2), get_string(*_3), 10);
-    printf("    _4=(void)  , _5=%3d,             _6=<ptr>(%3d),  _7=(void)%c",  _5, *_6, 10);
-    printf("    _8=%5s   , _9=<ptr>(%5s),    _10=%3d,        _11=<ptr>(%3d)%c", get_string(_8), get_string(*_9), _10, *_11, 10);
+    printf("    _0=%3d     , _1=<ptr>(%3d),      _2=%5s,       _3=<ptr>(%5s)\n",   _0, *_1, get_string(_2), get_string(*_3));
+    printf("    _4=(void)  , _5=%3d,             _6=<ptr>(%3d),  _7=(void)\n",  _5, *_6);
+    printf("    _8=%5s   , _9=<ptr>(%5s),    _10=%3d,        _11=<ptr>(%3d)\n", get_string(_8), get_string(*_9), _10, *_11);
 
-    printf("  In the function (copied to the stack)%c", 10);
+    printf("  In the function (copied to the stack)\n");
 
-    printf("    r0=%3d     , r1=<ptr>(%3d),      r2=%5s,       r3=<ptr>(%5s)%c",   r0, *r1, get_string(r2), get_string(*r3), 10);
-    printf("    r4=(void)  , r5=%3d,             r6=<ptr>(%3d),  r7=(void)%c",  r5, *r6, 10);
-    printf("    r8=%5s   , r9=<ptr>(%5s),    r10=%3d,        r11=<ptr>(%3d)%c", get_string(r8), get_string(*r9), r10, *r11, 10);
+    printf("    r0=%3d     , r1=<ptr>(%3d),      r2=%5s,       r3=<ptr>(%5s)\n",   r0, *r1, get_string(r2), get_string(*r3));
+    printf("    r4=(void)  , r5=%3d,             r6=<ptr>(%3d),  r7=(void)\n",  r5, *r6);
+    printf("    r8=%5s   , r9=<ptr>(%5s),    r10=%3d,        r11=<ptr>(%3d)\n", get_string(r8), get_string(*r9), r10, *r11);
 }
 
 func main(): int {
@@ -76,19 +76,19 @@ func main(): int {
     m10 := 10;
     m11 := &c;
 
-    printf("Before function call (main's stack)%c", 10);
-    printf("    m0=%3d     , m1=<ptr>(%3d),      m2=%5s,       m3=<ptr>(%5s)%c",   m0, *m1, get_string(m2), get_string(*m3), 10);
-    printf("    m4=(void)  , m5=%3d,             m6=<ptr>(%3d),  m7=(void)%c",  m5, *m6, 10);
-    printf("    m8=%5s   , m9=<ptr>(%5s),    m10=%3d,        m11=<ptr>(%3d)%c", get_string(m8), get_string(*m9), m10, *m11, 10);
+    printf("Before function call (main's stack)\n");
+    printf("    m0=%3d     , m1=<ptr>(%3d),      m2=%5s,       m3=<ptr>(%5s)\n",   m0, *m1, get_string(m2), get_string(*m3));
+    printf("    m4=(void)  , m5=%3d,             m6=<ptr>(%3d),  m7=(void)\n",  m5, *m6);
+    printf("    m8=%5s   , m9=<ptr>(%5s),    m10=%3d,        m11=<ptr>(%3d)\n", get_string(m8), get_string(*m9), m10, *m11);
 
-    printf("{ ---%c", 10);
+    printf("{ ---\n");
     reading(m0, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11);
-    printf("} ---%c", 10);
+    printf("} ---\n");
 
-    printf("After function call (main's stack) (left unchanged)%c", 10);
-    printf("    m0=%3d     , m1=<ptr>(%3d),      m2=%5s,       m3=<ptr>(%5s)%c",   m0, *m1, get_string(m2), get_string(*m3), 10);
-    printf("    m4=(void)  , m5=%3d,             m6=<ptr>(%3d),  m7=(void)%c",  m5, *m6, 10);
-    printf("    m8=%5s   , m9=<ptr>(%5s),    m10=%3d,        m11=<ptr>(%3d)%c", get_string(m8), get_string(*m9), m10, *m11, 10);
+    printf("After function call (main's stack) (left unchanged)\n");
+    printf("    m0=%3d     , m1=<ptr>(%3d),      m2=%5s,       m3=<ptr>(%5s)\n",   m0, *m1, get_string(m2), get_string(*m3));
+    printf("    m4=(void)  , m5=%3d,             m6=<ptr>(%3d),  m7=(void)\n",  m5, *m6);
+    printf("    m8=%5s   , m9=<ptr>(%5s),    m10=%3d,        m11=<ptr>(%3d)\n", get_string(m8), get_string(*m9), m10, *m11);
 
     return 0;
 }

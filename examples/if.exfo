@@ -1,17 +1,17 @@
 extern "C" func printf(char_ptr, ...): void;
 func print_bool(a: bool): void {
-    if a printf("true%c", 10);
-    else printf("false%c", 10);
+    if a printf("true\n");
+    else printf("false\n");
 }
 
 func main(): void { 
     a := 15;
     b := 15;
-    printf("a = %d, b = %d%c", a, b, 10);
+    printf("a = %d, b = %d\n", a, b);
     print_bool(a > b);
     if a > b
-        printf("a is greater than b%c", 10);
+        printf("a is greater than b\n");
     else if a < b
-        printf("a is less than b%c", 10);
-    else printf("a is equal to b%c", 10);
+        printf("a is less than b\n");
+    else printf("a is equal to b\n");
 }
