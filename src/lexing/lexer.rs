@@ -2,13 +2,14 @@ use crate::common::errors_warnings::CompilerError;
 use crate::common::SourceLocation;
 use crate::lexing::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
 use crate::lexing::lexer::LexerErrorKind::{
-    UnexpectedCharacter, UnterminatedComment, UnterminatedString,
+    UnexpectedCharacter, UnknownEscapeSequence, UnterminatedComment, UnterminatedEscapeSequence,
+    UnterminatedString,
 };
 use crate::lexing::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
 use std::fmt::{Display, Formatter};
-use std::fs;
 use std::rc::Rc;
 use std::str::FromStr;
+use std::fs;
 
 pub(crate) struct Lexer {
     filepath: Rc<str>,
@@ -55,7 +56,7 @@ impl Lexer {
 
         self.skip_whitespaces_and_comments()?;
         let saved = self.save();
-        let c = if let Some(c) = self.next_char() {
+        let c = if let Some(c) = self.consume_char() {
             c
         } else {
             return Ok(Token::eof(self.source_loc(self.state)));
@@ -79,8 +80,8 @@ impl Lexer {
 
             '.' => {
                 let state = self.save();
-                let n1 = self.next_char();
-                let n2 = self.next_char();
+                let n1 = self.consume_char();
+                let n2 = self.consume_char();
 
                 match (n1, n2) {
                     (Some(dot), Some(dot2)) if (dot, dot2) == ('.', '.') => {
@@ -181,19 +182,56 @@ impl Lexer {
         assert_eq!(self.peek_char().unwrap(), '"');
         let start_loc = self.source_loc(self.state);
         self.skip_char();
-        let start = self.idx();
 
-        // TODO: Escape sequences
-        while self.peek_char().is_not('"').is_some() {
+        let mut result = String::new();
+        while let Some(c) = self.peek_char() {
+            if c == '"' {
+                break;
+            }
+            if c != '\\' {
+                result.push(c);
+                self.skip_char();
+                continue;
+            }
+            // Escape sequences.
             self.skip_char();
+            let location = self.source_loc(self.state);
+            let Some(escape) = self.consume_char() else {
+                return Err(LexerError {
+                    location,
+                    kind: UnterminatedEscapeSequence,
+                });
+            };
+
+            let escape = match escape {
+                'n' => '\n',
+                't' => '\t',
+                '0' => '\0',
+                'r' => '\r',
+                '\\' => '\\',
+                '"' => '"',
+                '\n' => {
+                    return Err(LexerError {
+                        location,
+                        kind: UnterminatedString,
+                    })
+                }
+                ch => {
+                    return Err(LexerError {
+                        location,
+                        kind: UnknownEscapeSequence(ch),
+                    });
+                }
+            };
+            result.push(escape);
         }
 
         if self.is_eof() {
             return Err(LexerError::new(start_loc, UnterminatedString));
         }
-
         self.skip_char(); // "
-        let val: Rc<str> = Rc::from(&self.src[start..self.idx() - 1]);
+
+        let val: Rc<str> = Rc::from(result);
 
         Ok(Token {
             loc: self.source_loc(self.token_start),
@@ -272,12 +310,12 @@ impl Lexer {
     }
 
     fn skip_char(&mut self) {
-        let _ = self.next_char().unwrap();
+        let _ = self.consume_char().unwrap();
     }
 
     #[must_use]
-    fn next_char(&mut self) -> Option<char> {
-        let char = self.src.chars().nth(self.state.current)?;
+    fn consume_char(&mut self) -> Option<char> {
+        let char = self.src.chars().nth(self.idx())?;
         if let '\n' = char {
             self.state.line_number += 1;
             self.state.line_start = self.state.current;
@@ -379,6 +417,8 @@ pub enum LexerErrorKind {
     UnterminatedString,
     UnterminatedComment,
     UnexpectedCharacter(char),
+    UnterminatedEscapeSequence,
+    UnknownEscapeSequence(char),
 }
 
 impl CompilerError for LexerError {
@@ -392,6 +432,8 @@ impl CompilerError for LexerError {
             UnterminatedString => "Unterminated string".to_string(),
             UnterminatedComment => "Unterminated comment".to_string(),
             UnexpectedCharacter(ch) => format!("Unexpected character: `{}`", ch),
+            UnterminatedEscapeSequence => "Unterminated escape sequence".to_string(),
+            UnknownEscapeSequence(ch) => format!("Unknown escape sequence: `{}`", ch),
         }
     }
 
@@ -401,6 +443,8 @@ impl CompilerError for LexerError {
             UnterminatedString => Some(format!("string literal begins here: {}", self.location)),
             UnterminatedComment => Some(format!("comment begins here: {}", self.location)),
             UnexpectedCharacter(_) => None,
+            UnterminatedEscapeSequence => None,
+            UnknownEscapeSequence(_) => None,
         }
     }
 }
