@@ -31,7 +31,8 @@ pub mod expression {
 }
 
 pub mod statement {
-    use crate::analysis::type_context::TypeCtx;
+    use std::fmt::Write;
+use crate::analysis::type_context::TypeCtx;
     use crate::ast::prefix_printer::PrefixPrintStatement;
     use crate::lexing::lexer::Lexer;
     use crate::parsing::parser::Parser;
@@ -54,6 +55,27 @@ pub mod statement {
 
         let type_ctx = TypeCtx::new(&type_bump);
         format!("{}", PrefixPrintStatement(statement, &type_ctx)).trim().to_string()
+    }
+
+    pub fn multiple(input: &str) -> String {
+        let (t, e) = Lexer::new(input, PATH).accumulate();
+        assert_eq!(e.len(), 0);
+
+        let ast_bump = Bump::new();
+        let type_bump = Bump::new();
+        let mut types = TypeCtx::new(&type_bump);
+        let mut p = Parser::new(t.into(), &ast_bump,  addr_of_mut!(types));
+        let (statements, e) = p.parse_program();
+        assert_eq!(e.len(), 0);
+        let mut result = String::new();
+
+        for i in statements {
+            writeln!(result, "{}", PrefixPrintStatement(i, &types)).unwrap();
+        }
+
+        result.trim().to_string()
+
+
     }
 }
 

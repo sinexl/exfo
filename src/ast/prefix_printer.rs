@@ -8,7 +8,6 @@ use crate::ast::statement::{
 use crate::common::Join;
 use std::fmt::{Display, Formatter, Write};
 
-pub const PREFIX_TAB: &str = " ";
 
 pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Result {
     match &expr.kind {
@@ -26,7 +25,7 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
         }
         ExpressionKind::Assignment { target, value } => parenthesize(f, "=", &[target, value]),
         ExpressionKind::Literal(lit) => write!(f, "{}", lit),
-        ExpressionKind::VariableAccess(name, id) => write!(f, "{}<{id}>", name.name),
+        ExpressionKind::VariableAccess(name, id) => write!(f, "({}<{id}>)", name.name),
         ExpressionKind::FunctionCall { callee, arguments } => {
             let mut temp: Vec<&Expression> = Vec::with_capacity(arguments.len() + 1);
             temp.push(*callee);
@@ -38,15 +37,18 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
     }
 }
 
+pub const PREFIX_TAB: &str = "  ";
+
 pub fn prefix_print_statement<'ast, 'types>(
     statement: &Statement<'ast, 'types>,
     types: &'types TypeCtx<'types>,
+    depth: usize,
     f: &mut impl Write,
 ) -> std::fmt::Result {
-    let tab = PREFIX_TAB;
+    let tab = PREFIX_TAB.repeat(depth);
     match &statement.kind {
         StatementKind::ExpressionStatement(expr) => {
-            writeln!(f, "({})", PrefixPrint(expr))?;
+            write!(f, "{tab}{}", PrefixPrint(expr))?;
         }
         StatementKind::FunctionDeclaration(
             FunctionDeclaration {
@@ -59,7 +61,7 @@ pub fn prefix_print_statement<'ast, 'types>(
         ) => {
             write!(
                 f,
-                "(func `{}`({id}) ({}): {}",
+                "{tab}(func `{}`({id}) ({}): {}",
                 name.name,
                 Join(
                     parameters
@@ -72,10 +74,10 @@ pub fn prefix_print_statement<'ast, 'types>(
             if !body.is_empty() {
                 writeln!(f)?;
                 for statement in *body {
-                    write!(f, "{tab}{}", PrefixPrintStatement(statement, types))?;
+                    writeln!(f, "{}", PrefixPrintStatementIndented(statement, types, depth + 1))?;
                 }
             }
-            writeln!(f, ")")?;
+            write!(f, ")")?;
         }
 
         StatementKind::Extern(
@@ -90,7 +92,7 @@ pub fn prefix_print_statement<'ast, 'types>(
         ) => {
             write!(
                 f,
-                "(extern \"{kind:?}\" `{}`({id}) ({}{}): {}",
+                "{tab}(extern \"{kind:?}\" `{}`({id}) ({}{}): {}",
                 name.name,
                 Join(
                     parameters.iter().map(|e| DisplayType(e.inner(), types)),
@@ -101,13 +103,13 @@ pub fn prefix_print_statement<'ast, 'types>(
             )?;
         }
         StatementKind::Block(body) => {
-            writeln!(f, "(block")?;
+            writeln!(f, "{tab}(block")?;
             if !body.is_empty() {
                 for statement in *body {
-                    write!(f, "{tab}{}", PrefixPrintStatement(statement, types))?;
+                    writeln!(f, "{}", PrefixPrintStatementIndented(statement, types, depth + 1))?;
                 }
             }
-            writeln!(f, "{tab})")?;
+            write!(f, "{tab})")?;
         }
         StatementKind::VariableDeclaration(
             VariableDeclaration {
@@ -119,37 +121,37 @@ pub fn prefix_print_statement<'ast, 'types>(
         ) => {
             write!(
                 f,
-                "(`{}`({id}): {} ",
+                "{tab}(`{}`({id}): {} ",
                 name.name,
                 DisplayType(ty.inner(), types)
             )?;
             if let Some(initializer) = initializer {
                 write!(f, "= {}", PrefixPrint(initializer))?;
             }
-            writeln!(f, ")")?;
+            write!(f, ")")?;
         }
         StatementKind::Return(ret) => {
-            write!(f, "(return")?;
+            write!(f, "{tab}(return")?;
             if let Some(ret) = ret {
                 write!(f, " {ret}", ret = PrefixPrint(ret))?;
             }
-            writeln!(f, ")")?;
+            write!(f, ")")?;
         }
         StatementKind::If {
             condition,
             then,
             r#else,
         } => {
-            write!(
+            writeln!(
                 f,
-                "(if {condition}: {then}",
+                "{tab}(if {condition}\n{then}",
                 condition = PrefixPrint(condition),
-                then = PrefixPrintStatement(then, types)
+                then = PrefixPrintStatementIndented(then, types, depth + 1),
             )?;
             if let Some(r#else) = r#else {
-                write!(f, "else: {r}", r = PrefixPrintStatement(r#else, types))?;
+                writeln!(f, "{tab}else\n{r}", r = PrefixPrintStatementIndented(r#else, types, depth + 1))?;
             }
-            writeln!(f, ")")?;
+            write!(f, "{tab})")?;
         }
         StatementKind::While {
             condition,
@@ -164,12 +166,12 @@ pub fn prefix_print_statement<'ast, 'types>(
             };
             write!(
                 f,
-                "(({id}{name}): while {condition}: {body}",
+                "{tab}(({id}{name}): while {condition}: {body}",
                 condition = PrefixPrint(condition),
                 body = PrefixPrintStatement(body, types),
                 id = id.get()
             )?;
-            writeln!(f, ")")?;
+            write!(f, ")")?;
         }
         StatementKind::Break { name, id } => {
             let name = if let Some(name) = name {
@@ -177,7 +179,7 @@ pub fn prefix_print_statement<'ast, 'types>(
             } else {
                 "".to_string()
             };
-            writeln!(f, "(break {id}{name})", id = id.get())?;
+            writeln!(f, "{tab}(break {id}{name})", id = id.get())?;
         }
         StatementKind::Continue { name, id } => {
             let name = if let Some(name) = name {
@@ -185,7 +187,7 @@ pub fn prefix_print_statement<'ast, 'types>(
             } else {
                 "".to_string()
             };
-            writeln!(f, "(continue {id}{name})", id = id.get())?;
+            writeln!(f, "{tab}(continue {id}{name})", id = id.get())?;
         }
     }
 
@@ -220,13 +222,24 @@ impl Display for PrefixPrint<'_> {
     }
 }
 
+
+pub(crate) struct PrefixPrintStatementIndented<'ast, 'types>(
+    pub &'ast Statement<'ast, 'types>,
+    pub &'types TypeCtx<'types>,
+    pub usize,
+);
+impl<'ast, 'types> Display for PrefixPrintStatementIndented<'ast, 'types> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let PrefixPrintStatementIndented(statement, types, indent) = self;
+        prefix_print_statement(statement, types, *indent, f)
+    }
+}
 pub(crate) struct PrefixPrintStatement<'ast, 'types>(
     pub &'ast Statement<'ast, 'types>,
     pub &'types TypeCtx<'types>,
 );
 impl<'ast, 'types> Display for PrefixPrintStatement<'ast, 'types> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let PrefixPrintStatement(statement, types) = self;
-        prefix_print_statement(statement, types, f)
+        write!(f, "{}", PrefixPrintStatementIndented(self.0, self.1, 0))
     }
 }

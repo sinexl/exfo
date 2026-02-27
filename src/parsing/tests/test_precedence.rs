@@ -59,15 +59,15 @@ pub fn precedence_multiple() {
 
     assert_eq!(
         single("a = 1 + 2 * 3 - 4 / 5"),
-        "(= a<#?> (- (+ 1 (* 2 3)) (/ 4 5)))"
+        "(= (a<#?>) (- (+ 1 (* 2 3)) (/ 4 5)))"
     );
 
     assert_eq!(
         single("b = 1 * 2 / 3 + 4 - 5"),
-        "(= b<#?> (- (+ (/ (* 1 2) 3) 4) 5))"
+        "(= (b<#?>) (- (+ (/ (* 1 2) 3) 4) 5))"
     );
 
-    assert_eq!(single("a = b = 1 + 2"), "(= a<#?> (= b<#?> (+ 1 2)))");
+    assert_eq!(single("a = b = 1 + 2"), "(= (a<#?>) (= (b<#?>) (+ 1 2)))");
 }
 
 #[test]
@@ -79,10 +79,10 @@ pub fn left_associativity() {
 
 #[test]
 pub fn assignment_and_right_associativity() {
-    assert_eq!(single("a = b = c"), "(= a<#?> (= b<#?> c<#?>))");
-    assert_eq!(single("(a = b) = c"), "(= (= a<#?> b<#?>) c<#?>)");
-    assert_eq!(single("(a = 1) + 2"), "(+ (= a<#?> 1) 2)");
-    assert_eq!(single("a = 1 + 2"), "(= a<#?> (+ 1 2))");
+    assert_eq!(single("a = b = c"), "(= (a<#?>) (= (b<#?>) (c<#?>)))");
+    assert_eq!(single("(a = b) = c"), "(= (= (a<#?>) (b<#?>)) (c<#?>))");
+    assert_eq!(single("(a = 1) + 2"), "(+ (= (a<#?>) 1) 2)");
+    assert_eq!(single("a = 1 + 2"), "(= (a<#?>) (+ 1 2))");
 }
 
 #[test]
@@ -117,11 +117,11 @@ pub fn unary() {
 
 #[test]
 pub fn call() {
-    assert_eq!(single("a()"), "(call a<#?>)");
-    assert_eq!(single("a(1)(2)"), "(call (call a<#?> 1) 2)");
+    assert_eq!(single("a()"), "(call (a<#?>))");
+    assert_eq!(single("a(1)(2)"), "(call (call (a<#?>) 1) 2)");
     assert_eq!(
         single("a(1 + 2, 3 / 4 * 5, c = d = 10)"),
-        "(call a<#?> (+ 1 2) (* (/ 3 4) 5) (= c<#?> (= d<#?> 10)))"
+        "(call (a<#?>) (+ 1 2) (* (/ 3 4) 5) (= (c<#?>) (= (d<#?>) 10)))"
     )
 }
 

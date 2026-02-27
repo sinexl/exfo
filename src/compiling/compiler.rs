@@ -417,7 +417,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                 struct Param {
                     ty: TypeIdCell,
                     id: SymId,
-                };
+                }
                 self.current_function = Some(BumpVec::new_in(self.ir_bump));
                 // Collect non-zero parameters
                 let parameters = parameters

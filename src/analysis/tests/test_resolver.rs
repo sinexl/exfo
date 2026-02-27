@@ -53,8 +53,8 @@ pub fn reading_from_initializer() {
 pub fn simple_resolution() {
     let p =
 r#"(func `main`(#1) (): unknown_t
- (`a`(#0): unknown_t = 10)
- (a<#0>)
+  (`a`(#0): unknown_t = 10)
+  (a<#0>)
 )"#;
     assert_eq!(
         success("func main () { a:=10; a; }"),
@@ -67,13 +67,13 @@ pub fn with_blocks() {
     let resolutions = success("func main () { a := 10; a; { a; a := 15; a;} } ");
     let p =
 r#"(func `main`(#2) (): unknown_t
- (`a`(#0): unknown_t = 10)
- (a<#0>)
- (block
- (a<#0>)
- (`a`(#1): unknown_t = 15)
- (a<#1>)
- )
+  (`a`(#0): unknown_t = 10)
+  (a<#0>)
+  (block
+    (a<#0>)
+    (`a`(#1): unknown_t = 15)
+    (a<#1>)
+  )
 )"#;
     assert_eq!(
         resolutions,
@@ -86,10 +86,10 @@ pub fn shadowing() {
     let resolutions = success("func main() { a := 10; a; a := a + 10; a; }");
     let p =
 r#"(func `main`(#2) (): unknown_t
- (`a`(#0): unknown_t = 10)
- (a<#0>)
- (`a`(#1): unknown_t = (+ a<#0> 10))
- (a<#1>)
+  (`a`(#0): unknown_t = 10)
+  (a<#0>)
+  (`a`(#1): unknown_t = (+ (a<#0>) 10))
+  (a<#1>)
 )"#;
     assert_eq!(resolutions, p)
 }
