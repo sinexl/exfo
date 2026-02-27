@@ -104,6 +104,7 @@ impl ExpressionKind<'_> {
                 match operator {
                     UnaryKind::Negation | UnaryKind::AddressOf => false,
                     UnaryKind::Dereferencing => true,
+                    UnaryKind::Not => false,
                 },
             ExpressionKind::Literal(_) => false,
             ExpressionKind::FunctionCall { .. } => false,
@@ -126,6 +127,7 @@ pub enum UnaryKind {
     Negation,
     Dereferencing,
     AddressOf,
+    Not,
 }
 
 impl UnaryKind {
@@ -133,7 +135,16 @@ impl UnaryKind {
         match self {
             UnaryKind::Negation => "Negation",
             UnaryKind::Dereferencing => "Dereferencing",
-            UnaryKind::AddressOf => "AddressOf"
+            UnaryKind::AddressOf => "AddressOf",
+            UnaryKind::Not => "Logical Not",
+        }
+    }
+    pub(crate) fn verb(&self) -> &'static str {
+        match self {
+            UnaryKind::Negation => "negate",
+            UnaryKind::Dereferencing => "dereference",
+            UnaryKind::AddressOf => "take address of",
+            UnaryKind::Not => "apply logical not to",
         }
     }
 }

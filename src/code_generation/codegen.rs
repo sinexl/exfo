@@ -361,6 +361,19 @@ impl<'ir> Codegen<'ir> {
                 asm!(self, "  mov{p} ({ptr_reg}), {value_reg}");
                 self.store_reg_to_lvalue(value_reg, result);
             }
+            Opcode::Not { result, item } => {
+                comment!(self, "Logical Not");
+                let size = assert_same!("could not apply logical NOT to operand with size != 1.", 1usize, item.size(), result.size());
+                let reg = Rax.lower_bytes_register(size);
+
+                self.load_arg_to_reg(item, reg);
+                // In 2's complement -1 is 111...111 (all ones).
+                // XOR operation has beatiful property: A xor 1 = !A
+                asm!(self, "  xorb $-1, {reg}");
+                // Mask with 1 (0000...1) to keep LSB only
+                asm!(self, "  andb $1, {reg}");
+                self.store_reg_to_lvalue(reg, result);
+            }
         }
         comment!(self);
     }

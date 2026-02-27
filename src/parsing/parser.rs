@@ -562,7 +562,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     }
 
     fn parse_unary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
-        if let Some(tok) = self.consume(&[TokenType::Minus, TokenType::Star, TokenType::Ampersand])
+        if let Some(tok) = self.consume(&[TokenType::Minus, TokenType::Star, TokenType::Ampersand, TokenType::Bang])
         {
             let item = self.parse_unary()?;
 
@@ -573,6 +573,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                         TokenType::Star => UnaryKind::Dereferencing,
                         TokenType::Minus => UnaryKind::Negation,
                         TokenType::Ampersand => UnaryKind::AddressOf,
+                        TokenType::Bang => UnaryKind::Not,
                         _ => unreachable!(),
                     },
                 },

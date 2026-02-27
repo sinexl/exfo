@@ -113,7 +113,16 @@ pub fn precedence_comparison() {
 pub fn unary() {
     assert_eq!(single("-1 * 2"), "(* (- 1) 2)");
     assert_eq!(single("-1 * -2"), "(* (- 1) (- 2))");
+    assert_eq!(single("!1 || !1"), "(|| (! 1) (! 1))");
+    assert_eq!(single("!2 || 1 && !1"), "(|| (! 2) (&& 1 (! 1)))");
 }
+
+#[test]
+pub fn logical() {
+    assert_eq!(single("!1 && 2 || 3"), "(|| (&& (! 1) 2) 3)");
+    assert_eq!(single("!1 == 2"), "(== (! 1) 2)");
+}
+
 
 #[test]
 pub fn call() {

@@ -5,9 +5,10 @@ func get_string(a: bool): char_ptr {
     return "false";
 }
 
-func main(): void {
+func main(): int {
     a := true;
     printf("true  = %5s, !true  = %5s, !!true  = %5s\n", get_string(a), get_string(!a), get_string(!!a));
-    b := false;
-    printf("false = %5s, !false = %5s, !!false = %5s\n", get_string(b), get_string(!b), get_string(!!b));
+    a = !a;
+    printf("false = %5s, !false = %5s, !!false = %5s\n", get_string(a), get_string(!a), get_string(!!a));
+    return 0;
 }

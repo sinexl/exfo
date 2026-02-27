@@ -253,6 +253,12 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                         self.push_opcode(Opcode::Negate { item, result });
                         Arg::LValue(result)
                     }
+                    UnaryKind::Not => {
+                        assert_eq!(ty.get(self.types()).size(), 1);
+                        let result = self.allocate(1);
+                        self.push_opcode(Opcode::Not { item, result });
+                        Arg::LValue(result)
+                    }
                     UnaryKind::Dereferencing => {
                         let size = ty.get(self.types()).size();
                         let result = self.allocate(size);

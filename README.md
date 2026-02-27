@@ -15,7 +15,7 @@ logical operations
 ## Features not implemented yet
 - [ ] Other platforms support (including windows)
 - [ ] Pointer Arithmetic
-- [ ] Some basic operations (!, %, == for `bool`, bitwise operations)
+- [ ] Some basic operations (%, == for `bool`, bitwise operations)
 - [ ] Character type
 - [ ] 32, 16, 8 bit integer, 64, 32-bit floats
 - [ ] User types (structures, etc)

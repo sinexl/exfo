@@ -20,6 +20,7 @@ pub fn prefix_print(expr: &Expression<'_>, f: &mut impl Write) -> std::fmt::Resu
                 UnaryKind::Negation => "-",
                 UnaryKind::Dereferencing => "*",
                 UnaryKind::AddressOf => "&",
+                UnaryKind::Not => "!",
             };
             parenthesize(f, op, &[item])
         }

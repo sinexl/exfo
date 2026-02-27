@@ -98,6 +98,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::AddressOf { result, source } => writeln!(f, "{tab}{result} = &{source}")?,
         Opcode::Store { result, source } => writeln!(f, "{tab}*{result} = {source}")?,
         Opcode::Load { result, source } => writeln!(f, "{tab}{result} = *{source}")?,
+        Opcode::Not { result, item } =>  writeln!(f, "{tab}{result} = !{item}")?,
     }
 
     Ok(())

@@ -18,6 +18,10 @@ pub enum Opcode<'ir> {
         result: Lvalue,
         source: Lvalue,
     },
+    Not {
+        result: Lvalue,
+        item: Arg<'ir>,
+    },
 
     // Control Flow
     FunctionCall {

@@ -134,6 +134,21 @@ impl<'ast, 'types> Typechecker<'types> {
                         }
                         unsafe { (*self.types).monomorph_or_get_pointer(item.ty.inner()) }
                     }
+                    UnaryKind::Not => {
+                        if *item.ty.get(self.types()) != Type::Basic(BasicType::Bool) {
+                            return Err(TypeError {
+                                loc: expression.loc.clone(),
+                                kind: TypeErrorKind::InvalidUnopOperand(
+                                    UnaryKind::Not,
+                                    DisplayType(item.ty.inner(), self.types())
+                                        .to_string()
+                                        .into_boxed_str(),
+                                ),
+                            });
+                        }
+
+                        TypeId::from_basic(BasicType::Bool)
+                    }
                 };
                 expression.ty.set(ty);
             }
@@ -440,11 +455,11 @@ pub enum TypeErrorKind {
         function_name: Option<String>,
     },
     MismatchedConditionType(&'static str),
+
     CouldntInferFunctionReturnType,
-    /// This error kind is needed to ignore malformed code that should be marked as erroneous by previous passes.
-    /// For example, Top-level returns are handled by resolver, so, if we meet such in typechecker, we can skip it
-    FromPrevious,
+
     InvalidOperands(ast::binop::BinopKind, Box<str>, Box<str>),
+    InvalidUnopOperand(UnaryKind, Box<str>),
     DereferencingNonPointer {
         actual_type: Box<str>,
     },
@@ -497,7 +512,6 @@ impl CompilerError for TypeError {
             TypeErrorKind::CouldntInferFunctionReturnType => {
                 "Could not infer function return type".to_string()
             }
-            TypeErrorKind::FromPrevious => "".to_string(),
             TypeErrorKind::InvalidOperands(op, a, b) => format!(
                 "Invalid operands to '{op}' operation ({a}, {b})",
                 op = op.operator()
@@ -507,6 +521,9 @@ impl CompilerError for TypeError {
             }
             TypeErrorKind::RvalueAddressOf(typename) => {
                 format!("Could not take an address of rvalue of type `{typename}`")
+            }
+            TypeErrorKind::InvalidUnopOperand(kind, r#type) => {
+                format!("Could not {} {}", kind.verb(), r#type)
             }
         }
     }
@@ -536,10 +553,10 @@ impl CompilerError for TypeError {
             TypeErrorKind::InvalidArity { .. } => None,
             TypeErrorKind::MismatchedConditionType(_) => None,
             TypeErrorKind::CouldntInferFunctionReturnType => None,
-            TypeErrorKind::FromPrevious => None,
             TypeErrorKind::InvalidOperands(_, _, _) => None,
             TypeErrorKind::DereferencingNonPointer { .. } => None,
             TypeErrorKind::RvalueAddressOf(_) => None,
+            TypeErrorKind::InvalidUnopOperand(_, _) => None,
         }
     }
 }
