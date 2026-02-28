@@ -12,10 +12,11 @@ use crate::parsing::parser::Parser;
 use bumpalo::Bump;
 use code_generation::x86_64::codegen::Codegen;
 use exfo::target::target::Target;
-use std::path::Path;
+use exfo::target::target::x86_64::Os;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio, exit};
 use std::ptr::addr_of_mut;
-use std::{fs, io};
+use std::{env, fs, io};
 
 mod analysis;
 mod ast;
@@ -96,6 +97,14 @@ fn main() -> io::Result<()> {
     let os = match target {
         Target::x86_64(os) => os,
     };
+    let (assembler, linker) = match target {
+        Target::x86_64(Os::Linux) => (PathBuf::from("as"), PathBuf::from("cc")),
+        Target::x86_64(Os::Windows) => (
+            Path::new("as").with_extension(env::consts::EXE_EXTENSION),
+            Path::new("x86_64-w64-mingw32-gcc").with_extension(env::consts::EXE_EXTENSION),
+        ),
+    };
+
     let codegen = Codegen::new(ir, os, args.pic());
     let generated_assembly = codegen.generate();
     dprintln!(args, "{generated_assembly}");
@@ -106,9 +115,8 @@ fn main() -> io::Result<()> {
     dprintln!(args, "{ir}");
 
     // Outputting the result of compilation to user.
-    let build_dir = Path::new("./.exfo_build");
-
-    create_dir_if_not_exists(build_dir)?;
+    let build_dir = PathBuf::from(".exfo_build");
+    create_dir_if_not_exists(&build_dir)?;
     let file_name = input.file_stem().and_then(|s| s.to_str()).unwrap();
     let asm_path = build_dir.join(file_name).with_extension("s");
     fs::write(&asm_path, generated_assembly.as_bytes())?;
@@ -123,7 +131,7 @@ fn main() -> io::Result<()> {
         fs::create_dir_all(parent).expect("failed to create output directory");
     }
 
-    let mut gas = Command::new("as");
+    let mut gas = Command::new(&assembler);
     if args.debug_compiler {
         gas.arg("-g");
     }
@@ -137,12 +145,12 @@ fn main() -> io::Result<()> {
     run_command(
         &mut gas,
         "Assembler error occurred. Exiting.",
-        "Failed to run `as` command. \n\t\
-                     Make sure that you have installed GNU Assembler and it's available on your system and in PATH",
+        &format!("Failed to run `{}` command. \n\t\
+                     Make sure that you have installed GNU Assembler (MinGW in case of Windows) and it's available on your system in PATH", assembler.display()),
     );
 
     println!();
-    let mut cc = Command::new("cc");
+    let mut cc = Command::new(&linker);
     cc.arg(object_path)
         .arg("-o")
         .arg(output)
@@ -154,11 +162,11 @@ fn main() -> io::Result<()> {
         cc.arg("-no-pie");
     }
 
-    println!("Running cc:\n{cc}", cc = DisplayCommand(&cc));
+    println!("Running linker:\n{cc}", cc = DisplayCommand(&cc));
     run_command(
         &mut cc,
-        "Failed to run cc. Exiting.",
-        "Failed to run `cc` command. \n\tMake sure that `cc` is available in $PATH",
+        "Failed to run linker. Exiting.",
+        &format!("Failed to run linker command. \n\tMake sure that `{}` is available in $PATH", linker.display()),
     );
 
     Ok(())

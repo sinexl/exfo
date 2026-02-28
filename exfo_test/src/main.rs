@@ -1,6 +1,6 @@
 mod command;
 mod util;
-
+use std::path::PathBuf;
 use crate::command::Subcommand;
 use crate::util::colors::*;
 use crate::util::{DisplayBox, ensure_compiler_exists, remove_dir_contents};
@@ -76,31 +76,32 @@ pub fn scan_tests_from_folder(test_folder: impl AsRef<Path>) -> io::Result<BTree
 }
 
 fn main() -> io::Result<()> {
-    let json_path = Path::new("./src/tests.json");
-    let test_folder = Path::new("./tests/");
-    let test_bin = Path::new("./tests/bin/");
-    let diff_folder = Path::new("./tests/diff");
-    let compiler_path = Path::new("./../target/debug/exfo");
-    fs::create_dir_all(test_folder)?;
-    fs::create_dir_all(test_bin)?;
-    fs::create_dir_all(diff_folder)?;
-    ensure_compiler_exists(compiler_path)?;
+    let json_path = PathBuf::from("src").join("tests.json");
+    let test_folder = PathBuf::from("tests");
+    let test_bin = PathBuf::from("tests").join("bin");
+    let diff_folder = PathBuf::from("tests").join("diff");
+    let compiler_path = PathBuf::from("..").join("target").join("debug").join("exfo")
+        .with_extension(env::consts::EXE_EXTENSION); 
+    fs::create_dir_all(&test_folder)?;
+    fs::create_dir_all(&test_bin)?;
+    fs::create_dir_all(&diff_folder)?;
+    ensure_compiler_exists(&compiler_path)?;
 
     let mut args = env::args();
     let program_name = args.next().unwrap();
     let command = Subcommand::parse(&mut args);
 
-    let all_found = scan_tests_from_folder(test_folder)?;
+    let all_found = scan_tests_from_folder(&test_folder)?;
 
     if !command.is_record_all() {
         ensure_exists!(
-            json_path,
+            &json_path,
             "Could not find recorded test results",
             "Use `{program_name} record all` to record tests first"
         )?;
     }
 
-    let mut test_results = load_test_results_from_file(json_path)?;
+    let mut test_results = load_test_results_from_file(&json_path)?;
     let recorded = test_results
         .keys()
         .map(|k| k.clone())
@@ -134,7 +135,7 @@ fn main() -> io::Result<()> {
             println!("Recording tests...");
             let to_record = if new { &difference } else { &all_found };
 
-            let mut results = evaluate_tests(compiler_path, to_record, test_folder, test_bin)?;
+            let mut results = evaluate_tests(&compiler_path, to_record, test_folder, test_bin)?;
             assert_eq!(results.len(), to_record.len());
             for test in &difference {
                 let value = results.get(test).unwrap();
@@ -156,7 +157,7 @@ fn main() -> io::Result<()> {
                 results = test_results;
             }
 
-            write_results(&results, json_path)?;
+            write_results(&results, &json_path)?;
 
             let len = to_record.len();
             let message = if new {
@@ -197,11 +198,11 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn evaluate_tests<P: AsRef<Path>>(
-    compiler_path: P,
+fn evaluate_tests(
+    compiler_path: impl AsRef<Path>,
     tests: &BTreeSet<String>,
-    test_folder: P,
-    test_bin: P,
+    test_folder: impl AsRef<Path>,
+    test_bin: impl AsRef<Path>,
 ) -> io::Result<TestResults> {
     let compiler_path = compiler_path.as_ref();
     let test_bin = test_bin.as_ref();
@@ -210,7 +211,7 @@ fn evaluate_tests<P: AsRef<Path>>(
     let mut results: TestResults = BTreeMap::new();
     for test in tests {
         let test_path = test_folder.join(test).with_extension("exfo");
-        let test_output = test_bin.join(test);
+        let test_output = test_bin.join(test).with_extension(env::consts::EXE_EXTENSION);
         let mut compiler = Command::new(compiler_path)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
