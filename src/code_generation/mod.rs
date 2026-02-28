@@ -1,5 +1,4 @@
 pub mod x86_64;
-mod platform;
 
 #[macro_export]
 macro_rules! assert_same {

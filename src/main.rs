@@ -2,17 +2,18 @@ use crate::analysis::resolver::Resolver;
 use crate::analysis::type_context::TypeCtx;
 use crate::analysis::typechecker::Typechecker;
 use crate::ast::tree_printer::DisplayStatement;
-use crate::code_generation::codegen::Codegen;
 use crate::common::errors_warnings::CompilerError;
 use crate::compiler_io::compiler_arguments::CompilerArguments;
 use crate::compiler_io::dev_repl::dev_repl;
-use crate::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
+use crate::compiler_io::util::{DisplayCommand, create_dir_if_not_exists, run_command};
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
+use code_generation::x86_64::codegen::Codegen;
+use exfo::target::target::Target;
 use std::path::Path;
-use std::process::{exit, Command, Stdio};
+use std::process::{Command, Stdio, exit};
 use std::ptr::addr_of_mut;
 use std::{fs, io};
 
@@ -91,7 +92,11 @@ fn main() -> io::Result<()> {
     compiler.compile_statements(ast);
     let ir = compiler.ir;
 
-    let codegen = Codegen::new(ir, args.pic());
+    let target = args.target();
+    let os = match target {
+        Target::x86_64(os) => os,
+    };
+    let codegen = Codegen::new(ir, os, args.pic());
     let generated_assembly = codegen.generate();
     dprintln!(args, "{generated_assembly}");
     dprintln!(args, "Types = {types:#?}");
@@ -101,17 +106,14 @@ fn main() -> io::Result<()> {
     dprintln!(args, "{ir}");
 
     // Outputting the result of compilation to user.
-    const BUILD_DIR: &str = "./.exfo_build";
+    let build_dir = Path::new("./.exfo_build");
 
-    create_dir_if_not_exists(BUILD_DIR)?;
+    create_dir_if_not_exists(build_dir)?;
     let file_name = input.file_stem().and_then(|s| s.to_str()).unwrap();
-    let asm_path = format!("{BUILD_DIR}/{file_name}.s");
-    let asm_path = asm_path.as_str();
-    fs::write(asm_path, generated_assembly.as_bytes())?;
+    let asm_path = build_dir.join(file_name).with_extension("s");
+    fs::write(&asm_path, generated_assembly.as_bytes())?;
 
-    let object_path = format!("{BUILD_DIR}/{file_name}.o");
-    let object_path = object_path.as_str();
-
+    let object_path = build_dir.join(file_name).with_extension("o");
 
     if let Some(parent) = output.parent()
         && parent.file_name().is_some_and(|e| e != "") // it's weird because if there is no parent directory, it returns "" which is considered non-existing
@@ -127,7 +129,7 @@ fn main() -> io::Result<()> {
     }
     gas.arg(asm_path)
         .arg("-o")
-        .arg(object_path)
+        .arg(&object_path)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
@@ -136,7 +138,7 @@ fn main() -> io::Result<()> {
         &mut gas,
         "Assembler error occurred. Exiting.",
         "Failed to run `as` command. \n\t\
-                     Make sure that you have installed GNU Assembler and it's available in $PATH",
+                     Make sure that you have installed GNU Assembler and it's available on your system and in PATH",
     );
 
     println!();

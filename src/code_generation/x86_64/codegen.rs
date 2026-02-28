@@ -7,7 +7,7 @@ use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
 use crate::{asm, assert_same, comment};
 use std::cmp;
 use std::fmt::{Display, Formatter, Write};
-use crate::code_generation::x86_64::Os;
+use exfo::target::target::x86_64::Os;
 
 mod constants {
     use crate::code_generation::x86_64::register::Register;
