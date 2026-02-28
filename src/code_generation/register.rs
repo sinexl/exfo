@@ -34,10 +34,10 @@ impl Register {
         match self {
             // General purpose registers
             Rax => 8,
-            Rcx => 8,
             Rdi => 8,
             Rsi => 8,
             Rdx => 8,
+            Rcx => 8,
             R8 => 8,
             R9 => 8,
             // Lower bits registers
@@ -80,21 +80,20 @@ impl Register {
                 _ => panic!("invalid register size"),
             },
 
-            Rcx => match bytes {
-                1 => Cl,
-                _ => panic!("invalid register size"),
-            },
-
             Rdi => match bytes {
                 1 => Dil,
                 _ => panic!("invalid register size"),
             },
             Rsi => match bytes {
-                1 => Dil,
+                1 => Sil,
                 _ => panic!("invalid register size"),
             },
             Rdx => match bytes {
                 1 => Dl,
+                _ => panic!("invalid register size"),
+            },
+            Rcx => match bytes {
+                1 => Cl,
                 _ => panic!("invalid register size"),
             },
             R8 => match bytes {

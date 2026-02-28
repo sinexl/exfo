@@ -1,0 +1,53 @@
+extern "C" func printf(char_ptr, ...): void;
+extern "C" func memcmp(bool*, bool*, int): int;
+
+
+// XNOR Function. Note ((A XNOR B) == true) <=> (A == B) for booleans
+// In other words, if XNOR of two booleans is 1, they are equal.
+func xnor(a: bool, b: bool): bool {
+    return a && b || !a && !b;
+}
+
+// XOR Function. Note ((A XOR B) == true) <=> (A != B) for booleans
+// In other words, if XOR of two booleans is 1, they are different.
+func xor(a: bool, b: bool): bool {
+    return !a && b || a && !b;
+}
+
+func get_string(a: bool): char_ptr {
+    if a return "true";
+    else return "false";
+}
+
+func to_bool(a: int): bool {
+    if a == 0 return false;
+    else return true;
+}
+
+
+func main(): int {
+    printf("< --- XNOR \t\t\t\t\t XOR --- >\n");
+    i := 0;
+    while i <= 1 {
+        j := 0;
+        while j <= 1 {
+            a := to_bool(i);
+            b := to_bool(j);
+
+            expected_xnor := memcmp(&a, &b, 1) == 0;
+            expected_xor := memcmp(&a, &b, 1) != 0; // XNOR = !XOR.
+
+            result_xnor := xnor(a, b);
+            result_xor := xor(a, b);
+            a_str := get_string(a);
+            b_str := get_string(b);
+            printf("%5s XNOR %5s = %5s (expected %s)\t%5s XOR %5s = %5s (expected %5s)\n",
+                a_str, b_str, get_string(result_xnor), get_string(expected_xnor),
+                a_str, b_str, get_string(result_xor) , get_string(expected_xor)
+            );
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return 0;
+}

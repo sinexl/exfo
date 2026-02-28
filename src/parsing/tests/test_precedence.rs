@@ -121,6 +121,10 @@ pub fn unary() {
 pub fn logical() {
     assert_eq!(single("!1 && 2 || 3"), "(|| (&& (! 1) 2) 3)");
     assert_eq!(single("!1 == 2"), "(== (! 1) 2)");
+    // XNOR
+    assert_eq!(single("1 && 2 || !1 && !2"), "(|| (&& 1 2) (&& (! 1) (! 2)))");
+    // XOR
+    assert_eq!(single("1 && !2 || !1 && 2"), "(|| (&& 1 (! 2)) (&& (! 1) 2))");
 }
 
 
