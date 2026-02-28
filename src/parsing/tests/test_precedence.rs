@@ -31,14 +31,14 @@ pub fn parens_unbalanced() {
         fail("(1"),
         ParseError {
             kind: ParseErrorKind::UnbalancedParens,
-            location: SourceLocation::new(Rc::from(PATH), 1, 1),
+            loc: SourceLocation::new(Rc::from(PATH), 1, 1),
         }
     );
     assert_eq!(
         fail(" ((1 + 2)"),
         ParseError {
             kind: ParseErrorKind::UnbalancedParens,
-            location: SourceLocation {
+            loc: SourceLocation {
                 line: 1,
                 offset: 2,
                 file: Rc::from(PATH)
@@ -92,12 +92,28 @@ pub fn invalid_assignment() {
         fail("1 = 2"),
         ParseError {
             kind: ParseErrorKind::InvalidAssignment(msg.clone()),
-            location: SourceLocation::new(Rc::from(PATH), 1, 1),
+            loc: SourceLocation::new(Rc::from(PATH), 1, 1),
         }
     );
     assert_eq!(
         fail("(1 + a = 5) = 3").kind,
         ParseErrorKind::InvalidAssignment("binary operation".into())
+    );
+}
+
+#[test]
+pub fn invalid_address_of() {
+    let msg = ExpressionKind::Literal(Integral(0)).humanize();
+    assert_eq!(
+        fail("a = &2"),
+        ParseError {
+            kind: ParseErrorKind::InvalidAddressOf(msg.clone()),
+            loc: SourceLocation::new(Rc::from(PATH), 1, 5),
+        }
+    );
+    assert_eq!(
+        fail("a = &(b + 1)").kind,
+        ParseErrorKind::InvalidAddressOf("binary operation".into())
     );
 }
 

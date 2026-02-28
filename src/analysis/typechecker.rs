@@ -122,16 +122,7 @@ impl<'ast, 'types> Typechecker<'types> {
                         }
                     }
                     UnaryKind::AddressOf => {
-                        if !item.kind.lvalue() {
-                            return Err(TypeError {
-                                loc: expression.loc.clone(),
-                                kind: TypeErrorKind::RvalueAddressOf(
-                                    DisplayType(item.ty.inner(), self.types())
-                                        .to_string()
-                                        .into_boxed_str(),
-                                ),
-                            });
-                        }
+                        assert!(item.kind.lvalue(), "COMPILER BUG: Could not take address of rvalue. This should've been handled by Parser");
                         unsafe { (*self.types).monomorph_or_get_pointer(item.ty.inner()) }
                     }
                     UnaryKind::Not => {
@@ -429,12 +420,6 @@ impl<'ast, 'types> Typechecker<'types> {
         Ok(())
     }
 
-    pub fn try_infer_type(
-        &mut self,
-        body: &'ast [&'ast Statement<'ast, 'types>],
-    ) -> Result<Type<'ast>, TypeError> {
-        todo!()
-    }
 }
 pub struct TypeError {
     pub loc: SourceLocation,
@@ -456,15 +441,12 @@ pub enum TypeErrorKind {
     },
     MismatchedConditionType(&'static str),
 
-    CouldntInferFunctionReturnType,
 
     InvalidOperands(ast::binop::BinopKind, Box<str>, Box<str>),
     InvalidUnopOperand(UnaryKind, Box<str>),
     DereferencingNonPointer {
         actual_type: Box<str>,
     },
-
-    RvalueAddressOf(Box<str>),
 }
 impl CompilerError for TypeError {
     fn location(&self) -> SourceLocation {
@@ -509,18 +491,12 @@ impl CompilerError for TypeError {
             TypeErrorKind::MismatchedConditionType(name) => {
                 format!("{name} condition should evaluate to `bool` type")
             }
-            TypeErrorKind::CouldntInferFunctionReturnType => {
-                "Could not infer function return type".to_string()
-            }
             TypeErrorKind::InvalidOperands(op, a, b) => format!(
                 "Invalid operands to '{op}' operation ({a}, {b})",
                 op = op.operator()
             ),
             TypeErrorKind::DereferencingNonPointer { actual_type } => {
                 format!("Could not dereference `{}`", actual_type)
-            }
-            TypeErrorKind::RvalueAddressOf(typename) => {
-                format!("Could not take an address of rvalue of type `{typename}`")
             }
             TypeErrorKind::InvalidUnopOperand(kind, r#type) => {
                 format!("Could not {} {}", kind.verb(), r#type)
@@ -552,10 +528,8 @@ impl CompilerError for TypeError {
             }
             TypeErrorKind::InvalidArity { .. } => None,
             TypeErrorKind::MismatchedConditionType(_) => None,
-            TypeErrorKind::CouldntInferFunctionReturnType => None,
             TypeErrorKind::InvalidOperands(_, _, _) => None,
             TypeErrorKind::DereferencingNonPointer { .. } => None,
-            TypeErrorKind::RvalueAddressOf(_) => None,
             TypeErrorKind::InvalidUnopOperand(_, _) => None,
         }
     }

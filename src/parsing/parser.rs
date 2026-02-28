@@ -103,7 +103,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             return (
                 &[],
                 vec![ParseError {
-                    location: self.tokens.last().unwrap().loc.clone(),
+                    loc: self.tokens.last().unwrap().loc.clone(),
                     kind: ParseErrorKind::EmptyInput,
                 }]
                 .into_boxed_slice(),
@@ -205,7 +205,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             "C" => ExternKind::C,
             _ => {
                 return Err(ParseError {
-                    location: kind.loc.clone(),
+                    loc: kind.loc.clone(),
                     kind: ParseErrorKind::UnknownExternKind(String::from(kind.string.as_ref())),
                 });
             }
@@ -307,7 +307,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         let peek = |this: &mut Self, tk: Token| {
             this.peek_token().map_err(|mut e| {
                 e.kind = UnbalancedParens;
-                e.location = tk.loc;
+                e.loc = tk.loc;
                 e
             })
         };
@@ -326,7 +326,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 })
                 .map_err(|mut e| {
                     e.kind = UnbalancedParens;
-                    e.location = o_paren.loc;
+                    e.loc = o_paren.loc;
                     e
                 })?;
         }
@@ -465,7 +465,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 
         if self.consume(&[TokenType::CloseBrace]).is_none() {
             return Err(ParseError {
-                location: left_brace.clone().loc,
+                loc: left_brace.clone().loc,
                 kind: ParseErrorKind::UnbalancedBraces,
             });
         }
@@ -500,7 +500,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             "char_ptr" => Ok(TypeId::from_basic(BasicType::CharPtr)),
             _ => Err(ParseError {
                 kind: UnknownType(String::from(name.string.as_ref())),
-                location: name.loc.clone(),
+                loc: name.loc.clone(),
             }),
         }?;
         while self.consume(&[TokenType::Star]).is_some() {
@@ -515,7 +515,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             let value = self.parse_assignment()?;
             if !target.kind.lvalue() {
                 return Err(ParseError {
-                    location: target.loc.clone(),
+                    loc: target.loc.clone(),
                     kind: InvalidAssignment(target.kind.humanize()),
                 });
             }
@@ -565,17 +565,26 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         if let Some(tok) = self.consume(&[TokenType::Minus, TokenType::Star, TokenType::Ampersand, TokenType::Bang])
         {
             let item = self.parse_unary()?;
+            let operator =  match tok.kind {
+                TokenType::Star => UnaryKind::Dereferencing,
+                TokenType::Minus => UnaryKind::Negation,
+                TokenType::Ampersand => {
+                    if !item.kind.lvalue() {
+                        return Err(ParseError {
+                            loc: tok.loc.clone(),
+                            kind: ParseErrorKind::InvalidAddressOf(item.kind.humanize()),
+                        });
+                    }
+                    UnaryKind::AddressOf
+                },
+                TokenType::Bang => UnaryKind::Not,
+                _ => unreachable!(),
+            };
 
             return Ok(self.ast_bump.alloc(Expression {
                 kind: ExpressionKind::Unary {
                     item,
-                    operator: match tok.kind {
-                        TokenType::Star => UnaryKind::Dereferencing,
-                        TokenType::Minus => UnaryKind::Negation,
-                        TokenType::Ampersand => UnaryKind::AddressOf,
-                        TokenType::Bang => UnaryKind::Not,
-                        _ => unreachable!(),
-                    },
+                    operator
                 },
                 loc: tok.loc,
                 id: self.id(),
@@ -600,7 +609,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             });
             if self.consume(&[TokenType::CloseParen]).is_none() {
                 return Err(ParseError {
-                    location: tk.loc,
+                    loc: tk.loc,
                     kind: UnbalancedParens,
                 });
             }
@@ -680,7 +689,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 let expr = self.parse_expression()?;
                 if self.consume(&[CloseParen]).is_none() {
                     return Err(ParseError {
-                        location: loc,
+                        loc: loc,
                         kind: UnbalancedParens,
                     });
                 }
@@ -691,7 +700,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 self.nodes_count -= 1;
                 Err(ParseError {
                     kind: ParseErrorKind::UnknownToken(token.clone()),
-                    location: token.loc,
+                    loc: token.loc,
                 })
             }
         }
@@ -786,7 +795,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             .get(self.current)
             .cloned()
             .ok_or_else(|| ParseError {
-                location: self.tokens.last().unwrap().loc.clone(),
+                loc: self.tokens.last().unwrap().loc.clone(),
                 kind: ParseErrorKind::AtEof,
             })?;
         self.current += 1;
@@ -802,7 +811,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         }
 
         Err(ParseError {
-            location: self.tokens.last().unwrap().loc.clone(),
+            loc: self.tokens.last().unwrap().loc.clone(),
             kind: ParseErrorKind::AtEof,
         })
     }
@@ -836,7 +845,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         let last_token_in_input = self.tokens.last().unwrap().clone();
         let token = self.next_token().unwrap_or(last_token_in_input.clone());
         Err(ParseError {
-            location: self.peek_token().unwrap_or(last_token_in_input).loc,
+            loc: self.peek_token().unwrap_or(last_token_in_input).loc,
             kind: UnexpectedToken {
                 expected: Some(expected.to_vec().into_boxed_slice()),
                 got: token,
@@ -860,7 +869,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ParseError {
-    pub location: SourceLocation,
+    pub loc: SourceLocation,
     pub kind: ParseErrorKind,
 }
 
@@ -871,6 +880,7 @@ pub enum ParseErrorKind {
     UnbalancedParens,
     UnbalancedBraces,
     InvalidAssignment(String),
+    InvalidAddressOf(String),
     UnexpectedToken {
         expected: Option<Box<[TokenType]>>,
         got: Token,
@@ -883,7 +893,7 @@ pub enum ParseErrorKind {
 
 impl CompilerError for ParseError {
     fn location(&self) -> SourceLocation {
-        self.location.clone()
+        self.loc.clone()
     }
 
     fn message(&self) -> String {
@@ -905,6 +915,7 @@ impl CompilerError for ParseError {
             UnknownExternKind(k) => format!("unknown extern kind: \"{}\"", k),
             UnknownToken(tk) => format!("unknown token: {tk}").to_string(),
             EmptyInput => "empty input: nothing to parse".to_string(),
+            InvalidAddressOf(name) => format!("could not take address of {}", name),
         }
     }
 
@@ -912,14 +923,15 @@ impl CompilerError for ParseError {
         use ParseErrorKind::*;
         match &self.kind {
             AtEof => None,
-            UnbalancedParens => Some(format!("last parenthesis located here: {}", self.location)),
+            UnbalancedParens => Some(format!("last parenthesis located here: {}", self.loc)),
             InvalidAssignment(_) => None,
             UnexpectedToken { .. } => None,
-            UnbalancedBraces => Some(format!("last braces located here: {}", self.location)),
+            UnbalancedBraces => Some(format!("last braces located here: {}", self.loc)),
             UnknownType(_) => None,
             UnknownExternKind(_) => None, // todo: maybe point out existing external kinds.
             UnknownToken(_) => None,
             EmptyInput => None,
+            InvalidAddressOf(_) => None,
         }
     }
 }
