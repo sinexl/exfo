@@ -1,5 +1,6 @@
-use exfo::target::target::{Target, TARGETS};
 use std::path::PathBuf;
+use exfo::target::target::{Target, TARGETS};
+use crate::fatal;
 
 pub struct CompilerArguments {
     pub input: PathBuf,
@@ -20,12 +21,6 @@ pub struct CompilerArguments {
 
     /// Compilation Target
     pub target: Option<Target>,
-}
-macro_rules! fatal {
-    ($($arg:tt)*) => {{
-        eprintln!($($arg)*);
-        std::process::exit(1);
-    }};
 }
 
 impl CompilerArguments {

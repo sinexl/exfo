@@ -4,8 +4,8 @@ use crate::analysis::typechecker::Typechecker;
 use crate::ast::tree_printer::DisplayStatement;
 use crate::common::errors_warnings::CompilerError;
 use crate::compiler_io::compiler_arguments::CompilerArguments;
-use crate::compiler_io::dev_repl::dev_repl;
-use crate::compiler_io::util::{DisplayCommand, create_dir_if_not_exists, run_command};
+use dev_repl::dev_repl;
+use crate::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
@@ -14,7 +14,7 @@ use code_generation::x86_64::codegen::Codegen;
 use exfo::target::target::Target;
 use exfo::target::target::x86_64::Os;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio, exit};
+use std::process::{exit, Command, Stdio};
 use std::ptr::addr_of_mut;
 use std::{env, fs, io};
 
@@ -26,6 +26,7 @@ mod compiler_io;
 mod compiling;
 pub mod lexing;
 mod parsing;
+pub mod dev_repl;
 
 fn main() -> io::Result<()> {
     let args = std::env::args();
