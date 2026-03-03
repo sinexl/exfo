@@ -89,7 +89,7 @@ fn main() -> io::Result<()> {
 
     let mut args = env::args();
     let program_name = args.next().unwrap();
-    let command = Subcommand::parse(&mut args);
+    let command = Subcommand::parse(&program_name, &mut args);
 
     let all_found = scan_tests_from_folder(&test_folder)?;
 
@@ -135,7 +135,7 @@ fn main() -> io::Result<()> {
             println!("Recording tests...");
             let to_record = if new { &difference } else { &all_found };
 
-            let mut results = evaluate_tests(&compiler_path, to_record, test_folder, test_bin)?;
+            let mut results = evaluate_tests(&compiler_path, to_record, test_folder, test_bin, true)?;
             assert_eq!(results.len(), to_record.len());
             for test in &difference {
                 let value = results.get(test).unwrap();
@@ -168,8 +168,8 @@ fn main() -> io::Result<()> {
 
             print!("{message}", message = DisplayBox(&message, Some(BLUE)));
         }
-        Subcommand::Check => {
-            let got: TestResults = evaluate_tests(compiler_path, &recorded, test_folder, test_bin)?;
+        Subcommand::Check { preferred_pic } => {
+            let got: TestResults = evaluate_tests(compiler_path, &recorded, test_folder, test_bin, *preferred_pic)?;
             let failed = check_tests(&test_results, &got, &diff_folder)?;
 
             if failed == 0 {
@@ -203,6 +203,7 @@ fn evaluate_tests(
     tests: &BTreeSet<String>,
     test_folder: impl AsRef<Path>,
     test_bin: impl AsRef<Path>,
+    prefer_pic: bool,
 ) -> io::Result<TestResults> {
     let compiler_path = compiler_path.as_ref();
     let test_bin = test_bin.as_ref();
@@ -212,13 +213,20 @@ fn evaluate_tests(
     for test in tests {
         let test_path = test_folder.join(test).with_extension("exfo");
         let test_output = test_bin.join(test).with_extension(env::consts::EXE_EXTENSION);
-        let mut compiler = Command::new(compiler_path)
+
+        let mut compiler = Command::new(compiler_path);
+        compiler
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .arg(&test_path)
             .arg("-o")
-            .arg(&test_output)
-            .spawn()?;
+            .arg(&test_output);
+
+        if !prefer_pic {
+            compiler.arg("--no-pic");
+        }
+
+        let mut compiler = compiler.spawn()?;
 
         if !compiler.wait()?.success() {
             results.insert(test.clone(), TestResult::CompilerFailure);
