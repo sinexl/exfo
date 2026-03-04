@@ -1,6 +1,5 @@
 mod command;
 mod util;
-use std::path::PathBuf;
 use crate::command::Subcommand;
 use crate::util::colors::*;
 use crate::util::{DisplayBox, ensure_compiler_exists, remove_dir_contents};
@@ -11,6 +10,7 @@ use std::ffi::OsStr;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Command, Stdio, exit};
 use std::{cmp, env, fs, io};
 
@@ -80,8 +80,11 @@ fn main() -> io::Result<()> {
     let test_folder = PathBuf::from("tests");
     let test_bin = PathBuf::from("tests").join("bin");
     let diff_folder = PathBuf::from("tests").join("diff");
-    let compiler_path = PathBuf::from("..").join("target").join("debug").join("exfo")
-        .with_extension(env::consts::EXE_EXTENSION); 
+    let compiler_path = PathBuf::from("..")
+        .join("target")
+        .join("debug")
+        .join("exfo")
+        .with_extension(env::consts::EXE_EXTENSION);
     fs::create_dir_all(&test_folder)?;
     fs::create_dir_all(&test_bin)?;
     fs::create_dir_all(&diff_folder)?;
@@ -135,7 +138,8 @@ fn main() -> io::Result<()> {
             println!("Recording tests...");
             let to_record = if new { &difference } else { &all_found };
 
-            let mut results = evaluate_tests(&compiler_path, to_record, test_folder, test_bin, true)?;
+            let mut results =
+                evaluate_tests(&compiler_path, to_record, test_folder, test_bin, true)?;
             assert_eq!(results.len(), to_record.len());
             for test in &difference {
                 let value = results.get(test).unwrap();
@@ -169,7 +173,13 @@ fn main() -> io::Result<()> {
             print!("{message}", message = DisplayBox(&message, Some(BLUE)));
         }
         Subcommand::Check { preferred_pic } => {
-            let got: TestResults = evaluate_tests(compiler_path, &recorded, test_folder, test_bin, *preferred_pic)?;
+            let got: TestResults = evaluate_tests(
+                compiler_path,
+                &recorded,
+                test_folder,
+                test_bin,
+                *preferred_pic,
+            )?;
             let failed = check_tests(&test_results, &got, &diff_folder)?;
 
             if failed == 0 {
@@ -212,7 +222,9 @@ fn evaluate_tests(
     let mut results: TestResults = BTreeMap::new();
     for test in tests {
         let test_path = test_folder.join(test).with_extension("exfo");
-        let test_output = test_bin.join(test).with_extension(env::consts::EXE_EXTENSION);
+        let test_output = test_bin
+            .join(test)
+            .with_extension(env::consts::EXE_EXTENSION);
 
         let mut compiler = Command::new(compiler_path);
         compiler
@@ -235,7 +247,9 @@ fn evaluate_tests(
 
         let output = Command::new(&test_output).output()?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout)
+            .replace("\r\n", "\n") // we love windows
+            .to_string();
         let return_code = output.status.code().ok_or(io::ErrorKind::NotFound)?;
 
         results.insert(
