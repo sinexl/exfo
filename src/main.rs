@@ -133,8 +133,8 @@ fn main() -> io::Result<()> {
     }
 
     let mut gas = Command::new(&assembler);
-    if args.debug_compiler {
-        gas.arg("-g");
+    if args.debug_compiler { 
+        gas.arg("--gdwarf-2");
     }
     gas.arg(asm_path)
         .arg("-o")

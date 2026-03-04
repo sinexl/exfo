@@ -119,7 +119,7 @@ impl<'ir> Codegen<'ir> {
         }
 
         // Stack Parameters.
-        // X86-64 Stack layout:
+        // X86-64 Stack layout. This is Linux, on Windows, there is also a shadow space:
         // -16       -8         0         8         16
         //  | * * * * | * * * * | * * * * | * * * * | * * * * | * * * * ...
         //                      ^         ^         ^
@@ -128,6 +128,9 @@ impl<'ir> Codegen<'ir> {
         //                                       [8 - 16]
         let stack_params = &arguments[reg_arg_count..];
         let mut arg_read_offset = 16;
+        if self.os == Os::Windows {
+            arg_read_offset += 32; // windows shadow space
+        }
         for arg_size in stack_params {
             comment!(self, "Argument {i}. size: {arg_size}");
             arg_offset += arg_size;
@@ -407,7 +410,11 @@ impl<'ir> Codegen<'ir> {
         match arg {
             Arg::RValue(Rvalue::ExternalFunction(name)) => {
                 let name = if self.pic {
-                    format!("{}@PLT", name.name)
+                    let mut string =  format!("{}", name.name); 
+                    if self.os != Os::Windows { 
+                        write!(string, "@PLT").unwrap();
+                    }
+                    string
                 } else {
                     name.name.to_string()
                 };
