@@ -96,7 +96,7 @@ impl CompilerArguments {
                     result.repl = true;
                 }
 
-                "--help" => {
+                "--help" | "help" => {
                     println!("Usage: {program_name} [options]");
                     println!("\t--help                         Display this message.");
                     println!("\t--output | -o <path>           Desired output file.");
