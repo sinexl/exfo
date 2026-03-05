@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::path::Path;
-use std::process::{exit, Command};
+use std::process::{Command, exit};
 use std::{fs, io};
 
 pub fn get_line(msg: &str) -> String {
@@ -65,5 +65,13 @@ macro_rules! dprintln {
         if $out.debug_compiler {
             println!($($arg)*);
         }
+    }};
+}
+
+#[macro_export]
+macro_rules! fatal {
+    ($($arg:tt)*) => {{
+        eprintln!($($arg)*);
+        std::process::exit(1);
     }};
 }

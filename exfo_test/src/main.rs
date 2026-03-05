@@ -1,18 +1,21 @@
 mod command;
 mod util;
-
 use crate::command::Subcommand;
 use crate::util::colors::*;
 use crate::util::{DisplayBox, ensure_compiler_exists, remove_dir_contents};
 use serde::{Deserialize, Serialize};
-use similar::TextDiff;
+use similar::{DiffableStr, TextDiff};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Stderr, Write};
 use std::path::Path;
-use std::process::{Command, Stdio, exit};
+use std::path::PathBuf;
+use std::process::{Command, Stdio, exit, Child, Output};
 use std::{cmp, env, fs, io};
+use exfo::compiler_io::util::DisplayCommand;
+use exfo::target::target::Target;
+use exfo::target::target::x86_64::Os;
 
 #[derive(Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq, Eq, Clone)]
 pub enum TestResult {
@@ -76,31 +79,35 @@ pub fn scan_tests_from_folder(test_folder: impl AsRef<Path>) -> io::Result<BTree
 }
 
 fn main() -> io::Result<()> {
-    let json_path = Path::new("./src/tests.json");
-    let test_folder = Path::new("./tests/");
-    let test_bin = Path::new("./tests/bin/");
-    let diff_folder = Path::new("./tests/diff");
-    let compiler_path = Path::new("./../target/debug/exfo");
-    fs::create_dir_all(test_folder)?;
-    fs::create_dir_all(test_bin)?;
-    fs::create_dir_all(diff_folder)?;
-    ensure_compiler_exists(compiler_path)?;
+    let json_path = PathBuf::from("src").join("tests.json");
+    let test_folder = PathBuf::from("tests");
+    let test_bin = PathBuf::from("tests").join("bin");
+    let diff_folder = PathBuf::from("tests").join("diff");
+    let compiler_path = PathBuf::from("..")
+        .join("target")
+        .join("debug")
+        .join("exfo")
+        .with_extension(env::consts::EXE_EXTENSION);
+    fs::create_dir_all(&test_folder)?;
+    fs::create_dir_all(&test_bin)?;
+    fs::create_dir_all(&diff_folder)?;
+    ensure_compiler_exists(&compiler_path)?;
 
     let mut args = env::args();
     let program_name = args.next().unwrap();
-    let command = Subcommand::parse(&mut args);
+    let command = Subcommand::parse(&program_name, &mut args);
 
-    let all_found = scan_tests_from_folder(test_folder)?;
+    let all_found = scan_tests_from_folder(&test_folder)?;
 
     if !command.is_record_all() {
         ensure_exists!(
-            json_path,
+            &json_path,
             "Could not find recorded test results",
             "Use `{program_name} record all` to record tests first"
         )?;
     }
 
-    let mut test_results = load_test_results_from_file(json_path)?;
+    let mut test_results = load_test_results_from_file(&json_path)?;
     let recorded = test_results
         .keys()
         .map(|k| k.clone())
@@ -134,7 +141,8 @@ fn main() -> io::Result<()> {
             println!("Recording tests...");
             let to_record = if new { &difference } else { &all_found };
 
-            let mut results = evaluate_tests(compiler_path, to_record, test_folder, test_bin)?;
+            let mut results =
+                evaluate_tests(&compiler_path, to_record, test_folder, test_bin, true, Target::get_current_target().unwrap())?;
             assert_eq!(results.len(), to_record.len());
             for test in &difference {
                 let value = results.get(test).unwrap();
@@ -156,7 +164,7 @@ fn main() -> io::Result<()> {
                 results = test_results;
             }
 
-            write_results(&results, json_path)?;
+            write_results(&results, &json_path)?;
 
             let len = to_record.len();
             let message = if new {
@@ -167,13 +175,22 @@ fn main() -> io::Result<()> {
 
             print!("{message}", message = DisplayBox(&message, Some(BLUE)));
         }
-        Subcommand::Check => {
-            let got: TestResults = evaluate_tests(compiler_path, &recorded, test_folder, test_bin)?;
+        Subcommand::Check { preferred_pic, target } => {
+            // unwrap because subcommand::parse should always return Some
+            let got: TestResults = evaluate_tests(
+                compiler_path,
+                &recorded,
+                test_folder,
+                test_bin,
+                *preferred_pic,
+                *target,
+            )?;
             let failed = check_tests(&test_results, &got, &diff_folder)?;
 
             if failed == 0 {
                 remove_dir_contents(diff_folder)?;
             }
+            info!("Target: {target}");
             let (message, color) = if failed != 0 {
                 (format!("{failed} test(s) failed..."), RED)
             } else {
@@ -197,40 +214,82 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn evaluate_tests<P: AsRef<Path>>(
-    compiler_path: P,
+fn evaluate_tests(
+    compiler_path: impl AsRef<Path>,
     tests: &BTreeSet<String>,
-    test_folder: P,
-    test_bin: P,
+    test_folder: impl AsRef<Path>,
+    test_bin: impl AsRef<Path>,
+    prefer_pic: bool,
+    target: Target,
 ) -> io::Result<TestResults> {
     let compiler_path = compiler_path.as_ref();
     let test_bin = test_bin.as_ref();
     let test_folder = test_folder.as_ref();
 
     let mut results: TestResults = BTreeMap::new();
+    // test name -> test output (executable file path)
+    let mut compiled_tests = BTreeMap::new();
+    // Compilation
     for test in tests {
         let test_path = test_folder.join(test).with_extension("exfo");
-        let test_output = test_bin.join(test);
-        let mut compiler = Command::new(compiler_path)
+        let test_output = test_bin
+            .join(test)
+            .with_extension(target.exe_extension());
+
+        let mut compiler = Command::new(compiler_path);
+        compiler
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
+            .arg("-t").arg(target.to_string())
             .arg(&test_path)
             .arg("-o")
-            .arg(&test_output)
-            .spawn()?;
+            .arg(&test_output);
 
-        if !compiler.wait()?.success() {
-            results.insert(test.clone(), TestResult::CompilerFailure);
-            continue;
+        if !prefer_pic {
+            compiler.arg("--no-pic");
         }
 
-        let output = Command::new(&test_output).output()?;
+        let mut compiler = compiler.spawn()?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        if compiler.wait()?.success() {
+            compiled_tests.insert(test, test_output);
+        } else {
+            results.insert(test.clone(), TestResult::CompilerFailure);
+        }
+    }
+
+    // Running in parallel.
+    let mut running_tests = BTreeMap::<&str, Child>::new();
+    for (test, test_output) in compiled_tests {
+        let mut exe = match target {
+            Target::x86_64(Os::Linux) => Command::new(&test_output),
+            Target::x86_64(Os::Windows) => Command::new("wine"),
+        };
+        if target == Target::x86_64(Os::Windows) {
+            exe.arg(&test_output);
+        }
+
+        exe.stdout(Stdio::piped());
+        exe.stderr(Stdio::piped());
+        info!("Running executable: {}", DisplayCommand(&exe));
+
+
+        running_tests.insert(test, exe.spawn()?);
+    }
+
+    let mut got_tests = BTreeMap::<&str, Output>::new();
+    for (test, exe) in running_tests {
+        got_tests.insert(&test, exe.wait_with_output()?);
+    }
+
+    for (test, output) in got_tests {
+        let stdout = String::from_utf8_lossy(&output.stdout)
+            .replace("\r\n", "\n") // we love windows
+            .to_string();
         let return_code = output.status.code().ok_or(io::ErrorKind::NotFound)?;
 
         results.insert(
-            test.clone(),
+            String::from(test),
             TestResult::SuccessfulExecution {
                 stdout,
                 return_code,

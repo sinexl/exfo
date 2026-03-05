@@ -3,12 +3,12 @@ use crate::analysis::type_context::TypeCtx;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::ast::tree_printer::DisplayStatement;
 use crate::common::errors_warnings::CompilerError;
-use crate::compiler_io::util::get_line;
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
 use bumpalo::Bump;
 use std::ptr::addr_of_mut;
+use exfo::compiler_io::util::get_line;
 
 pub fn dev_repl() {
     let mut exit = false;

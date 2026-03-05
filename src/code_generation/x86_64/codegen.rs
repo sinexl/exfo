@@ -1,65 +1,54 @@
-use crate::code_generation::register::Register;
-use crate::code_generation::register::Register::*;
+use crate::code_generation::x86_64::register::Register;
+use crate::code_generation::x86_64::register::Register::*;
 use crate::compiling::ir::binop::{ArithmeticKind, Binop, BinopKind, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::binop::{IntegerBinop, OrderingKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
+use crate::{asm, assert_same, comment};
+use exfo::target::target::x86_64::Os;
 use std::cmp;
 use std::fmt::{Display, Formatter, Write};
+use exfo::target::target::Target;
 
-const CALL_REGISTERS: &[Register] = &[Rdi, Rsi, Rdx, Rcx, R8, R9];
+mod constants {
+    use crate::code_generation::x86_64::register::Register;
+    use crate::code_generation::x86_64::register::Register::*;
 
-macro_rules! assert_same {
-    ($msg:expr, $first:expr $(, $rest:expr)+ $(,)?) => {{
-        let first = $first;
-        $(
-            assert!(
-                $first == $rest,
-                "COMPILER BUG: Codegen: {} ({} != {})",
-                $msg,
-                $first,
-                $rest
-            );
-        )+
-        first
-    }};
-}
-
-macro_rules! asm {
-    ($dst:expr, $($fmt:tt)*) => {
-        writeln!($dst.output, $($fmt)*).unwrap()
-    };
-}
-
-macro_rules! comment {
-    ($dst:expr, $($fmt:tt)*) => {{
-        write!($dst.output, "  // ").unwrap();
-        writeln!($dst.output, $($fmt)*).unwrap();
-    }};
-
-    ($dst:expr) => {
-        writeln!($dst.output).unwrap()
-    };
+    pub const LINUX_CALL_REGISTERS: &[Register] = &[Rdi, Rsi, Rdx, Rcx, R8, R9];
+    pub const WINDOWS_CALL_REGISTERS: &[Register] = &[Rcx, Rdx, R8, R9];
 }
 
 pub struct Codegen<'ir> {
     ir: &'ir IntermediateRepresentation<'ir>,
-    pic: bool,
+    // This field shouldn't be read directly. Use Codegen::pic() instead.
+    pic_: bool,
     output: String,
 
     // Stores parameters' offsets of the function
     arg_offsets: Option<Vec<usize>>,
+
+    os: Os,
+    call_registers: &'static [Register],
 }
 
 //noinspection SpellCheckingInspection
 impl<'ir> Codegen<'ir> {
-    pub fn new(ir: &'ir IntermediateRepresentation<'ir>, pic: bool) -> Self {
+    pub fn new(ir: &'ir IntermediateRepresentation<'ir>, os: Os, pic: bool) -> Self {
         Self {
             ir,
             output: String::new(),
-            pic,
+            pic_: pic,
             arg_offsets: None,
+            call_registers: match os {
+                Os::Linux => constants::LINUX_CALL_REGISTERS,
+                Os::Windows => constants::WINDOWS_CALL_REGISTERS,
+            },
+            os,
         }
+    }
+
+    pub fn pic(&self) -> bool {
+        self.pic_ || self.os == Os::Windows
     }
 
     pub fn generate_function(&mut self, function: &Function<'ir>) {
@@ -114,7 +103,7 @@ impl<'ir> Codegen<'ir> {
             .for_each(|e| assert_ne!(*e, 0, "Function argument size could not be zero"));
         let mut offsets = Vec::with_capacity(arguments.len());
         let mut arg_offset = function_stack_size;
-        let reg_arg_count = cmp::min(arguments.len(), CALL_REGISTERS.len()); // Amount of parameters passed by register.
+        let reg_arg_count = cmp::min(arguments.len(), self.call_registers.len()); // Amount of parameters passed by register.
 
         let mut i = 0;
 
@@ -128,7 +117,7 @@ impl<'ir> Codegen<'ir> {
             asm!(
                 self,
                 "  mov{p} {}, -{}(%rbp)",
-                CALL_REGISTERS[i].lower_bytes_register(arg_size),
+                self.call_registers[i].lower_bytes_register(arg_size),
                 arg_offset
             );
             offsets.push(arg_offset);
@@ -136,7 +125,7 @@ impl<'ir> Codegen<'ir> {
         }
 
         // Stack Parameters.
-        // X86-64 Stack layout:
+        // X86-64 Stack layout. This is Linux, on Windows, there is also a shadow space:
         // -16       -8         0         8         16
         //  | * * * * | * * * * | * * * * | * * * * | * * * * | * * * * ...
         //                      ^         ^         ^
@@ -145,6 +134,9 @@ impl<'ir> Codegen<'ir> {
         //                                       [8 - 16]
         let stack_params = &arguments[reg_arg_count..];
         let mut arg_read_offset = 16;
+        if self.os == Os::Windows {
+            arg_read_offset += 32; // windows shadow space
+        }
         for arg_size in stack_params {
             comment!(self, "Argument {i}. size: {arg_size}");
             arg_offset += arg_size;
@@ -172,13 +164,16 @@ impl<'ir> Codegen<'ir> {
             } => {
                 // TODO: Check for the function return value size.
                 comment!(self, "Function call");
-                let register_args = args.iter().take(CALL_REGISTERS.len());
+                let register_args = args.iter().take(self.call_registers.len());
 
                 for (i, arg) in register_args.enumerate() {
-                    self.load_arg_to_reg(arg, CALL_REGISTERS[i].lower_bytes_register(arg.size()));
+                    self.load_arg_to_reg(
+                        arg,
+                        self.call_registers[i].lower_bytes_register(arg.size()),
+                    );
                 }
 
-                let stack_args = &args[cmp::min(CALL_REGISTERS.len(), args.len())..];
+                let stack_args = &args[cmp::min(self.call_registers.len(), args.len())..];
                 for i in stack_args.iter().rev() {
                     self.push_arg(i);
                 }
@@ -186,7 +181,15 @@ impl<'ir> Codegen<'ir> {
                 if *is_variadic {
                     asm!(self, "  movb $0, %al"); // SysV requires to put amount of floating point arguments into %al when calling variadic function
                 }
+                // Shadow space (windows only)
+                if self.os == Os::Windows {
+                    asm!(self, "  subq $32, %rsp")
+                }
                 self.call_arg(callee);
+
+                if self.os == Os::Windows {
+                    asm!(self, "  addq $32, %rsp")
+                }
                 if let Some(result) = result {
                     let ret_arg = Rax.lower_bytes_register(result.size());
                     self.store_reg_to_lvalue(ret_arg, result);
@@ -319,7 +322,7 @@ impl<'ir> Codegen<'ir> {
             }
             Opcode::AddressOf { result, source } => {
                 assert_same!(
-                    "Opcode::AddressOf: Could not store adress into lvalue with size different from 8",
+                    "Opcode::AddressOf: Could not store adress into lvalue with size different from pointer size",
                     result.size(),
                     8
                 );
@@ -363,7 +366,12 @@ impl<'ir> Codegen<'ir> {
             }
             Opcode::Not { result, item } => {
                 comment!(self, "Logical Not");
-                let size = assert_same!("could not apply logical NOT to operand with size != 1.", 1usize, item.size(), result.size());
+                let size = assert_same!(
+                    "could not apply logical NOT to operand with size != 1.",
+                    1usize,
+                    item.size(),
+                    result.size()
+                );
                 let reg = Rax.lower_bytes_register(size);
 
                 self.load_arg_to_reg(item, reg);
@@ -379,6 +387,7 @@ impl<'ir> Codegen<'ir> {
     }
 
     pub fn generate(mut self) -> String {
+        comment!(self, "Generating for: {}", Target::x86_64(self.os));
         asm!(self, ".section .text");
         for v in &self.ir.functions {
             self.generate_function(v);
@@ -410,8 +419,12 @@ impl<'ir> Codegen<'ir> {
     fn call_arg(&mut self, arg: &Arg<'ir>) {
         match arg {
             Arg::RValue(Rvalue::ExternalFunction(name)) => {
-                let name = if self.pic {
-                    format!("{}@PLT", name.name)
+                let name = if self.pic() {
+                    let mut string = format!("{}", name.name);
+                    if self.os != Os::Windows {
+                        write!(string, "@PLT").unwrap();
+                    }
+                    string
                 } else {
                     name.name.to_string()
                 };
@@ -446,10 +459,10 @@ impl<'ir> Codegen<'ir> {
         let offsets = self.arg_offsets();
         match arg {
             Arg::RValue(rvalue) => {
-                let display = DisplayRValue(rvalue, self.pic);
+                let display = DisplayRValue(rvalue, self.pic());
 
                 // Unfortunately strings are annoying in PIC and need to be handled separately.
-                let instruction = if rvalue.is_string() && self.pic {
+                let instruction = if rvalue.is_string() && self.pic() {
                     "lea"
                 } else {
                     "mov"
@@ -469,7 +482,7 @@ impl<'ir> Codegen<'ir> {
         };
         // Zero-extend and push if size is not 8
         if arg.size() == 1 {
-            let display = DisplayArg(arg, self.pic, &self.arg_offsets()).to_string();
+            let display = DisplayArg(arg, self.pic(), &self.arg_offsets()).to_string();
             asm!(self, "  movzbq {display}, {Rax}");
             asm!(self, "  pushq {Rax}");
             return;
@@ -480,11 +493,11 @@ impl<'ir> Codegen<'ir> {
         let offsets = self.arg_offsets();
         match arg {
             Arg::RValue(rvalue) => {
-                let display = DisplayRValue(rvalue, self.pic);
+                let display = DisplayRValue(rvalue, self.pic());
                 match rvalue {
                     // Unfortunately strings are annoying in PIC and need to be handled separately.
                     Rvalue::String { .. } => {
-                        if self.pic {
+                        if self.pic() {
                             asm!(self, "  lea{p} {display}, {Rax}");
                             asm!(self, "  push{p} {Rax}")
                         } else {

@@ -13,7 +13,7 @@ logical operations
 - [X] `if-else` (see [if.exfo](./examples/if.exfo)), labeled `while`  loops (see [loops example](./examples/loops.exfo))
 - [X] Pointers (see [pointers example](./examples/swap.exfo))
 ## Features not implemented yet
-- [ ] Other platforms support (including windows)
+- [ ] Other platforms support
 - [ ] Pointer Arithmetic
 - [ ] Some basic operations (%, == for `bool`, bitwise operations)
 - [ ] Character type
@@ -26,32 +26,56 @@ logical operations
 - [ ] Smarter type system 
 - [ ] Better error messages & error recovery in parser & resolver. 
 
+## External Dependencies 
+- [Rust programming language](https://rust-lang.org/) & Cargo (package manager for Rust).
+- [GNU Compiler Collection (GCC)](https://gcc.gnu.org/) or [MinGW](https://www.mingw-w64.org/).
+- (Optional) [Wine](https://www.winehq.org/) if you are willing to cross-test for Windows while being on Linux.
 
 ## Building (x86_64-linux) 
 Please make sure that you have C compiler `cc` & GNU Assembler `as` installed on your system and available 
 in `$PATH`
-
+### Compilation
 run
 ```shell
 cargo build --release 
 ```
 After compilation is done, the compiler will be located in `./target/release/exfo`
 
+## Building (x86_64-windows)
+Please make sure that you have MinGW software package installed and available in `$PATH`
+### Compilation
+run
+```shell
+cargo build --release 
+```
+After compilation is done, the compiler will be located in `.\target\release\exfo.exe`
+
+## Usage 
+Basic compiler usage is: 
+```shell
+exfo <file.exfo> -o <output>
+```
+(replace `exfo` by executable path of the compiler)
+
+for more details, run `exfo --help`
+
 ## Running tests
 Exfo comes with its own "testing framework" which is located at [exfo_test crate](./exfo_test)
 
 To run the tests, ensure that debug version of compiler is built 
 ```shell
-cargo build --debug
+cargo build --debug # in exfo/
 ```
 Go to exfo_test directory, and run 
 ```shell
-cargo run -- check
+cargo run -- check # in exfo/exfo_test
 ```
 If you want to add a test, put the test code into `exfo_test/tests` folder and run 
 ```shell
 cargo run -- record # or `record all` if you want to override all test results (not recommended unless you change a test).
 ```
+For more details, invoke `cargo run -- help` inside exfo/exfo_test 
+directory
 
 ## Resources I found useful while developing this project 
 - [bext-lang/b source code](https://github.com/bext-lang/b)
