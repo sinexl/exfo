@@ -20,7 +20,8 @@ mod constants {
 
 pub struct Codegen<'ir> {
     ir: &'ir IntermediateRepresentation<'ir>,
-    pic: bool,
+    // This field shouldn't be read directly. Use Codegen::pic() instead.
+    pic_: bool,
     output: String,
 
     // Stores parameters' offsets of the function
@@ -36,7 +37,7 @@ impl<'ir> Codegen<'ir> {
         Self {
             ir,
             output: String::new(),
-            pic,
+            pic_: pic,
             arg_offsets: None,
             call_registers: match os {
                 Os::Linux => constants::LINUX_CALL_REGISTERS,
@@ -44,6 +45,10 @@ impl<'ir> Codegen<'ir> {
             },
             os,
         }
+    }
+
+    pub fn pic(&self) -> bool {
+        self.pic_ || self.os == Os::Windows
     }
 
     pub fn generate_function(&mut self, function: &Function<'ir>) {
@@ -414,7 +419,7 @@ impl<'ir> Codegen<'ir> {
     fn call_arg(&mut self, arg: &Arg<'ir>) {
         match arg {
             Arg::RValue(Rvalue::ExternalFunction(name)) => {
-                let name = if self.pic {
+                let name = if self.pic() {
                     let mut string = format!("{}", name.name);
                     if self.os != Os::Windows {
                         write!(string, "@PLT").unwrap();
@@ -454,10 +459,10 @@ impl<'ir> Codegen<'ir> {
         let offsets = self.arg_offsets();
         match arg {
             Arg::RValue(rvalue) => {
-                let display = DisplayRValue(rvalue, self.pic);
+                let display = DisplayRValue(rvalue, self.pic());
 
                 // Unfortunately strings are annoying in PIC and need to be handled separately.
-                let instruction = if rvalue.is_string() && self.pic {
+                let instruction = if rvalue.is_string() && self.pic() {
                     "lea"
                 } else {
                     "mov"
@@ -477,7 +482,7 @@ impl<'ir> Codegen<'ir> {
         };
         // Zero-extend and push if size is not 8
         if arg.size() == 1 {
-            let display = DisplayArg(arg, self.pic, &self.arg_offsets()).to_string();
+            let display = DisplayArg(arg, self.pic(), &self.arg_offsets()).to_string();
             asm!(self, "  movzbq {display}, {Rax}");
             asm!(self, "  pushq {Rax}");
             return;
@@ -488,11 +493,11 @@ impl<'ir> Codegen<'ir> {
         let offsets = self.arg_offsets();
         match arg {
             Arg::RValue(rvalue) => {
-                let display = DisplayRValue(rvalue, self.pic);
+                let display = DisplayRValue(rvalue, self.pic());
                 match rvalue {
                     // Unfortunately strings are annoying in PIC and need to be handled separately.
                     Rvalue::String { .. } => {
-                        if self.pic {
+                        if self.pic() {
                             asm!(self, "  lea{p} {display}, {Rax}");
                             asm!(self, "  push{p} {Rax}")
                         } else {

@@ -100,7 +100,7 @@ impl Subcommand {
                     fatal!(
                         "Unknown subcommand: `{str}`. Use `{program_name} help` for list of all commands"
                     );
-                }
+               }
             }
         }
 
