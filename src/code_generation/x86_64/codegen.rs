@@ -5,9 +5,10 @@ use crate::compiling::ir::binop::{IntegerBinop, OrderingKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
 use crate::{asm, assert_same, comment};
+use exfo::target::target::x86_64::Os;
 use std::cmp;
 use std::fmt::{Display, Formatter, Write};
-use exfo::target::target::x86_64::Os;
+use exfo::target::target::Target;
 
 mod constants {
     use crate::code_generation::x86_64::register::Register;
@@ -41,7 +42,7 @@ impl<'ir> Codegen<'ir> {
                 Os::Linux => constants::LINUX_CALL_REGISTERS,
                 Os::Windows => constants::WINDOWS_CALL_REGISTERS,
             },
-            os
+            os,
         }
     }
 
@@ -161,7 +162,10 @@ impl<'ir> Codegen<'ir> {
                 let register_args = args.iter().take(self.call_registers.len());
 
                 for (i, arg) in register_args.enumerate() {
-                    self.load_arg_to_reg(arg, self.call_registers[i].lower_bytes_register(arg.size()));
+                    self.load_arg_to_reg(
+                        arg,
+                        self.call_registers[i].lower_bytes_register(arg.size()),
+                    );
                 }
 
                 let stack_args = &args[cmp::min(self.call_registers.len(), args.len())..];
@@ -378,6 +382,7 @@ impl<'ir> Codegen<'ir> {
     }
 
     pub fn generate(mut self) -> String {
+        comment!(self, "Generating for: {}", Target::x86_64(self.os));
         asm!(self, ".section .text");
         for v in &self.ir.functions {
             self.generate_function(v);
@@ -410,8 +415,8 @@ impl<'ir> Codegen<'ir> {
         match arg {
             Arg::RValue(Rvalue::ExternalFunction(name)) => {
                 let name = if self.pic {
-                    let mut string =  format!("{}", name.name); 
-                    if self.os != Os::Windows { 
+                    let mut string = format!("{}", name.name);
+                    if self.os != Os::Windows {
                         write!(string, "@PLT").unwrap();
                     }
                     string

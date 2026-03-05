@@ -2,14 +2,14 @@ use std::env;
 use std::fmt::{Display, Formatter};
 
 pub mod x86_64 {
-    #[derive(Eq, PartialEq, Clone, Copy)]
+    #[derive(Eq, PartialEq, Clone, Copy, Debug)]
     pub enum Os {
         Linux,
         Windows,
     }
 }
 #[allow(non_camel_case_types)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Eq, PartialEq, Clone, Debug)]
 pub enum Target {
     x86_64(x86_64::Os),
 }
@@ -27,6 +27,17 @@ impl Target {
             Target::x86_64(x86_64::Os::Linux) => "x86_64-linux",
             Target::x86_64(x86_64::Os::Windows) => "x86_64-windows",
         }
+    }
+
+    pub fn exe_extension(self) -> &'static str {
+        match self {
+            Target::x86_64(x86_64::Os::Windows) => "exe",
+            Target::x86_64(x86_64::Os::Linux) => "",
+        }
+    }
+
+    pub fn x86_64_linux() -> Self {
+        Self::x86_64(x86_64::Os::Linux)
     }
 }
 

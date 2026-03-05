@@ -1,7 +1,6 @@
 use std::path::PathBuf;
-use exfo::target::target::{Target, TARGETS};
 use crate::fatal;
-
+use crate::target::target::{Target, TARGETS};
 pub struct CompilerArguments {
     pub input: PathBuf,
 
@@ -65,7 +64,7 @@ impl CompilerArguments {
                 }
                 "--target" | "-t" => {
                     let Some(target) = args.next() else {
-                        fatal!("error: no target target provided: {program_name} --help");
+                        fatal!("error: no target provided: {program_name} --help");
                     };
                     if target == "list" {
                         for i in TARGETS {

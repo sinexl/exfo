@@ -3,9 +3,7 @@ use crate::analysis::type_context::TypeCtx;
 use crate::analysis::typechecker::Typechecker;
 use crate::ast::tree_printer::DisplayStatement;
 use crate::common::errors_warnings::CompilerError;
-use crate::compiler_io::compiler_arguments::CompilerArguments;
 use dev_repl::dev_repl;
-use crate::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
@@ -17,19 +15,21 @@ use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Stdio};
 use std::ptr::addr_of_mut;
 use std::{env, fs, io};
+use exfo::compiler_io::compiler_arguments::CompilerArguments;
+use exfo::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
+use exfo::dprintln;
 
 mod analysis;
 mod ast;
 mod code_generation;
 pub mod common;
-mod compiler_io;
 mod compiling;
 pub mod lexing;
 mod parsing;
 pub mod dev_repl;
 
 fn main() -> io::Result<()> {
-    let args = std::env::args();
+    let args = env::args();
     let args = CompilerArguments::parse(args);
     if args.repl {
         dev_repl();
