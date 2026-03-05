@@ -1,4 +1,4 @@
-use crate::analysis::r#type::{BasicType, TypeId, TypeIdCell};
+use crate::analysis::r#type::{BasicType, PointerType, TypeId, TypeIdCell};
 use crate::analysis::type_context::TypeCtx;
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
@@ -504,7 +504,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             }),
         }?;
         while self.consume(&[TokenType::Star]).is_some() {
-            ty = unsafe { (*self.types).monomorph_or_get_pointer(ty) };
+            ty = unsafe { (*self.types).monomorph_or_get_pointer(PointerType { inner: ty }) };
         }
         Ok(ty)
     }

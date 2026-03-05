@@ -46,9 +46,19 @@ pub struct FunctionType<'types> {
     pub is_variadic: bool,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct PointerType {
     pub inner: TypeId,
+}
+
+impl<'types> TypeInner<'types> for PointerType {
+    fn to_type(&self) -> Type<'types> {
+        Type::Pointer(self.clone())
+    }
+}
+
+pub trait TypeInner<'types>: Hash + Eq {
+    fn to_type(&self) -> Type<'types>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]

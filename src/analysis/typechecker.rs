@@ -122,8 +122,15 @@ impl<'ast, 'types> Typechecker<'types> {
                         }
                     }
                     UnaryKind::AddressOf => {
-                        assert!(item.kind.lvalue(), "COMPILER BUG: Could not take address of rvalue. This should've been handled by Parser");
-                        unsafe { (*self.types).monomorph_or_get_pointer(item.ty.inner()) }
+                        assert!(
+                            item.kind.lvalue(),
+                            "COMPILER BUG: Could not take address of rvalue. This should've been handled by Parser"
+                        );
+                        unsafe {
+                            (*self.types).monomorph_or_get_pointer(PointerType {
+                                inner: item.ty.inner(),
+                            })
+                        }
                     }
                     UnaryKind::Not => {
                         if *item.ty.get(self.types()) != Type::Basic(BasicType::Bool) {
@@ -419,7 +426,6 @@ impl<'ast, 'types> Typechecker<'types> {
 
         Ok(())
     }
-
 }
 pub struct TypeError {
     pub loc: SourceLocation,
@@ -440,7 +446,6 @@ pub enum TypeErrorKind {
         function_name: Option<String>,
     },
     MismatchedConditionType(&'static str),
-
 
     InvalidOperands(ast::binop::BinopKind, Box<str>, Box<str>),
     InvalidUnopOperand(UnaryKind, Box<str>),
