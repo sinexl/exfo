@@ -1,4 +1,3 @@
-use crate::analysis::get_at::GetAt;
 use crate::analysis::Stack;
 use crate::ast::expression::{Expression, ExpressionKind, RefId, SymId};
 use crate::ast::statement::{ExternalFunction, VariableDeclaration};
@@ -10,7 +9,7 @@ use std::collections::HashMap;
 
 
 pub struct Resolver<'ast> {
-    locals: Stack<HashMap<&'ast str, Variable<'ast>>>,
+    scopes: Stack<HashMap<&'ast str, Variable<'ast>>>,
     current_initializer: Option<Identifier<'ast>>,
     in_function: bool,
     loop_stack: Stack<While<'ast>>,
@@ -40,7 +39,7 @@ struct While<'a> {
 
 macro_rules! current_scope {
     ($dst:expr) => {
-        $dst.locals
+        $dst.scopes
             .last_mut()
             .expect("COMPILER BUG: Scopes should contain at least global scope.")
     };
@@ -50,7 +49,7 @@ impl<'ast> Resolver<'ast> {
     pub fn new() -> Resolver<'ast> {
         Resolver {
             current_initializer: None,
-            locals: vec![HashMap::new()],
+            scopes: vec![HashMap::new()],
             in_function: false,
             warnings: vec![],
             loop_stack: vec![],
@@ -232,7 +231,7 @@ impl<'ast, 'types> Resolver<'ast> {
             }
             ExpressionKind::VariableAccess(read, id) => {
                 let depth = self.resolve_local_variable(id, read)?;
-                let var = self.locals.get_at_mut(&read.name, depth);
+                let var = self.get_at_mut(&read.name, depth);
                 var.state = VariableState::Read;
             }
             ExpressionKind::FunctionCall { callee, arguments } => {
@@ -298,11 +297,11 @@ impl<'ast, 'types> Resolver<'ast> {
     }
 
     pub fn enter_scope(&mut self) {
-        self.locals.push(HashMap::new());
+        self.scopes.push(HashMap::new());
     }
 
     pub fn exit_scope(&mut self) {
-        self.locals.pop();
+        self.scopes.pop();
     }
     fn resolve_local_variable(
         &mut self,
@@ -310,7 +309,7 @@ impl<'ast, 'types> Resolver<'ast> {
         var: &Identifier<'ast>,
         // Returns depth
     ) -> Result<usize, ResolverError> {
-        for (i, scope) in self.locals.iter().rev().enumerate() {
+        for (i, scope) in self.scopes.iter().rev().enumerate() {
             if let Some(e) = scope.get(var.name) {
                 let id = e.sym_id;
                 ref_id.set(id);
@@ -370,6 +369,16 @@ impl<'ast, 'types> Resolver<'ast> {
         let index = self.loop_count;
         self.loop_count += 1;
         index
+    }
+
+    fn get_at_mut(&mut self, name: &'ast str, depth: usize) -> &mut Variable<'ast> {
+        let scope_index = self.scopes.len() - 1 - depth;
+        let scope = &mut self.scopes[scope_index];
+        scope.get_mut(name).unwrap_or_else(|| {
+            panic!(
+                "RESOLVER BUG: No key `{name}` in the scope."
+            )
+        })
     }
 }
 

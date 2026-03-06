@@ -115,7 +115,7 @@ impl<'ast, 'types> Typechecker<'types> {
                                     message: "coercion".to_owned(),
                                     line: line!(),
                                     column: column!(),
-                                    file: &file!()
+                                    file: &file!(),
                                 }, // TODO.
                                 loc: expression.loc.clone(),
                             });
@@ -180,7 +180,6 @@ impl<'ast, 'types> Typechecker<'types> {
             ExpressionKind::Assignment { target, value } => {
                 self.typecheck_expression(target)?;
                 self.typecheck_expression(value)?;
-                dbg!(&self.types());
                 if target.ty != value.ty {
                     return Err(TypeError {
                         kind: TypeErrorKind::Todo {
@@ -198,7 +197,7 @@ impl<'ast, 'types> Typechecker<'types> {
                 assert_ne!(
                     expression.ty.inner(),
                     TypeId::Unknown,
-                    "Compiler bug: literals should always have a type."
+                    "Compiler bug: literals should always have a type set up by parser."
                 );
             }
             ExpressionKind::VariableAccess(_n, id) => {
@@ -513,8 +512,6 @@ impl CompilerError for TypeError {
                 "Expected `{}`, found `{}`, Mismatched argument type",
                 expected_type, actual_type
             ),
-            //
-            //
             TypeErrorKind::InvalidArity {
                 expected_arguments,
                 actual_arguments,
