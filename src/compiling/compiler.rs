@@ -34,15 +34,24 @@ pub struct Compiler<'ir, 'types> {
 }
 
 #[derive(Debug, Copy, Clone)]
-struct Entity {
-    ty: TypeId,
-    kind: EntityKind,
+pub struct Entity {
+    pub ty: TypeId,
+    pub kind: Option<EntityKind>,
+}
+
+impl Entity {
+    fn kind(&self) -> EntityKind {
+        match self.kind {
+            None => panic!("COMPILER BUG: attempt to access Entity::kind without setting it."),
+            Some(kind) => kind,
+        }
+    }
 }
 
 impl CompilerEntity for Entity {}
 
 #[derive(Clone, Copy, Debug)]
-enum EntityKind {
+pub enum EntityKind {
     Local(Lvalue),
     Function,
 }
@@ -69,7 +78,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
     pub fn new(
         ir_bump: &'ir Bump,
         types: *mut TypeCtx<'types>,
-        symbol_count: usize,
+        entities: SymbolTable<Entity>,
     ) -> Compiler<'ir, 'types> {
         Self {
             ir_bump,
@@ -77,7 +86,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
             ir: ir_bump.alloc(IntermediateRepresentation::new(ir_bump)),
             current_function: None,
             stack_size: StackSize::zero(),
-            entities: SymbolTable::new(symbol_count),
+            entities,
             label_count: 0,
             loops: Default::default(),
             bucket: None,
@@ -342,7 +351,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
             }
             ExpressionKind::VariableAccess(n, id) => {
                 let entity = self.entities[id.get()];
-                match entity.kind {
+                match entity.kind() {
                     EntityKind::Local(lvalue) => Arg::LValue(lvalue),
                     EntityKind::Function => {
                         Arg::RValue(Rvalue::ExternalFunction(n.clone_into(self.ir_bump)))
@@ -420,61 +429,22 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                 },
                 id,
             ) => {
-                struct Param {
-                    ty: TypeIdCell,
-                    id: SymId,
-                }
                 self.current_function = Some(BumpVec::new_in(self.ir_bump));
                 // Collect non-zero parameters
-                let parameters = parameters
-                    .iter()
-                    .filter_map(|e| {
-                        let types =
-                            unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") };
-                        if e.ty.get(types).size() != 0 {
-                            return Some(Param {
-                                ty: e.ty.clone(),
-                                id: e.id,
-                            });
-                        }
-                        None
-                    })
-                    .collect::<Vec<_>>();
-
-                let parameters_types = parameters
-                    .iter()
-                    .map(|p| p.ty.clone())
-                    .collect_in::<BumpVec<_>>(self.types().bump())
-                    .into_bump_slice();
-                self.entities.insert(
-                    *id,
-                    Entity {
-                        ty: unsafe {
-                            (*self.types).allocate(Type::Function(FunctionType {
-                                return_type: return_type.clone(),
-                                parameters: parameters_types,
-                                is_variadic: false,
-                            }))
-                        },
-                        kind: EntityKind::Function,
-                    },
-                );
 
                 let mut sizes = BumpVec::with_capacity_in(parameters.len(), self.ir_bump);
-                for (i, param) in parameters.iter().enumerate() {
-                    let param_size = param.ty.get(self.types()).size();
-                    self.entities.insert(
-                        param.id,
-                        Entity {
-                            ty: param.ty.inner(),
-                            kind: EntityKind::Local(Lvalue::Argument {
-                                index: i,
-                                size: param_size,
-                            }),
-                        },
-                    );
-                    sizes.push(param.ty.get(self.types()).size());
+                let mut index = 0;
+                for (_, param) in parameters.iter().enumerate() {
+                    let size = param.ty.get(self.types()).size();
+                    self.entities[param.id].kind =
+                        Some(EntityKind::Local(Lvalue::Argument { index, size }));
+                    if size != 0 {
+                        index += 1;
+                        sizes.push(size);
+                    }
                 }
+
+                self.entities[*id].kind = Some(EntityKind::Function);
 
                 for statement in *body {
                     self.compile_statement(statement);
@@ -496,23 +466,13 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                 ExternalFunction {
                     name: _,
                     kind: _kind,
-                    parameters,
-                    return_type,
-                    is_variadic,
+                    parameters: _,
+                    return_type: _,
+                    is_variadic: _,
                 },
                 id,
             ) => {
-                let var = Entity {
-                    ty: unsafe {
-                        (*self.types).allocate(Type::Function(FunctionType {
-                            return_type: return_type.clone(),
-                            parameters,
-                            is_variadic: *is_variadic,
-                        }))
-                    },
-                    kind: EntityKind::Function,
-                };
-                self.entities.insert(*id, var);
+                self.entities[*id].kind = Some(EntityKind::Function);
             }
             StatementKind::Block(statements) => {
                 let stack_size = self.stack_size.count;
@@ -549,11 +509,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                     }
                     self.bucket = None;
                 }
-                let var = Entity {
-                    ty: ty.inner(),
-                    kind: EntityKind::Local(stack_offset),
-                };
-                self.entities.insert(*id, var);
+                self.entities[*id].kind = Some(EntityKind::Local(stack_offset))
             }
             StatementKind::Return(val) => {
                 let ret_arg = val.as_ref().map(|arg| self.compile_expression(arg));

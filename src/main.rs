@@ -18,6 +18,7 @@ use std::{env, fs, io};
 use exfo::compiler_io::compiler_arguments::CompilerArguments;
 use exfo::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
 use exfo::dprintln;
+use crate::common::symbol_table::Transform;
 
 mod analysis;
 mod ast;
@@ -81,6 +82,8 @@ fn main() -> io::Result<()> {
         push_errors!(static_errors, r);
     }
 
+    let compiler_entities = type_checker.symbols.transform();
+
     // Error reporting
     if !static_errors.is_empty() {
         for e in static_errors {
@@ -89,8 +92,9 @@ fn main() -> io::Result<()> {
         exit(-1);
     }
 
+
     // Compilation to IR.
-    let mut compiler = Compiler::new(&ir_allocator, types_ptr, symbols_count);
+    let mut compiler = Compiler::new(&ir_allocator, types_ptr, compiler_entities);
     compiler.compile_statements(ast);
     let ir = compiler.ir;
 
@@ -133,7 +137,7 @@ fn main() -> io::Result<()> {
     }
 
     let mut gas = Command::new(&assembler);
-    if args.debug_compiler { 
+    if args.debug_compiler {
         gas.arg("--gdwarf-2");
     }
     gas.arg(asm_path)

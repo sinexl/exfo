@@ -7,7 +7,7 @@ use std::ops::{Index, IndexMut};
 pub trait CompilerEntity: Debug {}
 
 pub struct SymbolTable<T: CompilerEntity> {
-    inner: Vec<T>,
+    pub inner: Vec<T>,
 }
 
 impl<T: CompilerEntity> SymbolTable<T> {
@@ -25,6 +25,14 @@ impl<T: CompilerEntity> SymbolTable<T> {
     pub fn insert(&mut self, sym_id: SymId, value: T) {
         self[sym_id] = value
     }
+    pub fn size(&self) -> usize { self.inner.len()  }
+}
+
+pub trait Transform<B>
+where
+    B: CompilerEntity,
+{
+    fn transform(&self) -> SymbolTable<B>;
 }
 
 impl<T: CompilerEntity> Index<SymId> for SymbolTable<T> {

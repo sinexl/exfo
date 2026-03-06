@@ -4,27 +4,44 @@ use crate::analysis::r#type::{
 use crate::analysis::type_context::TypeCtx;
 use crate::ast;
 use crate::ast::binop::BinopFamily;
-use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
+use crate::ast::expression::{Expression, ExpressionKind, SymId, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::errors_warnings::CompilerError;
-use crate::common::symbol_table::{CompilerEntity, SymbolTable};
+use crate::common::symbol_table::{CompilerEntity, SymbolTable, Transform};
 use crate::common::{BumpVec, SourceLocation};
+use crate::compiling::compiler;
 use bumpalo::collections::CollectIn;
 
 pub struct Typechecker<'types> {
     current_function_type: Option<TypeId>,
     types: *mut TypeCtx<'types>,
 
-    symbols: SymbolTable<Variable>,
+    pub symbols: SymbolTable<TypedEntity>,
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Variable {
+pub struct TypedEntity {
     ty: TypeId,
 }
 
-impl CompilerEntity for Variable {}
+impl CompilerEntity for TypedEntity {}
+impl Transform<compiler::Entity> for SymbolTable<TypedEntity> {
+    fn transform(&self) -> SymbolTable<compiler::Entity> {
+        let mut result = SymbolTable::new(self.size());
+        for (i, var) in self.inner.iter().enumerate() {
+            assert_ne!(var.ty, TypeId::Unknown);
+            result.insert(
+                SymId(i),
+                compiler::Entity {
+                    ty: var.ty,
+                    kind: None,
+                },
+            )
+        }
+        result
+    }
+}
 
 impl<'types> Typechecker<'types> {
     pub fn new(types: *mut TypeCtx<'types>, symbols_count: usize) -> Self {
@@ -74,7 +91,12 @@ impl<'ast, 'types> Typechecker<'types> {
                     BinopFamily::Arithmetic => {
                         if left != right {
                             return Err(TypeError {
-                                kind: TypeErrorKind::Todo("coercion".to_owned()), // TODO.
+                                kind: TypeErrorKind::Todo {
+                                    message: "coercion".to_owned(),
+                                    line: line!(),
+                                    column: column!(),
+                                    file: &file!(),
+                                }, // TODO.
                                 loc: expression.loc.clone(),
                             });
                         }
@@ -89,7 +111,12 @@ impl<'ast, 'types> Typechecker<'types> {
                     BinopFamily::Ordering => {
                         if left != right {
                             return Err(TypeError {
-                                kind: TypeErrorKind::Todo("coercion".to_owned()), // TODO.
+                                kind: TypeErrorKind::Todo {
+                                    message: "coercion".to_owned(),
+                                    line: line!(),
+                                    column: column!(),
+                                    file: &file!()
+                                }, // TODO.
                                 loc: expression.loc.clone(),
                             });
                         }
@@ -153,9 +180,15 @@ impl<'ast, 'types> Typechecker<'types> {
             ExpressionKind::Assignment { target, value } => {
                 self.typecheck_expression(target)?;
                 self.typecheck_expression(value)?;
+                dbg!(&self.types());
                 if target.ty != value.ty {
                     return Err(TypeError {
-                        kind: TypeErrorKind::Todo("coercion".to_owned()), // TODO:
+                        kind: TypeErrorKind::Todo {
+                            message: "Coercions are not implemented yet".to_owned(),
+                            file: &file!(),
+                            line: line!(),
+                            column: column!(),
+                        }, // TODO:
                         loc: expression.loc.clone(),
                     });
                 }
@@ -295,13 +328,13 @@ impl<'ast, 'types> Typechecker<'types> {
                     is_variadic: false,
                 };
                 let ty = unsafe { (*self.types).allocate(Type::Function(fn_type)) };
-                self.symbols.insert(*id, Variable { ty });
+                self.symbols.insert(*id, TypedEntity { ty });
 
                 self.current_function_type = Some(ty);
                 for param in *parameters {
                     self.symbols.insert(
                         param.id,
-                        Variable {
+                        TypedEntity {
                             ty: param.ty.inner(),
                         },
                     );
@@ -334,10 +367,15 @@ impl<'ast, 'types> Typechecker<'types> {
                 } else if variable_type.inner() != initializer_type {
                     return Err(TypeError {
                         loc: statement.loc.clone(),
-                        kind: TypeErrorKind::Todo("Coercions are not implemented yet".to_owned()), // TODO
+                        kind: TypeErrorKind::Todo {
+                            message: "Coercions are not implemented yet".to_owned(),
+                            line: line!(),
+                            column: column!(),
+                            file: file!(),
+                        }, // TODO
                     });
                 }
-                self.symbols.insert(*id, Variable { ty: ty.inner() });
+                self.symbols.insert(*id, TypedEntity { ty: ty.inner() });
             }
             StatementKind::Block(statements) => {
                 for statement in *statements {
@@ -378,7 +416,7 @@ impl<'ast, 'types> Typechecker<'types> {
             ) => {
                 self.symbols.insert(
                     *id,
-                    Variable {
+                    TypedEntity {
                         ty: unsafe {
                             (*self.types).allocate(Type::Function(FunctionType {
                                 return_type: return_type.clone(),
@@ -433,7 +471,12 @@ pub struct TypeError {
 }
 
 pub enum TypeErrorKind {
-    Todo(String),
+    Todo {
+        message: String,
+        file: &'static str,
+        line: u32,
+        column: u32,
+    },
     MismatchedArgumentType {
         function_location: Option<SourceLocation>,
         function_name: Option<Box<str>>,
@@ -460,7 +503,7 @@ impl CompilerError for TypeError {
 
     fn message(&self) -> String {
         match &self.kind {
-            TypeErrorKind::Todo(message) => format!("Not implemented: {}", message),
+            TypeErrorKind::Todo { message, .. } => format!("Not implemented: {}", message),
             TypeErrorKind::MismatchedArgumentType {
                 function_location: _function_location,
                 function_name: _function_name,
@@ -511,7 +554,12 @@ impl CompilerError for TypeError {
 
     fn note(&self) -> Option<String> {
         match &self.kind {
-            TypeErrorKind::Todo(_) => None,
+            TypeErrorKind::Todo {
+                message,
+                file,
+                line,
+                column,
+            } => Some(format!("{file}:{line}:{column}")),
             TypeErrorKind::MismatchedArgumentType {
                 function_location,
                 function_name,

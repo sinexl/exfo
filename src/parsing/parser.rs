@@ -787,7 +787,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 #[allow(clippy::result_large_err)]
 impl<'ast, 'types> Parser<'ast, 'types> {
     pub fn count_symbols(&self) -> usize {
-        self.symbols_count + 1
+        self.symbols_count
     }
     fn next_token(&mut self) -> Result<Token, ParseError> {
         let tk = self

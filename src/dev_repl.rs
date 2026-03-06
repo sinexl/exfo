@@ -9,6 +9,9 @@ use crate::parsing::parser::Parser;
 use bumpalo::Bump;
 use std::ptr::addr_of_mut;
 use exfo::compiler_io::util::get_line;
+use crate::analysis::typechecker::Typechecker;
+use crate::common::symbol_table::Transform;
+use crate::push_errors;
 
 pub fn dev_repl() {
     let mut exit = false;
@@ -33,11 +36,16 @@ pub fn dev_repl() {
         let (statements, errors) = parser.parse_program();
         crate::push_errors!(static_errors, errors);
 
-        let entity_count = parser.count_symbols();
-
         let mut resolver = Resolver::new();
         let errors = resolver.resolve_statements(statements);
         crate::push_errors!(static_errors, errors);
+
+        let mut type_checker = Typechecker::new(types_ptr, parser.count_symbols());
+        let errors = type_checker.typecheck_statements(statements);
+        if let Err(e) = errors {
+
+            push_errors!(static_errors, e);
+        }
 
         for statement in statements {
             println!("{}", DisplayStatement(statement, &types));
@@ -47,7 +55,7 @@ pub fn dev_repl() {
         }
 
         if static_errors.is_empty() {
-            let mut comp = Compiler::new(&ir_alloc, types_ptr, entity_count);
+            let mut comp = Compiler::new(&ir_alloc, types_ptr, type_checker.symbols.transform());
             comp.compile_statements(statements);
             println!("{ir}", ir = comp.ir);
         } else {
