@@ -26,6 +26,15 @@ macro_rules! binop_enum {
     };
 }
 
+pub(crate) mod constants {
+    use crate::ast::binop::BinopKind;
+    use crate::ast::binop::BinopKind::*;
+
+    pub const ARITHMETIC_BINOPS: &'static[BinopKind] = &[Addition, Subtraction, Multiplication, Division];
+    pub const COMPARISON_BINOPS: &'static[BinopKind] = &[Equality, Inequality, GreaterThan, GreaterEq, LessThan, LessEq];
+    pub const LOGICAL_BINOPS: &'static[BinopKind] = &[Or, And];
+}
+
 binop_enum! {
     BinopKind {
         // Arithmetic
@@ -40,6 +49,7 @@ binop_enum! {
         GreaterEq      => GreaterEqual,
         LessThan       => Less,
         LessEq         => LessEqual,
+        // Logical
         And            => DoubleAmpersand,
         Or             => DoubleBar
     }

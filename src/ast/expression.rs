@@ -122,7 +122,7 @@ impl ExpressionKind<'_> {
     }
 }
 
-#[derive(Hash, Debug, Eq, PartialEq)]
+#[derive(Hash, Debug, Eq, PartialEq, Clone, Copy)]
 pub enum UnaryKind {
     Negation,
     Dereferencing,

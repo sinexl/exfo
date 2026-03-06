@@ -1,5 +1,5 @@
 use crate::analysis::resolver::Resolver;
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::ast::tree_printer::DisplayStatement;
 use crate::common::errors_warnings::CompilerError;
@@ -9,7 +9,7 @@ use crate::parsing::parser::Parser;
 use bumpalo::Bump;
 use std::ptr::addr_of_mut;
 use exfo::compiler_io::util::get_line;
-use crate::analysis::typechecker::Typechecker;
+use crate::analysis::type_system::typechecker::Typechecker;
 use crate::common::symbol_table::Transform;
 use crate::push_errors;
 
@@ -30,15 +30,15 @@ pub fn dev_repl() {
         }
 
         let (tokens, errors) = Lexer::new(&input, "<REPL>").accumulate();
-        crate::push_errors!(static_errors, errors);
+        push_errors!(static_errors, errors);
 
         let mut parser = Parser::new(tokens.into(), &ast_alloc, types_ptr);
         let (statements, errors) = parser.parse_program();
-        crate::push_errors!(static_errors, errors);
+        push_errors!(static_errors, errors);
 
         let mut resolver = Resolver::new();
         let errors = resolver.resolve_statements(statements);
-        crate::push_errors!(static_errors, errors);
+        push_errors!(static_errors, errors);
 
         let mut type_checker = Typechecker::new(types_ptr, parser.count_symbols());
         let errors = type_checker.typecheck_statements(statements);

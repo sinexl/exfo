@@ -2,8 +2,8 @@ pub mod resolver;
 #[cfg(test)]
 mod tests;
 
-#[path = "./r#type.rs"]
+#[path = "type_system/r#type.rs"]
 pub mod r#type;
-pub mod typechecker;
-pub mod type_context;
+pub mod type_system;
+
 type Stack<T> = Vec<T>;

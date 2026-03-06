@@ -1,6 +1,6 @@
 // Machinery for built-in tests for Parser.
 pub mod expression {
-    use crate::analysis::type_context::TypeCtx;
+    use crate::analysis::type_system::type_context::TypeCtx;
     use crate::ast::prefix_printer::PrefixPrint;
     use crate::lexing::lexer::Lexer;
     use crate::parsing::parser::{ParseError, Parser};
@@ -32,7 +32,7 @@ pub mod expression {
 
 pub mod statement {
     use std::fmt::Write;
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
     use crate::ast::prefix_printer::PrefixPrintStatement;
     use crate::lexing::lexer::Lexer;
     use crate::parsing::parser::Parser;

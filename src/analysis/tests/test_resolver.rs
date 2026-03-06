@@ -1,6 +1,6 @@
 use crate::analysis::resolver::{Resolver, ResolverError, ResolverErrorKind};
 use crate::analysis::tests::machinery::{error, success, PATH};
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::identifier::{Identifier, IdentifierBox};
 use crate::common::SourceLocation;

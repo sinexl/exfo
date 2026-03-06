@@ -1,5 +1,5 @@
 use crate::analysis::resolver::{Resolver, ResolverError};
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::prefix_printer::PrefixPrintStatement;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;

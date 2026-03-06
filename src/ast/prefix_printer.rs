@@ -1,5 +1,5 @@
 use crate::analysis::r#type::DisplayType;
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::expression::{Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
     DisplayFunctionParameter, ExternalFunction, FunctionDeclaration, Statement, StatementKind,

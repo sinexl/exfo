@@ -1,6 +1,5 @@
 use crate::analysis::resolver::Resolver;
-use crate::analysis::type_context::TypeCtx;
-use crate::analysis::typechecker::Typechecker;
+use analysis::type_system::type_context::TypeCtx;
 use crate::ast::tree_printer::DisplayStatement;
 use crate::common::errors_warnings::CompilerError;
 use dev_repl::dev_repl;
@@ -18,6 +17,7 @@ use std::{env, fs, io};
 use exfo::compiler_io::compiler_arguments::CompilerArguments;
 use exfo::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
 use exfo::dprintln;
+use crate::analysis::type_system::typechecker::Typechecker;
 use crate::common::symbol_table::Transform;
 
 mod analysis;

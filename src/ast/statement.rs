@@ -1,5 +1,5 @@
 use crate::analysis::r#type::{DisplayType, TypeIdCell};
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::expression::{Expression, SymId};
 use crate::common::identifier::Identifier;
 use crate::common::SourceLocation;

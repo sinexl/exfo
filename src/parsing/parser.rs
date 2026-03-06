@@ -1,5 +1,5 @@
 use crate::analysis::r#type::{BasicType, PointerType, TypeId, TypeIdCell};
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::ExpressionKind::{

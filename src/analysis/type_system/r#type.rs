@@ -1,4 +1,4 @@
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::common::Join;
 use std::cell::Cell;
 use std::fmt::{Debug, Display, Formatter};
@@ -24,6 +24,11 @@ pub enum BasicType {
     Float64,
     Bool,
     CharPtr,
+}
+impl BasicType {
+    pub fn id(self) -> TypeId {
+        TypeId::from_basic(self)
+    }
 }
 pub const BASIC_TYPES: &[BasicType] = &[
     BasicType::Void,
@@ -80,7 +85,6 @@ pub struct TypeIdCell {
     inner: Cell<TypeId>,
 }
 
-
 impl TypeId {
     pub fn get<'types>(self, arena: &'types TypeCtx<'types>) -> &'types Type<'types> {
         match self {
@@ -134,7 +138,6 @@ impl TypeIdCell {
         self.inner.set(value);
     }
 }
-
 
 pub struct DisplayType<'types>(pub TypeId, pub &'types TypeCtx<'types>);
 impl<'ast> Display for DisplayType<'ast> {

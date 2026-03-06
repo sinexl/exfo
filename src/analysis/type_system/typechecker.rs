@@ -1,9 +1,7 @@
 use crate::analysis::r#type::{
     BasicType, DisplayType, FunctionType, PointerType, Type, TypeId, TypeIdCell,
 };
-use crate::analysis::type_context::TypeCtx;
-use crate::ast;
-use crate::ast::binop::BinopFamily;
+use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{Expression, ExpressionKind, SymId, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
@@ -12,6 +10,7 @@ use crate::common::symbol_table::{CompilerEntity, SymbolTable, Transform};
 use crate::common::{BumpVec, SourceLocation};
 use crate::compiling::compiler;
 use bumpalo::collections::CollectIn;
+use crate::analysis::type_system::type_context::TypeCtx;
 
 pub struct Typechecker<'types> {
     current_function_type: Option<TypeId>,
@@ -489,7 +488,7 @@ pub enum TypeErrorKind {
     },
     MismatchedConditionType(&'static str),
 
-    InvalidOperands(ast::binop::BinopKind, Box<str>, Box<str>),
+    InvalidOperands(BinopKind, Box<str>, Box<str>),
     InvalidUnopOperand(UnaryKind, Box<str>),
     DereferencingNonPointer {
         actual_type: Box<str>,

@@ -1,4 +1,4 @@
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::tree_printer::DisplayStatement;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
