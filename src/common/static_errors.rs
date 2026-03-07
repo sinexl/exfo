@@ -11,7 +11,7 @@ use crate::parsing::parser::ParseError;
 pub struct StaticErrors<'errors> {
     lexer: BumpVec<'errors, LexerError>,
     parser: BumpVec<'errors, ParseError>,
-    resolver: BumpVec<'errors, ResolverError>,
+    resolver: BumpVec<'errors, ResolverError<'errors>>,
     typechecker: BumpVec<'errors, TypeError>,
 }
 impl<'errors> StaticErrors<'errors> {
@@ -35,7 +35,7 @@ impl<'errors> StaticErrors<'errors> {
         self.parser.extend(errors.into_iter());
     }
 
-    pub fn resolver(&mut self, errors: Vec<ResolverError>) {
+    pub fn resolver(&mut self, errors: Vec<ResolverError<'errors>>) {
         self.resolver.extend(errors.into_iter());
     }
     pub fn typechecker(&mut self, errors: Vec<TypeError>) {

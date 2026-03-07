@@ -63,7 +63,7 @@ fn main() -> io::Result<()> {
     static_errors.parser(errors);
 
     // Static analysis
-    let mut resolver = Resolver::new();
+    let mut resolver = Resolver::new(&error_allocator);
     let errors = resolver.resolve_statements(ast);
     for w in resolver.warnings {
         eprintln!("{}", w);
