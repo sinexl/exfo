@@ -40,7 +40,7 @@ pub fn dev_repl() {
         let errors = resolver.resolve_statements(statements);
         push_errors!(static_errors, errors);
 
-        let mut type_checker = Typechecker::new(types_ptr, parser.count_symbols());
+        let mut type_checker = Typechecker::new(&type_alloc, types_ptr, parser.count_symbols());
         let errors = type_checker.typecheck_statements(statements);
         if let Err(e) = errors {
 

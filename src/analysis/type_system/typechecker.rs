@@ -1,7 +1,9 @@
 use crate::analysis::r#type::{
     BasicType, DisplayType, FunctionType, PointerType, Type, TypeId, TypeIdCell,
 };
-use crate::ast::binop::{BinopFamily, BinopKind};
+use crate::analysis::type_system::type_context::TypeCtx;
+use crate::ast;
+use crate::ast::binop::BinopKind;
 use crate::ast::expression::{Expression, ExpressionKind, SymId, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
@@ -9,14 +11,16 @@ use crate::common::errors_warnings::CompilerError;
 use crate::common::symbol_table::{CompilerEntity, SymbolTable, Transform};
 use crate::common::{BumpVec, SourceLocation};
 use crate::compiling::compiler;
+use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
-use crate::analysis::type_system::type_context::TypeCtx;
 
 pub struct Typechecker<'types> {
     current_function_type: Option<TypeId>,
     types: *mut TypeCtx<'types>,
 
     pub symbols: SymbolTable<TypedEntity>,
+    binary_operators: BumpVec<'types, BinaryOperator>,
+    unary_operators: BumpVec<'types, UnaryOperator>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -43,19 +47,171 @@ impl Transform<compiler::Entity> for SymbolTable<TypedEntity> {
 }
 
 impl<'types> Typechecker<'types> {
-    pub fn new(types: *mut TypeCtx<'types>, symbols_count: usize) -> Self {
-        Self {
+    pub fn new(bump: &'types Bump, types: *mut TypeCtx<'types>, symbols_count: usize) -> Self {
+        let mut res = Self {
             current_function_type: None,
             types,
             symbols: SymbolTable::new(symbols_count),
+            binary_operators: BumpVec::new_in(bump),
+            unary_operators: BumpVec::new_in(bump),
+        };
+        Self::fill_operators(&mut res);
+        res
+    }
+    pub fn fill_operators(&mut self) {
+        use BasicType::*;
+        use BinopKind::*;
+        use UnaryKind::*;
+        use ast::binop::constants;
+
+        let int = Int64.id();
+        let bool = Bool.id();
+        let type_commutative = true;
+        for kind in constants::ARITHMETIC_BINOPS.iter().copied() {
+            self.binary_operators.push(BinaryOperator {
+                kind,
+                x: int,
+                y: int,
+                result: int,
+                type_commutative,
+            });
+        }
+        for kind in constants::COMPARISON_BINOPS.iter().copied() {
+            self.binary_operators.push(BinaryOperator {
+                kind,
+                x: int,
+                y: int,
+                result: bool,
+                type_commutative,
+            });
+        }
+
+        for kind in constants::LOGICAL_BINOPS
+            .iter()
+            .chain(&[Equality, Inequality])
+            .copied()
+        {
+            self.binary_operators.push(BinaryOperator {
+                kind,
+                x: bool,
+                y: bool,
+                result: bool,
+                type_commutative,
+            });
+        }
+
+        // Unary operations
+        self.unary_operators.push(UnaryOperator {
+            kind: Negation,
+            item: int,
+            result: int,
+        });
+        self.unary_operators.push(UnaryOperator {
+            kind: Not,
+            item: bool,
+            result: bool,
+        });
+    }
+}
+
+struct BinaryOperator {
+    // result = f(x, y)
+    kind: BinopKind,
+    x: TypeId,
+    y: TypeId,
+    result: TypeId,
+    type_commutative: bool,
+}
+
+struct UnaryOperator {
+    kind: UnaryKind,
+    item: TypeId,
+    result: TypeId,
+}
+
+impl Eq for BinaryOperator {}
+
+impl Eq for UnaryOperator {}
+impl PartialEq for UnaryOperator {
+    fn eq(&self, other: &Self) -> bool {
+        let UnaryOperator {
+            kind: k1,
+            item: i1,
+            result: r1,
+        } = self;
+        let UnaryOperator {
+            kind: k2,
+            item: i2,
+            result: r2,
+        } = other;
+        k1 == k2 && i1 == i2 && r1 == r2
+    }
+}
+impl PartialEq for BinaryOperator {
+    fn eq(&self, other: &Self) -> bool {
+        let BinaryOperator {
+            kind: k1,
+            x: x1,
+            y: y1,
+            result: r1,
+            type_commutative: commute1,
+        } = self;
+        let BinaryOperator {
+            kind: k2,
+            x: x2,
+            y: y2,
+            result: r2,
+            type_commutative: commute2,
+        } = other;
+        if k1 != k2 || r1 != r2 || commute1 != commute2 {
+            return false;
+        }
+
+        if *commute1 {
+            (x1 == x2 && y1 == y2) || (x1 == y2 && y1 == x2)
+        } else {
+            x1 == x2 && y1 == y2
         }
     }
 }
+
 
 impl<'ast, 'types> Typechecker<'types> {
     pub fn types(&self) -> &'types TypeCtx<'types> {
         unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") }
     }
+    pub fn typecheck_binop(
+        &self,
+        lhs: TypeId,
+        rhs: TypeId,
+        kind: BinopKind,
+        loc: SourceLocation,
+    ) -> Result<TypeId, TypeError> {
+        for BinaryOperator {
+            kind: _op_kind,
+            x,
+            y,
+            result,
+            type_commutative,
+        } in self.binary_operators.iter().filter(|e| e.kind == kind )
+        {
+            if *x == lhs && *y == rhs {
+                return Ok(*result);
+            }
+            if *type_commutative && *x == rhs && *y == lhs {
+                return Ok(*result);
+            }
+        }
+        Err(TypeError {
+            loc,
+            kind: TypeErrorKind::InvalidBinopOperands(
+                kind,
+                DisplayType(lhs, self.types()).to_string().into_boxed_str(),
+                DisplayType(rhs, self.types()).to_string().into_boxed_str(),
+            ),
+        })
+    }
+
     pub fn typecheck_expression(
         &mut self,
         expression: &'ast Expression<'ast>,
@@ -65,63 +221,9 @@ impl<'ast, 'types> Typechecker<'types> {
                 let kind = *kind;
                 self.typecheck_expression(left)?;
                 self.typecheck_expression(right)?;
-                let error = Err(TypeError {
-                    loc: expression.loc.clone(),
-                    kind: TypeErrorKind::InvalidOperands(
-                        kind,
-                        DisplayType(left.ty.inner(), self.types())
-                            .to_string()
-                            .into_boxed_str(),
-                        DisplayType(right.ty.inner(), self.types())
-                            .to_string()
-                            .into_boxed_str(),
-                    ),
-                });
-
-                let left_id = left.ty.clone();
-                let right_id = right.ty.clone();
-                let left = left_id.get(self.types());
-                let right = right_id.get(self.types());
-
-                if (left.is_bool() || right.is_bool()) && kind.family() != BinopFamily::Logical {
-                    return error;
-                }
-                let ty: TypeId = match kind.family() {
-                    BinopFamily::Arithmetic => {
-                        if left != right {
-                            return Err(TypeError {
-                                kind: TypeErrorKind::Todo {
-                                    message: "coercion".to_owned(),
-                                    line: line!(),
-                                    column: column!(),
-                                    file: &file!(),
-                                }, // TODO.
-                                loc: expression.loc.clone(),
-                            });
-                        }
-                        left_id.inner()
-                    }
-                    BinopFamily::Logical => {
-                        if !left.is_bool() || (left != right) {
-                            return error;
-                        }
-                        left_id.inner()
-                    }
-                    BinopFamily::Ordering => {
-                        if left != right {
-                            return Err(TypeError {
-                                kind: TypeErrorKind::Todo {
-                                    message: "coercion".to_owned(),
-                                    line: line!(),
-                                    column: column!(),
-                                    file: &file!(),
-                                }, // TODO.
-                                loc: expression.loc.clone(),
-                            });
-                        }
-                        TypeId::from_basic(BasicType::Bool)
-                    }
-                };
+                let left_id = left.ty.clone().inner();
+                let right_id = right.ty.clone().inner();
+                let ty = self.typecheck_binop(left_id, right_id, kind, expression.loc.clone())?;
                 expression.ty.set(ty);
             }
             ExpressionKind::Unary { item, operator } => {
@@ -129,6 +231,21 @@ impl<'ast, 'types> Typechecker<'types> {
                 let ty = match operator {
                     // TODO: ensure that the expression really could be negated.
                     UnaryKind::Negation => item.ty.inner(),
+                    UnaryKind::Not => {
+                        if *item.ty.get(self.types()) != Type::Basic(BasicType::Bool) {
+                            return Err(TypeError {
+                                loc: expression.loc.clone(),
+                                kind: TypeErrorKind::InvalidUnopOperand(
+                                    UnaryKind::Not,
+                                    DisplayType(item.ty.inner(), self.types())
+                                        .to_string()
+                                        .into_boxed_str(),
+                                ),
+                            });
+                        }
+
+                        TypeId::from_basic(BasicType::Bool)
+                    }
                     UnaryKind::Dereferencing => {
                         use Type::*;
 
@@ -157,21 +274,6 @@ impl<'ast, 'types> Typechecker<'types> {
                                 inner: item.ty.inner(),
                             })
                         }
-                    }
-                    UnaryKind::Not => {
-                        if *item.ty.get(self.types()) != Type::Basic(BasicType::Bool) {
-                            return Err(TypeError {
-                                loc: expression.loc.clone(),
-                                kind: TypeErrorKind::InvalidUnopOperand(
-                                    UnaryKind::Not,
-                                    DisplayType(item.ty.inner(), self.types())
-                                        .to_string()
-                                        .into_boxed_str(),
-                                ),
-                            });
-                        }
-
-                        TypeId::from_basic(BasicType::Bool)
                     }
                 };
                 expression.ty.set(ty);
@@ -488,7 +590,7 @@ pub enum TypeErrorKind {
     },
     MismatchedConditionType(&'static str),
 
-    InvalidOperands(BinopKind, Box<str>, Box<str>),
+    InvalidBinopOperands(BinopKind, Box<str>, Box<str>),
     InvalidUnopOperand(UnaryKind, Box<str>),
     DereferencingNonPointer {
         actual_type: Box<str>,
@@ -535,7 +637,7 @@ impl CompilerError for TypeError {
             TypeErrorKind::MismatchedConditionType(name) => {
                 format!("{name} condition should evaluate to `bool` type")
             }
-            TypeErrorKind::InvalidOperands(op, a, b) => format!(
+            TypeErrorKind::InvalidBinopOperands(op, a, b) => format!(
                 "Invalid operands to '{op}' operation ({a}, {b})",
                 op = op.operator()
             ),
@@ -577,7 +679,7 @@ impl CompilerError for TypeError {
             }
             TypeErrorKind::InvalidArity { .. } => None,
             TypeErrorKind::MismatchedConditionType(_) => None,
-            TypeErrorKind::InvalidOperands(_, _, _) => None,
+            TypeErrorKind::InvalidBinopOperands(_, _, _) => None,
             TypeErrorKind::DereferencingNonPointer { .. } => None,
             TypeErrorKind::InvalidUnopOperand(_, _) => None,
         }

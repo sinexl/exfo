@@ -76,7 +76,7 @@ fn main() -> io::Result<()> {
         exit(1);
     }
 
-    let mut type_checker = Typechecker::new(types_ptr, symbols_count);
+    let mut type_checker = Typechecker::new(&type_allocator, types_ptr, symbols_count);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {
         push_errors!(static_errors, r);
