@@ -1,35 +1,56 @@
 use crate::common::SourceLocation;
 use std::fmt;
-use std::fmt::{Write, Display, Formatter};
+use std::fmt::{Display, Formatter, Write};
 
 pub trait CompilerError<Context> {
     fn location(&self) -> SourceLocation;
-    fn display_message(&self, f: &mut dyn Write, ctx: Context) -> fmt::Result;
+    fn display_message(&self, f: &mut impl Write, ctx: Context) -> fmt::Result;
     // If there is no note, implementors should not write anything
-    fn display_note(&self, f: &mut dyn Write, ctx: Context) -> fmt::Result;
+    fn display_note(&self, f: &mut impl Write, ctx: Context) -> fmt::Result;
 }
 
-struct DisplayError<'a, Context>(&'a dyn CompilerError<Context>, Context);
+pub mod display {
+    use std::fmt;
+    use std::fmt::{Display, Formatter};
+    use crate::common::errors_warnings::CompilerError;
 
-impl<'a, Context> Display for DisplayError<'a, Context> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let DisplayError(error, ctx) = self;
-        let loc = error.location();
-        write!(
-            f,
-            "{loc}: error: ",
-        )?;
-        error.display_message(f, *ctx)?;
-        let mut note = String::new();
-        error.display_note(&mut note, *ctx)?;
-        if !note.is_empty() {
-            write!(f, "\n\tnote: ")?;
-            error.display_note(f, *ctx)?;
+    struct DisplayError<'a, Context, E>(&'a E, Context)
+    where
+        E: CompilerError<Context>;
+
+    pub trait DisplayErrorExtension<Context, E>: CompilerError<Context>
+    where
+        E: CompilerError<Context>
+    {
+        fn display(&self, ctx: Context) -> DisplayError<Context, E>;
+    }
+
+    impl<Context, E> DisplayErrorExtension<Context, E> for E
+    where E: CompilerError<Context>{
+        fn display(&self, ctx: Context) -> DisplayError<Context, E> {
+            DisplayError(self, ctx)
         }
-        Ok(())
+    }
+
+    impl<'a, Context, E> Display for DisplayError<'a, Context, E>
+    where
+        E: CompilerError<Context>,
+    {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            let DisplayError(error, ctx) = self;
+            let loc = error.location();
+            write!(f, "{loc}: error: ",)?;
+            error.display_message(f, *ctx)?;
+            let mut note = String::new();
+            error.display_note(&mut note, *ctx)?;
+            if !note.is_empty() {
+                write!(f, "\n\tnote: ")?;
+                error.display_note(f, *ctx)?;
+            }
+            Ok(())
+        }
     }
 }
-
 
 pub trait CompilerWarning {
     fn location(&self) -> SourceLocation;

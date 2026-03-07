@@ -96,7 +96,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 
 #[allow(clippy::result_large_err)]
 impl<'ast, 'types> Parser<'ast, 'types> {
-    pub fn parse_program(&mut self) -> (&'ast [&'ast Statement<'ast, 'types>], Box<[ParseError]>) {
+    pub fn parse_program(&mut self) -> (&'ast [&'ast Statement<'ast, 'types>], Vec<ParseError>) {
         let mut statements = BumpVec::new_in(self.ast_bump);
         let mut errors = Vec::new();
         if self.tokens.len() == 1 {
@@ -106,7 +106,6 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                     loc: self.tokens.last().unwrap().loc.clone(),
                     kind: ParseErrorKind::EmptyInput,
                 }]
-                .into_boxed_slice(),
             );
         }
         while !self.at_eof() {
@@ -116,7 +115,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             }
         }
 
-        (statements.into_bump_slice(), errors.into_boxed_slice())
+        (statements.into_bump_slice(), errors)
     }
 
     pub fn parse_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {

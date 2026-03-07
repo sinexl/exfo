@@ -1,6 +1,7 @@
 pub mod symbol_table;
 pub mod errors_warnings;
 pub mod identifier;
+pub mod static_errors;
 
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
@@ -65,15 +66,6 @@ macro_rules! hashmap {
         let mut map = ::std::collections::HashMap::new();
         $( map.insert($key, $val); )*
         map
-    }};
-}
-#[macro_export]
-macro_rules! push_errors {
-    ($compilation_errors:expr, $errors:expr) => {{
-        $compilation_errors.reserve($errors.len());
-        for e in $errors {
-            $compilation_errors.push(Box::new(e));
-        }
     }};
 }
 #[macro_export]

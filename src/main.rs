@@ -1,33 +1,35 @@
 use crate::analysis::resolver::Resolver;
-use analysis::type_system::type_context::TypeCtx;
+use crate::analysis::type_system::typechecker::Typechecker;
 use crate::ast::tree_printer::DisplayStatement;
-use crate::common::errors_warnings::CompilerError;
-use dev_repl::dev_repl;
+use crate::common::static_errors::StaticErrors;
+use crate::common::symbol_table::Transform;
 use crate::compiling::compiler::Compiler;
 use crate::lexing::lexer::Lexer;
 use crate::parsing::parser::Parser;
+use analysis::type_system::type_context::TypeCtx;
 use bumpalo::Bump;
 use code_generation::x86_64::codegen::Codegen;
-use exfo::target::target::Target;
+use dev_repl::dev_repl;
+use exfo::compiler_io::compiler_arguments::CompilerArguments;
+use exfo::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
+use exfo::dprintln;
 use exfo::target::target::x86_64::Os;
+use exfo::target::target::Target;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Stdio};
 use std::ptr::addr_of_mut;
 use std::{env, fs, io};
-use exfo::compiler_io::compiler_arguments::CompilerArguments;
-use exfo::compiler_io::util::{create_dir_if_not_exists, run_command, DisplayCommand};
-use exfo::dprintln;
-use crate::analysis::type_system::typechecker::Typechecker;
-use crate::common::symbol_table::Transform;
 
 mod analysis;
 mod ast;
 mod code_generation;
 pub mod common;
 mod compiling;
+pub mod dev_repl;
 pub mod lexing;
 mod parsing;
-pub mod dev_repl;
+
+
 
 fn main() -> io::Result<()> {
     let args = env::args();
@@ -41,20 +43,24 @@ fn main() -> io::Result<()> {
     let output = args.output_file();
     let file = fs::read_to_string(input)?;
 
-    // Compilation process.
-    let mut static_errors: Vec<Box<dyn CompilerError>> = vec![];
     let ast_allocator = Bump::new();
     let type_allocator = Bump::new();
+    let ir_allocator = Bump::new();
+    let error_allocator = Bump::new();
+
     let mut types = TypeCtx::new(&type_allocator);
     let types_ptr = addr_of_mut!(types);
-    let ir_allocator = Bump::new();
+
+    let mut static_errors = StaticErrors::new(&error_allocator);
+
+    // Compilation process.
     // Lexing.
     let (tokens, errors) = Lexer::new(&file, input.to_str().unwrap()).accumulate();
-    push_errors!(static_errors, errors);
+    static_errors.lexer(errors);
     // Parsing
     let mut parser = Parser::new(tokens.into(), &ast_allocator, types_ptr);
     let (ast, errors) = parser.parse_program();
-    push_errors!(static_errors, errors);
+    static_errors.parser(errors);
 
     // Static analysis
     let mut resolver = Resolver::new();
@@ -62,36 +68,27 @@ fn main() -> io::Result<()> {
     for w in resolver.warnings {
         eprintln!("{}", w);
     }
-    push_errors!(static_errors, errors);
+    static_errors.resolver(errors);
     let symbols_count = parser.count_symbols();
-
-    // Error reporting
-    // TODO: Currently, compiler exits if are any errors at resolution pass, which is not correct.
-    //   Ideally, Resolver and Typechecker should produce dummy-results on error, as much as possible
-    //   errors could be reported.
-    if !static_errors.is_empty() {
-        for e in static_errors {
-            eprintln!("{e}");
-        }
-        exit(1);
-    }
 
     let mut type_checker = Typechecker::new(&type_allocator, types_ptr, symbols_count);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {
-        push_errors!(static_errors, r);
+        static_errors.typechecker(r);
     }
 
     let compiler_entities = type_checker.symbols.transform();
 
+    // TODO: Currently, compiler exits if are any errors at resolution pass, which is not correct.
+    //   Ideally, Resolver and Typechecker should produce dummy-results on error, as much as possible
+    //   errors could be reported.
     // Error reporting
-    if !static_errors.is_empty() {
-        for e in static_errors {
-            eprintln!("{e}");
-        }
+    if static_errors.len() != 0 {
+        let mut e = String::new();
+        static_errors.print(&mut e, &types).map_err(|_| io::Error::from(io::ErrorKind::Other))?;
+        eprintln!("{}", e);
         exit(-1);
     }
-
 
     // Compilation to IR.
     let mut compiler = Compiler::new(&ir_allocator, types_ptr, compiler_entities);
@@ -150,8 +147,11 @@ fn main() -> io::Result<()> {
     run_command(
         &mut gas,
         "Assembler error occurred. Exiting.",
-        &format!("Failed to run `{}` command. \n\t\
-                     Make sure that you have installed GNU Assembler (MinGW in case of Windows) and it's available on your system in PATH", assembler.display()),
+        &format!(
+            "Failed to run `{}` command. \n\t\
+                     Make sure that you have installed GNU Assembler (MinGW in case of Windows) and it's available on your system in PATH",
+            assembler.display()
+        ),
     );
 
     println!();
@@ -171,7 +171,10 @@ fn main() -> io::Result<()> {
     run_command(
         &mut cc,
         "Failed to run linker. Exiting.",
-        &format!("Failed to run linker command. \n\tMake sure that `{}` is available in $PATH", linker.display()),
+        &format!(
+            "Failed to run linker command. \n\tMake sure that `{}` is available in $PATH",
+            linker.display()
+        ),
     );
 
     Ok(())
