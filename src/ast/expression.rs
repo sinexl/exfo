@@ -110,14 +110,14 @@ impl ExpressionKind<'_> {
             ExpressionKind::FunctionCall { .. } => false,
         }
     }
-    pub fn humanize(&self) -> String {
+    pub fn humanize(&self) -> &'static str {
         match self {
-            ExpressionKind::Binop { .. } => "binary operation".to_string(),
-            ExpressionKind::Unary { .. } => "unary operation".to_string(),
-            ExpressionKind::Assignment { .. } => "assignment".to_string(),
-            ExpressionKind::Literal(_) => "literal".to_string(),
-            ExpressionKind::VariableAccess(_, ..) => "variable access".to_string(),
-            ExpressionKind::FunctionCall { .. } => "function call".to_string(),
+            ExpressionKind::Binop { .. } => "binary operation",
+            ExpressionKind::Unary { .. } => "unary operation",
+            ExpressionKind::Assignment { .. } => "assignment",
+            ExpressionKind::Literal(_) => "literal",
+            ExpressionKind::VariableAccess(_, ..) => "variable access",
+            ExpressionKind::FunctionCall { .. } => "function call",
         }
     }
 }

@@ -58,7 +58,7 @@ fn main() -> io::Result<()> {
     let (tokens, errors) = Lexer::new(&file, input.to_str().unwrap()).accumulate();
     static_errors.lexer(errors);
     // Parsing
-    let mut parser = Parser::new(tokens.into(), &ast_allocator, types_ptr);
+    let mut parser = Parser::new(tokens.into(), &ast_allocator, &error_allocator, types_ptr);
     let (ast, errors) = parser.parse_program();
     static_errors.parser(errors);
 
