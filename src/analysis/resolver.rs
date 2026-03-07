@@ -5,9 +5,9 @@ use crate::ast::statement::{Statement, StatementKind};
 use crate::common::errors_warnings::{CompilerError, CompilerWarning};
 use crate::common::identifier::{Identifier, IdentifierBox};
 use crate::common::{IntoBox, SourceLocation};
+use bumpalo::Bump;
 use std::collections::HashMap;
 use std::fmt::Write;
-use bumpalo::Bump;
 
 pub struct Resolver<'ast, 'errors> {
     scopes: Stack<HashMap<&'ast str, Variable<'ast>>>,

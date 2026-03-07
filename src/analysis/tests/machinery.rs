@@ -15,13 +15,14 @@ pub fn success(src: &str) -> String {
     assert!(errors.is_empty());
     let ast_alloc = Bump::new();
     let type_alloc = Bump::new();
+    let err_alloc = Bump::new();
     let mut types = TypeCtx::new(&type_alloc);
 
-    let mut parser = Parser::new(tokens.into(), &ast_alloc, addr_of_mut!(types));
+    let mut parser = Parser::new(tokens.into(), &ast_alloc, &err_alloc, addr_of_mut!(types));
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
-    let mut resolver = Resolver::new();
+    let mut resolver = Resolver::new(&err_alloc);
     let errors = resolver.resolve_statements(ast);
     assert_eq!(errors.len(), 0);
     let mut result = String::new();
@@ -31,13 +32,13 @@ pub fn success(src: &str) -> String {
     result.trim().to_string()
 }
 
-pub fn error(src: &str) -> ResolverError {
-    let errors = errors(src);
+pub fn error<'errors>(e: &'errors Bump, src: &str) -> ResolverError<'errors> {
+    let errors = errors(e, src);
     assert_eq!(errors.len(), 1);
     errors[0].clone()
 }
 
-pub fn errors(src: &str) -> Vec<ResolverError> {
+pub fn errors<'errors>(e: &'errors Bump, src: &str) -> Vec<ResolverError<'errors>> {
     let (tokens, errors) = Lexer::new(src, PATH).accumulate();
     assert!(errors.is_empty());
 
@@ -45,10 +46,10 @@ pub fn errors(src: &str) -> Vec<ResolverError> {
     let type_alloc = Bump::new();
     let mut type_ctx = TypeCtx::new(&type_alloc);
 
-    let mut parser = Parser::new(tokens.into(), &ast_alloc, addr_of_mut!(type_ctx));
+    let mut parser = Parser::new(tokens.into(), &ast_alloc, e, addr_of_mut!(type_ctx));
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
-    let mut resolver = Resolver::new();
+    let mut resolver = Resolver::new(e);
     resolver.resolve_statements(ast).to_vec()
 }

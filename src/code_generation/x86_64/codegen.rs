@@ -6,9 +6,9 @@ use crate::compiling::ir::intermediate_representation::{Function, IntermediateRe
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
 use crate::{asm, assert_same, comment};
 use exfo::target::target::x86_64::Os;
+use exfo::target::target::Target;
 use std::cmp;
 use std::fmt::{Display, Formatter, Write};
-use exfo::target::target::Target;
 
 mod constants {
     use crate::code_generation::x86_64::register::Register;

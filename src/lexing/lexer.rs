@@ -1,4 +1,3 @@
-use std::fmt::Write;
 use crate::common::errors_warnings::CompilerError;
 use crate::common::SourceLocation;
 use crate::lexing::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
@@ -6,7 +5,8 @@ use crate::lexing::lexer::LexerErrorKind::{
     UnexpectedCharacter, UnknownEscapeSequence, UnterminatedComment, UnterminatedEscapeSequence,
     UnterminatedString,
 };
-use crate::lexing::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
+pub(crate) use crate::lexing::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
+use std::fmt::Write;
 use std::fs;
 use std::rc::Rc;
 use std::str::FromStr;

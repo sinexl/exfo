@@ -1,18 +1,18 @@
-use crate::analysis::r#type::{FunctionType, Type, TypeId, TypeIdCell};
+use crate::analysis::r#type::{FunctionType, Type, TypeId};
 use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::binop::{BinopFamily, BinopKind};
-use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, SymId, UnaryKind};
+use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
     ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
 };
-use crate::common::BumpVec;
 use crate::common::symbol_table::{CompilerEntity, SymbolTable};
+use crate::common::BumpVec;
 use crate::compiling::ir::binop;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
-use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
+use bumpalo::Bump;
 use std::collections::HashMap;
 
 pub struct Compiler<'ir, 'types> {

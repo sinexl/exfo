@@ -1,12 +1,12 @@
-use std::fmt::Write;
-use bumpalo::Bump;
 use crate::analysis::resolver::ResolverError;
 use crate::analysis::type_system::type_context::TypeCtx;
 use crate::analysis::type_system::typechecker::TypeError;
-use crate::common::BumpVec;
 use crate::common::errors_warnings::display::DisplayErrorExtension;
+use crate::common::BumpVec;
 use crate::lexing::lexer::LexerError;
 use crate::parsing::parser::ParseError;
+use bumpalo::Bump;
+use std::fmt::Write;
 
 pub struct StaticErrors<'errors> {
     lexer: BumpVec<'errors, LexerError>,

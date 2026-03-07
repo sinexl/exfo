@@ -11,8 +11,8 @@ use crate::common::errors_warnings::CompilerError;
 use crate::common::symbol_table::{CompilerEntity, SymbolTable, Transform};
 use crate::common::{BumpVec, SourceLocation};
 use crate::compiling::compiler;
-use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
+use bumpalo::Bump;
 use std::fmt::Write;
 
 pub struct Typechecker<'types> {
@@ -603,7 +603,7 @@ impl<'types> CompilerError<&TypeCtx<'types>> for TypeError {
         self.loc.clone()
     }
 
-    fn display_message(&self, f: &mut dyn Write, ctx: &TypeCtx<'types>) -> std::fmt::Result {
+    fn display_message(&self, f: &mut impl Write, ctx: &TypeCtx<'types>) -> std::fmt::Result {
         match &self.kind {
             TypeErrorKind::Todo { message, .. } => write!(f, "Not implemented: {}", message)?,
             TypeErrorKind::MismatchedArgumentType {
@@ -663,7 +663,7 @@ impl<'types> CompilerError<&TypeCtx<'types>> for TypeError {
         Ok(())
     }
 
-    fn display_note(&self, f: &mut dyn Write, ctx: *const TypeCtx) -> std::fmt::Result {
+    fn display_note(&self, f: &mut impl Write, ctx: &TypeCtx<'types>) -> std::fmt::Result {
         match &self.kind {
             TypeErrorKind::Todo {
                 message,

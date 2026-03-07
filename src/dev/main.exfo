@@ -1,0 +1,15 @@
+extern "C" func printf(char_ptr, ...): void;
+func add(a: int, b: int): int {
+    return a + b;
+}
+func mult(a: int, b: int): int {
+    return a * b;
+}
+
+
+func main(): void {
+    fn := add;
+    printf("%d\n", fn(10, 12));
+    fn = mult;
+    printf("%d\n", fn(10, 12));
+}
