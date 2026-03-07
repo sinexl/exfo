@@ -15,10 +15,11 @@ use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use std::fmt::Write;
 
-pub struct Typechecker<'types> {
+pub struct Typechecker<'types, 'errors> {
     current_function_type: Option<TypeId>,
     types: *mut TypeCtx<'types>,
-    bump: &'types Bump,
+    types_bump: &'types Bump,
+    errors_bump: &'errors Bump,
 
     pub symbols: SymbolTable<TypedEntity>,
     binary_operators: BumpVec<'types, BinaryOperator>,
@@ -48,15 +49,16 @@ impl Transform<compiler::Entity> for SymbolTable<TypedEntity> {
     }
 }
 
-impl<'types> Typechecker<'types> {
-    pub fn new(bump: &'types Bump, types: *mut TypeCtx<'types>, symbols_count: usize) -> Self {
+impl<'types, 'errors> Typechecker<'types, 'errors> {
+    pub fn new(types_bump: &'types Bump, errors_bump: &'errors Bump, types: *mut TypeCtx<'types>, symbols_count: usize) -> Self {
         let mut res = Self {
             current_function_type: None,
             types,
-            bump,
+            types_bump,
+            errors_bump,
             symbols: SymbolTable::new(symbols_count),
-            binary_operators: BumpVec::new_in(bump),
-            unary_operators: BumpVec::new_in(bump),
+            binary_operators: BumpVec::new_in(types_bump),
+            unary_operators: BumpVec::new_in(types_bump),
         };
         Self::fill_operators(&mut res);
         res
@@ -179,7 +181,7 @@ impl PartialEq for BinaryOperator {
     }
 }
 
-impl<'ast, 'types> Typechecker<'types> {
+impl<'errors, 'ast, 'types> Typechecker<'types, 'errors> {
     pub fn types(&self) -> &'types TypeCtx<'types> {
         unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") }
     }
@@ -375,8 +377,8 @@ impl<'ast, 'types> Typechecker<'types> {
     pub fn typecheck_statements(
         &mut self,
         statements: &'ast [&'ast Statement<'ast, 'types>],
-    ) -> Result<(), Vec<TypeError>> {
-        let mut errors = Vec::new();
+    ) -> Result<(), BumpVec<'errors, TypeError>> {
+        let mut errors = BumpVec::new_in(self.errors_bump);
         for statement in statements {
             if let Err(e) = self.typecheck_statement(statement) {
                 errors.push(e);

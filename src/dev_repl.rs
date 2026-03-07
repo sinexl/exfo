@@ -18,8 +18,8 @@ pub fn dev_repl() {
         let ir_alloc = Bump::new();
         let ast_alloc = Bump::new();
         let type_alloc = Bump::new();
-        let errors_bump = Bump::new();
-        let mut static_errors = StaticErrors::new(&errors_bump);
+        let errors_alloc = Bump::new();
+        let mut static_errors = StaticErrors::new(&errors_alloc);
         let input = get_line("> ");
 
         let mut types = TypeCtx::new(&type_alloc);
@@ -32,15 +32,15 @@ pub fn dev_repl() {
         let (tokens, errors) = Lexer::new(&input, "<REPL>").accumulate();
         static_errors.lexer(errors);
 
-        let mut parser = Parser::new(tokens.into(), &ast_alloc, &errors_bump, types_ptr);
+        let mut parser = Parser::new(tokens.into(), &ast_alloc, &errors_alloc, types_ptr);
         let (statements, errors) = parser.parse_program();
         static_errors.parser(errors);
 
-        let mut resolver = Resolver::new(&errors_bump);
+        let mut resolver = Resolver::new(&errors_alloc);
         let errors = resolver.resolve_statements(statements);
         static_errors.resolver(errors);
 
-        let mut type_checker = Typechecker::new(&type_alloc, types_ptr, parser.count_symbols());
+        let mut type_checker = Typechecker::new(&type_alloc, &errors_alloc, types_ptr, parser.count_symbols());
         let errors = type_checker.typecheck_statements(statements);
         if let Err(e) = errors {
 

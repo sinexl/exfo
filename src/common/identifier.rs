@@ -5,7 +5,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub(crate) struct IdentifierInner<T> {
+pub struct IdentifierInner<T> {
     pub name: T,
     pub location: SourceLocation,
 }
@@ -24,7 +24,7 @@ where
         write!(f, "{}", self.name)
     }
 }
-pub(crate) type IdentifierBox = IdentifierInner<Box<str>>;
+pub type IdentifierBox = IdentifierInner<Box<str>>;
 
 impl IdentifierBox {
     pub fn from_borrowed(id: &Identifier<'_>) -> Self {

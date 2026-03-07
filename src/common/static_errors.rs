@@ -1,8 +1,8 @@
 use crate::analysis::resolver::ResolverError;
 use crate::analysis::type_system::type_context::TypeCtx;
 use crate::analysis::type_system::typechecker::TypeError;
-use crate::common::errors_warnings::display::DisplayErrorExtension;
 use crate::common::BumpVec;
+use crate::common::errors_warnings::display::DisplayErrorExtension;
 use crate::lexing::lexer::LexerError;
 use crate::parsing::parser::ParseError;
 use bumpalo::Bump;
@@ -24,22 +24,22 @@ impl<'errors> StaticErrors<'errors> {
         }
     }
 
-    pub fn len(&self)  -> usize {
+    pub fn len(&self) -> usize {
         self.lexer.len() + self.parser.len() + self.resolver.len() + self.typechecker.len()
     }
 
     pub fn lexer(&mut self, errors: Vec<LexerError>) {
-        self.lexer.extend(errors.into_iter());
+        self.lexer.extend(errors);
     }
-    pub fn parser(&mut self, errors: Vec<ParseError<'errors>>) {
-        self.parser.extend(errors.into_iter());
+    pub fn parser(&mut self, errors: BumpVec<'errors, ParseError<'errors>>) {
+        self.parser.extend(errors);
     }
 
     pub fn resolver(&mut self, errors: Vec<ResolverError<'errors>>) {
-        self.resolver.extend(errors.into_iter());
+        self.resolver.extend(errors);
     }
-    pub fn typechecker(&mut self, errors: Vec<TypeError>) {
-        self.typechecker.extend(errors.into_iter());
+    pub fn typechecker(&mut self, errors: BumpVec<'errors, TypeError>) {
+        self.typechecker.extend(errors);
     }
 
     pub fn print<'types>(&self, f: &mut impl Write, types: &TypeCtx<'types>) -> std::fmt::Result {
@@ -59,5 +59,4 @@ impl<'errors> StaticErrors<'errors> {
         }
         Ok(())
     }
-
 }

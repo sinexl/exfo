@@ -235,7 +235,7 @@ impl<'ast, 'types, 'errors> Resolver<'ast, 'errors> {
             }
             ExpressionKind::VariableAccess(read, id) => {
                 let depth = self.resolve_local_variable(id, read)?;
-                let var = self.get_at_mut(&read.name, depth);
+                let var = self.get_at_mut(read.name, depth);
                 var.state = VariableState::Read;
             }
             ExpressionKind::FunctionCall { callee, arguments } => {

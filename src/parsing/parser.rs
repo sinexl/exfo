@@ -103,18 +103,19 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
         &mut self,
     ) -> (
         &'ast [&'ast Statement<'ast, 'types>],
-        Vec<ParseError<'errors>>,
+        BumpVec<'errors, ParseError<'errors>>,
     ) {
         let mut statements = BumpVec::new_in(self.ast_bump);
-        let mut errors = Vec::new();
+        let mut errors = BumpVec::new_in(self.errors_bump);
         if self.tokens.len() == 1 {
-            return (
-                &[],
-                vec![ParseError {
+            return (&[], {
+                let mut x = BumpVec::new_in(self.errors_bump);
+                x.push(ParseError {
                     loc: self.tokens.last().unwrap().loc.clone(),
                     kind: ParseErrorKind::EmptyInput,
-                }],
-            );
+                });
+                x
+            });
         }
         while !self.at_eof() {
             match self.parse_declaration() {
@@ -707,7 +708,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
                 let expr = self.parse_expression()?;
                 if self.consume(&[CloseParen]).is_none() {
                     return Err(ParseError {
-                        loc: loc,
+                        loc,
                         kind: UnbalancedParens,
                     });
                 }
@@ -947,7 +948,7 @@ impl<'errors> CompilerError<()> for ParseError<'errors> {
         Ok(())
     }
 
-    fn display_note(&self, f: &mut impl Write, ctx: ()) -> std::fmt::Result {
+    fn display_note(&self, f: &mut impl Write, _ctx: ()) -> std::fmt::Result {
         use ParseErrorKind::*;
         match &self.kind {
             AtEof => Ok(()),

@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Token {
+pub struct Token {
     pub kind: TokenType,
 
     pub integer: i64,
@@ -79,7 +79,7 @@ macro_rules! token_type {
         { $($variant:ident => $str:expr),* $(,)?}
     ) => {
         #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-        pub(crate) enum $name {
+        pub enum $name {
             $($variant),*
         }
 

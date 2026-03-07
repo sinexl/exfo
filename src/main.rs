@@ -71,7 +71,7 @@ fn main() -> io::Result<()> {
     static_errors.resolver(errors);
     let symbols_count = parser.count_symbols();
 
-    let mut type_checker = Typechecker::new(&type_allocator, types_ptr, symbols_count);
+    let mut type_checker = Typechecker::new(&type_allocator, &error_allocator, types_ptr, symbols_count);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {
         static_errors.typechecker(r);
@@ -126,7 +126,7 @@ fn main() -> io::Result<()> {
     let object_path = build_dir.join(file_name).with_extension("o");
 
     if let Some(parent) = output.parent()
-        && parent.file_name().is_some_and(|e| e != "") // it's weird because if there is no parent directory, it returns "" which is considered non-existing
+        && parent.file_name().is_some_and(|e| !e.is_empty()) // it's weird because if there is no parent directory, it returns "" which is considered non-existing
         && !parent.exists()
     {
         println!("Creating directory {parent}", parent = parent.display());

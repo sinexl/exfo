@@ -96,13 +96,13 @@ pub fn invalid_assignment() {
     assert_eq!(
         fail(e, "1 = 2"),
         ParseError {
-            kind: ParseErrorKind::InvalidAssignment(msg.clone()),
+            kind: ParseErrorKind::InvalidAssignment(msg),
             loc: SourceLocation::new(Rc::from(PATH), 1, 1),
         }
     );
     assert_eq!(
         fail(e, "(1 + a = 5) = 3").kind,
-        ParseErrorKind::InvalidAssignment("binary operation".into())
+        ParseErrorKind::InvalidAssignment("binary operation")
     );
 }
 
@@ -114,13 +114,13 @@ pub fn invalid_address_of() {
     assert_eq!(
         fail(e, "a = &2"),
         ParseError {
-            kind: ParseErrorKind::InvalidAddressOf(msg.clone()),
+            kind: ParseErrorKind::InvalidAddressOf(msg),
             loc: SourceLocation::new(Rc::from(PATH), 1, 5),
         }
     );
     assert_eq!(
         fail(e, "a = &(b + 1)").kind,
-        ParseErrorKind::InvalidAddressOf("binary operation".into())
+        ParseErrorKind::InvalidAddressOf("binary operation")
     );
 }
 

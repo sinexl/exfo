@@ -30,9 +30,9 @@ pub(crate) mod constants {
     use crate::ast::binop::BinopKind;
     use crate::ast::binop::BinopKind::*;
 
-    pub const ARITHMETIC_BINOPS: &'static[BinopKind] = &[Addition, Subtraction, Multiplication, Division];
-    pub const COMPARISON_BINOPS: &'static[BinopKind] = &[Equality, Inequality, GreaterThan, GreaterEq, LessThan, LessEq];
-    pub const LOGICAL_BINOPS: &'static[BinopKind] = &[Or, And];
+    pub const ARITHMETIC_BINOPS: &[BinopKind] = &[Addition, Subtraction, Multiplication, Division];
+    pub const COMPARISON_BINOPS: &[BinopKind] = &[Equality, Inequality, GreaterThan, GreaterEq, LessThan, LessEq];
+    pub const LOGICAL_BINOPS: &[BinopKind] = &[Or, And];
 }
 
 binop_enum! {
