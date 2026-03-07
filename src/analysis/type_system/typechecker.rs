@@ -103,12 +103,12 @@ impl<'types> Typechecker<'types> {
         // Unary operations
         self.unary_operators.push(UnaryOperator {
             kind: Negation,
-            item: int,
+            x: int,
             result: int,
         });
         self.unary_operators.push(UnaryOperator {
             kind: Not,
-            item: bool,
+            x: bool,
             result: bool,
         });
     }
@@ -124,8 +124,9 @@ struct BinaryOperator {
 }
 
 struct UnaryOperator {
+    // result = f(x)
     kind: UnaryKind,
-    item: TypeId,
+    x: TypeId,
     result: TypeId,
 }
 
@@ -136,12 +137,12 @@ impl PartialEq for UnaryOperator {
     fn eq(&self, other: &Self) -> bool {
         let UnaryOperator {
             kind: k1,
-            item: i1,
+            x: i1,
             result: r1,
         } = self;
         let UnaryOperator {
             kind: k2,
-            item: i2,
+            x: i2,
             result: r2,
         } = other;
         k1 == k2 && i1 == i2 && r1 == r2
@@ -175,7 +176,6 @@ impl PartialEq for BinaryOperator {
     }
 }
 
-
 impl<'ast, 'types> Typechecker<'types> {
     pub fn types(&self) -> &'types TypeCtx<'types> {
         unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") }
@@ -188,16 +188,18 @@ impl<'ast, 'types> Typechecker<'types> {
         loc: SourceLocation,
     ) -> Result<TypeId, TypeError> {
         for BinaryOperator {
-            kind: _op_kind,
+            kind: _,
             x,
             y,
             result,
             type_commutative,
-        } in self.binary_operators.iter().filter(|e| e.kind == kind )
+        } in self.binary_operators.iter().filter(|e| e.kind == kind)
         {
+            // Exact match
             if *x == lhs && *y == rhs {
                 return Ok(*result);
             }
+            // type commutative match
             if *type_commutative && *x == rhs && *y == lhs {
                 return Ok(*result);
             }
@@ -208,6 +210,28 @@ impl<'ast, 'types> Typechecker<'types> {
                 kind,
                 DisplayType(lhs, self.types()).to_string().into_boxed_str(),
                 DisplayType(rhs, self.types()).to_string().into_boxed_str(),
+            ),
+        })
+    }
+
+    pub fn typecheck_unary_basic(
+        &self,
+        item: TypeId,
+        kind: UnaryKind,
+        loc: SourceLocation,
+    ) -> Result<TypeId, TypeError> {
+        for UnaryOperator { kind: _, x, result } in
+            self.unary_operators.iter().filter(|e| e.kind == kind)
+        {
+            if *x == item {
+                return Ok(*result);
+            }
+        }
+        Err(TypeError {
+            loc,
+            kind: TypeErrorKind::InvalidUnopOperand(
+                kind,
+                DisplayType(item, self.types()).to_string().into_boxed_str(),
             ),
         })
     }
@@ -229,23 +253,12 @@ impl<'ast, 'types> Typechecker<'types> {
             ExpressionKind::Unary { item, operator } => {
                 self.typecheck_expression(item)?;
                 let ty = match operator {
-                    // TODO: ensure that the expression really could be negated.
-                    UnaryKind::Negation => item.ty.inner(),
-                    UnaryKind::Not => {
-                        if *item.ty.get(self.types()) != Type::Basic(BasicType::Bool) {
-                            return Err(TypeError {
-                                loc: expression.loc.clone(),
-                                kind: TypeErrorKind::InvalidUnopOperand(
-                                    UnaryKind::Not,
-                                    DisplayType(item.ty.inner(), self.types())
-                                        .to_string()
-                                        .into_boxed_str(),
-                                ),
-                            });
-                        }
+                    UnaryKind::Negation | UnaryKind::Not => self.typecheck_unary_basic(
+                        item.ty.inner(),
+                        *operator,
+                        expression.loc.clone(),
+                    )?,
 
-                        TypeId::from_basic(BasicType::Bool)
-                    }
                     UnaryKind::Dereferencing => {
                         use Type::*;
 
