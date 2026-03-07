@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use crate::common::errors_warnings::CompilerError;
 use crate::common::SourceLocation;
 use crate::lexing::extensions::{CharExtensions, OptionCharExtensions, StringExtensions};
@@ -6,10 +7,9 @@ use crate::lexing::lexer::LexerErrorKind::{
     UnterminatedString,
 };
 use crate::lexing::token::{is_punct, Token, TokenType, SINGLE_PUNCTS};
-use std::fmt::{Display, Formatter};
+use std::fs;
 use std::rc::Rc;
 use std::str::FromStr;
-use std::fs;
 
 pub(crate) struct Lexer {
     filepath: Rc<str>,
@@ -214,7 +214,7 @@ impl Lexer {
                     return Err(LexerError {
                         location,
                         kind: UnterminatedString,
-                    })
+                    });
                 }
                 ch => {
                     return Err(LexerError {
@@ -421,36 +421,31 @@ pub enum LexerErrorKind {
     UnknownEscapeSequence(char),
 }
 
-impl CompilerError for LexerError {
+impl CompilerError<()> for LexerError {
     fn location(&self) -> SourceLocation {
         self.location.clone()
     }
 
-    fn message(&self) -> String {
+    fn display_message(&self, f: &mut impl Write, _ctx: ()) -> std::fmt::Result {
         use LexerErrorKind::*;
         match self.kind {
-            UnterminatedString => "Unterminated string".to_string(),
-            UnterminatedComment => "Unterminated comment".to_string(),
-            UnexpectedCharacter(ch) => format!("Unexpected character: `{}`", ch),
-            UnterminatedEscapeSequence => "Unterminated escape sequence".to_string(),
-            UnknownEscapeSequence(ch) => format!("Unknown escape sequence: `{}`", ch),
+            UnterminatedString => write!(f, "Unterminated string")?,
+            UnterminatedComment => write!(f, "Unterminated comment")?,
+            UnexpectedCharacter(ch) => write!(f, "Unexpected character: `{}`", ch)?,
+            UnterminatedEscapeSequence => write!(f, "Unterminated escape sequence")?,
+            UnknownEscapeSequence(ch) => write!(f, "Unknown escape sequence: `{}`", ch)?,
         }
+        Ok(())
     }
 
-    fn note(&self) -> Option<String> {
+    fn display_note(&self, f: &mut impl Write, _ctx: ()) -> std::fmt::Result {
         use LexerErrorKind::*;
         match self.kind {
-            UnterminatedString => Some(format!("string literal begins here: {}", self.location)),
-            UnterminatedComment => Some(format!("comment begins here: {}", self.location)),
-            UnexpectedCharacter(_) => None,
-            UnterminatedEscapeSequence => None,
-            UnknownEscapeSequence(_) => None,
+            UnterminatedString => write!(f, "string literal begins here: {}", self.location),
+            UnterminatedComment => write!(f, "comment begins here: {}", self.location),
+            UnexpectedCharacter(_) => Ok(()),
+            UnterminatedEscapeSequence => Ok(()),
+            UnknownEscapeSequence(_) => Ok(()),
         }
-    }
-}
-
-impl Display for LexerError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(self as &dyn CompilerError, f)
     }
 }
