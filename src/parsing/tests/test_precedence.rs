@@ -1,10 +1,10 @@
 use crate::ast::expression::AstLiteral::Integral;
 use crate::ast::expression::ExpressionKind;
 use crate::common::SourceLocation;
-use crate::parsing::parser::{ParseError, ParseErrorKind};
 use crate::parsing::tests::machinery::expression::*;
 use bumpalo::Bump;
 use std::rc::Rc;
+use crate::parsing::errors::{ParseError, ParseErrorKind};
 
 pub const PATH: &str = "<testcase>";
 

@@ -62,6 +62,13 @@ fn main() -> io::Result<()> {
     let (ast, errors) = parser.parse_program();
     static_errors.parser(errors);
 
+    if static_errors.len() != 0 {
+        let mut e = String::new();
+        static_errors.print(&mut e, &types).map_err(|_| io::Error::from(io::ErrorKind::Other))?;
+        eprintln!("{}", e);
+        exit(-1);
+    }
+
     // Static analysis
     let mut resolver = Resolver::new(&error_allocator);
     let errors = resolver.resolve_statements(ast);

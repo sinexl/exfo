@@ -27,7 +27,7 @@ pub mod display {
         E: CompilerError<Context>,
         Context: Clone,
     {
-        fn display(&self, ctx: Context) -> DisplayError<Context, E>;
+        fn display(&self, ctx: Context) -> DisplayError<'_, Context, E>;
     }
 
     impl<Context, E> DisplayErrorExtension<Context, E> for E
@@ -35,7 +35,7 @@ pub mod display {
         E: CompilerError<Context>,
         Context: Clone,
     {
-        fn display(&self, ctx: Context) -> DisplayError<Context, E> {
+        fn display(&self, ctx: Context) -> DisplayError<'_, Context, E> {
             DisplayError(self, ctx)
         }
     }

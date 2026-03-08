@@ -3,10 +3,11 @@ pub mod expression {
     use crate::analysis::type_system::type_context::TypeCtx;
     use crate::ast::prefix_printer::PrefixPrint;
     use crate::lexing::lexer::Lexer;
-    use crate::parsing::parser::{ParseError, Parser};
     use crate::parsing::tests::test_precedence::PATH;
     use bumpalo::Bump;
     use std::ptr::addr_of_mut;
+    use crate::parsing::errors::ParseError;
+    use crate::parsing::parser::Parser;
 
     pub fn single(expr: &str) -> String {
         let (tokens, errors) = Lexer::new(expr, PATH).accumulate();
