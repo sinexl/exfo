@@ -77,6 +77,7 @@ macro_rules! expect {
         $self.expect($expected, $where, Some($note))
     };
 }
+type ParseResult<'errors, T> = Result<T, ParseError<'errors>>;
 
 
 impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
@@ -141,7 +142,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 
     pub fn parse_declaration(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let state = self.save_state();
         // --- Variable declaration / Named while Loop ---
         if self.consume(&[TokenType::Id]).is_some() {
@@ -181,7 +182,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 
     pub fn parse_variable_declaration(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let name = expect!(self, &[TokenType::Id])?;
         let colon = expect!(self, &[TokenType::Colon])?;
 
@@ -213,7 +214,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 
     pub fn parse_external_declaration(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let keyword = expect!(self, &[TokenType::Extern])?;
         let kind = expect!(self, &[TokenType::String])?;
 
@@ -294,7 +295,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     /// func name (args) {} ...
     pub fn parse_function_declaration(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let func_keyword = expect!(self, &[TokenType::Func])?;
         let name = expect!(self, &[TokenType::Id])?;
         debug_assert!(name.kind == TokenType::Id);
@@ -317,13 +318,12 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     /// (args) {}
     pub fn parse_function(
         &mut self,
-    ) -> Result<
+    ) -> ParseResult<'errors,
         (
             &'ast [FunctionParameter<'ast>],
             &'ast [&'ast Statement<'ast, 'types>],
             TypeId,
         ),
-        ParseError<'errors>,
     > {
         let o_paren = expect!(self, &[TokenType::OpenParen], "in function declaration")?;
         let peek = |this: &mut Self, tk: Token| {
@@ -368,7 +368,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 
     pub fn parse_statement(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         use TokenType::*;
         let state = self.save_state();
 
@@ -414,7 +414,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 
     pub fn parse_if_statement(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let loc = expect!(self, &[TokenType::If])?.loc;
 
         let condition = self.parse_expression()?;
@@ -436,7 +436,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     }
     pub fn parse_while_statement(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let mut name: Option<Identifier<'ast>> = None;
         if let Some(id) = self.consume(&[TokenType::Id]) {
             name = Some(Identifier::from_token(id, self.ast_bump));
@@ -459,7 +459,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 
     pub fn parse_return_statement(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let loc = expect!(self, &[TokenType::Return])?.loc;
         let mut val: Option<&'ast Expression<'ast>> = None;
         if self.peek_token()?.kind != TokenType::Semicolon {
@@ -476,7 +476,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 
     pub fn parse_block_statement(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let mut statements = BumpVec::new_in(self.ast_bump);
         let left_brace = expect!(self, &[TokenType::OpenBrace], "in block statement")?;
 
@@ -500,7 +500,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 
     fn parse_expression_statement(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let loc = self.peek_token()?.loc;
         let expr = self.parse_expression()?;
         expect!(self, &[TokenType::Semicolon], "after expression")?;
@@ -510,11 +510,11 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
         }))
     }
 
-    pub fn parse_expression(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError<'errors>> {
+    pub fn parse_expression(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         self.parse_assignment()
     }
 
-    pub fn parse_type(&mut self) -> Result<TypeId, ParseError<'errors>> {
+    pub fn parse_type(&mut self) -> ParseResult<'errors, TypeId> {
         let name = expect!(self, &[TokenType::Id])?;
 
         let mut ty = match name.string.as_ref() {
@@ -533,7 +533,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
         Ok(ty)
     }
 
-    fn parse_assignment(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError<'errors>> {
+    fn parse_assignment(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         let target = self.parse_binop(0)?;
         if let Some(tk) = self.consume(&[TokenType::Equal]) {
             let value = self.parse_assignment()?;
@@ -557,7 +557,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     pub(crate) fn parse_binop(
         &mut self,
         precedence: i32,
-    ) -> Result<&'ast mut Expression<'ast>, ParseError<'errors>> {
+    ) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         if precedence >= binop::MAX_PRECEDENCE {
             return self.parse_unary();
         }
@@ -585,7 +585,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
         Ok(left)
     }
 
-    fn parse_unary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError<'errors>> {
+    fn parse_unary(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         if let Some(tok) = self.consume(&[
             TokenType::Minus,
             TokenType::Star,
@@ -620,7 +620,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
         self.parse_call()
     }
 
-    fn parse_call(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError<'errors>> {
+    fn parse_call(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         let mut left = self.parse_primary()?;
         while let Some(tk) = self.consume(&[TokenType::OpenParen]) {
             left = self.ast_bump.alloc(Expression {
@@ -643,7 +643,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
         Ok(left)
     }
 
-    fn parse_args(&mut self) -> Result<&'ast [*mut Expression<'ast>], ParseError<'errors>> {
+    fn parse_args(&mut self) -> ParseResult<'errors, &'ast [*mut Expression<'ast>]> {
         let mut args = BumpVec::<*mut Expression<'ast>>::new_in(self.ast_bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
             let comma_separated = self.parse_comma_separated::<*mut Expression<'ast>>(|this| {
@@ -654,7 +654,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
         Ok(args.into_bump_slice())
     }
 
-    fn parse_primary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError<'errors>> {
+    fn parse_primary(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         use TokenType::*;
         let token = self.peek_token()?;
         self.skip_token();
@@ -788,8 +788,8 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     pub fn parse_comma_separated<T>(
         &mut self,
-        mut single_item: impl FnMut(&mut Self) -> Result<T, ParseError<'errors>>,
-    ) -> Result<&'ast [T], ParseError<'errors>> {
+        mut single_item: impl FnMut(&mut Self) -> ParseResult<'errors, T>,
+    ) -> ParseResult<'errors, &'ast [T]> {
         let mut res = BumpVec::new_in(self.ast_bump);
         let expr = single_item(self)?;
         res.push(expr);
@@ -806,7 +806,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     pub fn count_symbols(&self) -> usize {
         self.symbols_count
     }
-    fn next_token(&mut self) -> Result<Token, ParseError<'errors>> {
+    fn next_token(&mut self) -> ParseResult<'errors, Token> {
         let tk = self
             .tokens
             .get(self.current)
@@ -821,7 +821,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     pub fn skip_token(&mut self) {
         let _ = self.next_token();
     }
-    pub fn peek_token(&self) -> Result<Token, ParseError<'errors>> {
+    pub fn peek_token(&self) -> ParseResult<'errors, Token> {
         let r = self.tokens.get(self.current);
         if let Some(token) = r {
             return Ok(token.clone());
@@ -860,7 +860,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
         expected: &[TokenType],
         r#where: &'errors str,
         note: Option<&'errors str>,
-    ) -> Result<Token, ParseError<'errors>> {
+    ) -> ParseResult<'errors, Token> {
         if let Some(tk) = self.consume(expected) {
             return Ok(tk);
         }
