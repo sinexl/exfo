@@ -12,7 +12,7 @@ pub struct StaticErrors<'errors> {
     lexer: BumpVec<'errors, LexerError>,
     parser: BumpVec<'errors, ParseError<'errors>>,
     resolver: BumpVec<'errors, ResolverError<'errors>>,
-    typechecker: BumpVec<'errors, TypeError>,
+    typechecker: BumpVec<'errors, TypeError<'errors>>,
 }
 impl<'errors> StaticErrors<'errors> {
     pub fn new(bump: &'errors Bump) -> Self {
@@ -38,7 +38,7 @@ impl<'errors> StaticErrors<'errors> {
     pub fn resolver(&mut self, errors: Vec<ResolverError<'errors>>) {
         self.resolver.extend(errors);
     }
-    pub fn typechecker(&mut self, errors: BumpVec<'errors, TypeError>) {
+    pub fn typechecker(&mut self, errors: BumpVec<'errors, TypeError<'errors>>) {
         self.typechecker.extend(errors);
     }
 

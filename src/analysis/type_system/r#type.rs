@@ -1,4 +1,5 @@
 use crate::analysis::type_system::type_context::TypeCtx;
+use crate::common::identifier::Identifier;
 use crate::common::Join;
 use std::cell::Cell;
 use std::fmt::{Debug, Display, Formatter};
@@ -49,6 +50,8 @@ pub struct FunctionType<'types> {
     pub return_type: TypeIdCell,
     pub parameters: &'types [TypeIdCell],
     pub is_variadic: bool,
+    // in exfo, each function has different type even if the signatures are the same.
+    pub name: Identifier<'types>
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]

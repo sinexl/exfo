@@ -5,7 +5,7 @@ macro_rules! binop_enum {
         { $($variant:ident => $token:ident),* $(,)?}
     ) => {
         #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
-        pub(crate) enum $name {
+        pub enum $name {
             $($variant),*
         }
 
