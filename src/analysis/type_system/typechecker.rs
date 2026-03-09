@@ -378,7 +378,7 @@ impl<'errors, 'ast, 'types> Typechecker<'types, 'errors> {
                         return Err(TypeError {
                             loc: arg.loc.clone(),
                             kind: TypeErrorKind::MismatchedArgumentType {
-                                function_name: name.clone_into(self.errors_bump), // TODO: Get function name and location
+                                function_name: name.clone_into(self.errors_bump),
                                 expected_parameters,
                                 expected: i,
                                 actual_type: got.inner(),
