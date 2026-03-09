@@ -1,43 +1,45 @@
 // Machinery for built-in tests for Parser.
 pub mod expression {
-    use crate::analysis::type_context::TypeCtx;
+    use crate::analysis::type_system::type_context::TypeCtx;
     use crate::ast::prefix_printer::PrefixPrint;
     use crate::lexing::lexer::Lexer;
-    use crate::parsing::parser::{ParseError, Parser};
     use crate::parsing::tests::test_precedence::PATH;
     use bumpalo::Bump;
     use std::ptr::addr_of_mut;
+    use crate::parsing::errors::ParseError;
+    use crate::parsing::parser::Parser;
 
     pub fn single(expr: &str) -> String {
         let (tokens, errors) = Lexer::new(expr, PATH).accumulate();
         assert_eq!(errors.len(), 0);
         let test_alloc = Bump::new();
         let type_alloc = Bump::new();
+        let errors_alloc = Bump::new();
         let mut type_ctx = TypeCtx::new(&type_alloc);
-        let v = Parser::new(tokens.into(), &test_alloc, addr_of_mut!(type_ctx))
+        let v = Parser::new(tokens.into(), &test_alloc, &errors_alloc, addr_of_mut!(type_ctx))
             .parse_expression()
             .unwrap();
         format!("{}", PrefixPrint(v))
     }
-    pub fn fail(expr: &str) -> ParseError {
+    pub fn fail<'errors>(e: &'errors Bump, expr: &str) -> ParseError<'errors> {
         let (tokens, errors) = Lexer::new(expr, PATH).accumulate();
         assert_eq!(errors.len(), 0);
         let test_alloc = Bump::new();
         let mut type_ctx = TypeCtx::new(&test_alloc);
-        Parser::new(tokens.into(), &test_alloc, addr_of_mut!(type_ctx))
+        Parser::new(tokens.into(), &test_alloc, e, addr_of_mut!(type_ctx))
             .parse_expression()
             .expect_err("should fail")
     }
 }
 
 pub mod statement {
-    use std::fmt::Write;
-use crate::analysis::type_context::TypeCtx;
+    use crate::analysis::type_system::type_context::TypeCtx;
     use crate::ast::prefix_printer::PrefixPrintStatement;
     use crate::lexing::lexer::Lexer;
     use crate::parsing::parser::Parser;
     use crate::parsing::tests::test_precedence::PATH;
     use bumpalo::Bump;
+    use std::fmt::Write;
     use std::ptr::addr_of_mut;
 
     pub fn single(input: &str) -> String {
@@ -46,8 +48,9 @@ use crate::analysis::type_context::TypeCtx;
 
         let ast_bump = Bump::new();
         let type_bump = Bump::new();
+        let errors_bump = Bump::new();
         let mut type_ctx = TypeCtx::new(&type_bump);
-        let mut p = Parser::new(t.into(), &ast_bump,  addr_of_mut!(type_ctx));
+        let mut p = Parser::new(t.into(), &ast_bump, &errors_bump,  addr_of_mut!(type_ctx));
         let (statements, e) = p.parse_program();
         assert_eq!(e.len(), 0);
         assert_eq!(statements.len(), 1);
@@ -63,8 +66,9 @@ use crate::analysis::type_context::TypeCtx;
 
         let ast_bump = Bump::new();
         let type_bump = Bump::new();
+        let errors_bump = Bump::new();
         let mut types = TypeCtx::new(&type_bump);
-        let mut p = Parser::new(t.into(), &ast_bump,  addr_of_mut!(types));
+        let mut p = Parser::new(t.into(), &ast_bump, &errors_bump,  addr_of_mut!(types));
         let (statements, e) = p.parse_program();
         assert_eq!(e.len(), 0);
         let mut result = String::new();

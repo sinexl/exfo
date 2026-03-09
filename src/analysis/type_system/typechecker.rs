@@ -1,23 +1,30 @@
 use crate::analysis::r#type::{
     BasicType, DisplayType, FunctionType, PointerType, Type, TypeId, TypeIdCell,
 };
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast;
-use crate::ast::binop::BinopFamily;
+use crate::ast::binop::BinopKind;
 use crate::ast::expression::{Expression, ExpressionKind, SymId, UnaryKind};
 use crate::ast::statement::{ExternalFunction, FunctionDeclaration, VariableDeclaration};
 use crate::ast::statement::{Statement, StatementKind};
 use crate::common::errors_warnings::CompilerError;
+use crate::common::identifier::Identifier;
 use crate::common::symbol_table::{CompilerEntity, SymbolTable, Transform};
-use crate::common::{BumpVec, SourceLocation};
+use crate::common::{BumpVec, Join, SourceLocation};
 use crate::compiling::compiler;
+use bumpalo::Bump;
 use bumpalo::collections::CollectIn;
+use std::fmt::Write;
 
-pub struct Typechecker<'types> {
+pub struct Typechecker<'types, 'errors> {
     current_function_type: Option<TypeId>,
     types: *mut TypeCtx<'types>,
+    types_bump: &'types Bump,
+    errors_bump: &'errors Bump,
 
     pub symbols: SymbolTable<TypedEntity>,
+    binary_operators: BumpVec<'types, BinaryOperator>,
+    unary_operators: BumpVec<'types, UnaryOperator>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -43,93 +50,221 @@ impl Transform<compiler::Entity> for SymbolTable<TypedEntity> {
     }
 }
 
-impl<'types> Typechecker<'types> {
-    pub fn new(types: *mut TypeCtx<'types>, symbols_count: usize) -> Self {
-        Self {
+type TypeResult<'errors, T> = Result<T, TypeError<'errors>>;
+
+impl<'types, 'errors> Typechecker<'types, 'errors> {
+    pub fn new(
+        types_bump: &'types Bump,
+        errors_bump: &'errors Bump,
+        types: *mut TypeCtx<'types>,
+        symbols_count: usize,
+    ) -> Self {
+        let mut res = Self {
             current_function_type: None,
             types,
+            types_bump,
+            errors_bump,
             symbols: SymbolTable::new(symbols_count),
+            binary_operators: BumpVec::new_in(types_bump),
+            unary_operators: BumpVec::new_in(types_bump),
+        };
+        Self::fill_operators(&mut res);
+        res
+    }
+    pub fn fill_operators(&mut self) {
+        use BasicType::*;
+        use BinopKind::*;
+        use UnaryKind::*;
+        use ast::binop::constants;
+
+        let int = Int64.id();
+        let bool = Bool.id();
+        let type_commutative = true;
+        for kind in constants::ARITHMETIC_BINOPS.iter().copied() {
+            self.binary_operators.push(BinaryOperator {
+                kind,
+                x: int,
+                y: int,
+                result: int,
+                type_commutative,
+            });
+        }
+        for kind in constants::COMPARISON_BINOPS.iter().copied() {
+            self.binary_operators.push(BinaryOperator {
+                kind,
+                x: int,
+                y: int,
+                result: bool,
+                type_commutative,
+            });
+        }
+
+        for kind in constants::LOGICAL_BINOPS
+            .iter()
+            .chain(&[Equality, Inequality])
+            .copied()
+        {
+            self.binary_operators.push(BinaryOperator {
+                kind,
+                x: bool,
+                y: bool,
+                result: bool,
+                type_commutative,
+            });
+        }
+
+        // Unary operations
+        self.unary_operators.push(UnaryOperator {
+            kind: Negation,
+            x: int,
+            result: int,
+        });
+        self.unary_operators.push(UnaryOperator {
+            kind: Not,
+            x: bool,
+            result: bool,
+        });
+    }
+}
+
+struct BinaryOperator {
+    // result = f(x, y)
+    kind: BinopKind,
+    x: TypeId,
+    y: TypeId,
+    result: TypeId,
+    type_commutative: bool,
+}
+
+struct UnaryOperator {
+    // result = f(x)
+    kind: UnaryKind,
+    x: TypeId,
+    result: TypeId,
+}
+
+impl Eq for BinaryOperator {}
+
+impl Eq for UnaryOperator {}
+impl PartialEq for UnaryOperator {
+    fn eq(&self, other: &Self) -> bool {
+        let UnaryOperator {
+            kind: k1,
+            x: i1,
+            result: r1,
+        } = self;
+        let UnaryOperator {
+            kind: k2,
+            x: i2,
+            result: r2,
+        } = other;
+        k1 == k2 && i1 == i2 && r1 == r2
+    }
+}
+impl PartialEq for BinaryOperator {
+    fn eq(&self, other: &Self) -> bool {
+        let BinaryOperator {
+            kind: k1,
+            x: x1,
+            y: y1,
+            result: r1,
+            type_commutative: commute1,
+        } = self;
+        let BinaryOperator {
+            kind: k2,
+            x: x2,
+            y: y2,
+            result: r2,
+            type_commutative: commute2,
+        } = other;
+        if k1 != k2 || r1 != r2 || commute1 != commute2 {
+            return false;
+        }
+
+        if *commute1 {
+            (x1 == x2 && y1 == y2) || (x1 == y2 && y1 == x2)
+        } else {
+            x1 == x2 && y1 == y2
         }
     }
 }
 
-impl<'ast, 'types> Typechecker<'types> {
+impl<'errors, 'ast, 'types> Typechecker<'types, 'errors> {
     pub fn types(&self) -> &'types TypeCtx<'types> {
         unsafe { self.types.as_ref().expect("ERROR: Type context is NULL") }
     }
+    pub fn typecheck_binop(
+        &self,
+        lhs: TypeId,
+        rhs: TypeId,
+        kind: BinopKind,
+        loc: SourceLocation,
+    ) -> TypeResult<'errors, TypeId> {
+        for BinaryOperator {
+            kind: _,
+            x,
+            y,
+            result,
+            type_commutative,
+        } in self.binary_operators.iter().filter(|e| e.kind == kind)
+        {
+            // Exact match
+            if *x == lhs && *y == rhs {
+                return Ok(*result);
+            }
+            // type commutative match
+            if *type_commutative && *x == rhs && *y == lhs {
+                return Ok(*result);
+            }
+        }
+        Err(TypeError {
+            loc,
+            kind: TypeErrorKind::InvalidBinopOperands(kind, lhs, rhs),
+        })
+    }
+
+    pub fn typecheck_unary_basic(
+        &self,
+        item: TypeId,
+        kind: UnaryKind,
+        loc: SourceLocation,
+    ) -> TypeResult<'errors, TypeId> {
+        for UnaryOperator { kind: _, x, result } in
+            self.unary_operators.iter().filter(|e| e.kind == kind)
+        {
+            if *x == item {
+                return Ok(*result);
+            }
+        }
+        Err(TypeError {
+            loc,
+            kind: TypeErrorKind::InvalidUnopOperand(kind, item),
+        })
+    }
+
     pub fn typecheck_expression(
         &mut self,
         expression: &'ast Expression<'ast>,
-    ) -> Result<(), TypeError> {
+    ) -> TypeResult<'errors, ()> {
         match &expression.kind {
             ExpressionKind::Binop { left, right, kind } => {
                 let kind = *kind;
                 self.typecheck_expression(left)?;
                 self.typecheck_expression(right)?;
-                let error = Err(TypeError {
-                    loc: expression.loc.clone(),
-                    kind: TypeErrorKind::InvalidOperands(
-                        kind,
-                        DisplayType(left.ty.inner(), self.types())
-                            .to_string()
-                            .into_boxed_str(),
-                        DisplayType(right.ty.inner(), self.types())
-                            .to_string()
-                            .into_boxed_str(),
-                    ),
-                });
-
-                let left_id = left.ty.clone();
-                let right_id = right.ty.clone();
-                let left = left_id.get(self.types());
-                let right = right_id.get(self.types());
-
-                if (left.is_bool() || right.is_bool()) && kind.family() != BinopFamily::Logical {
-                    return error;
-                }
-                let ty: TypeId = match kind.family() {
-                    BinopFamily::Arithmetic => {
-                        if left != right {
-                            return Err(TypeError {
-                                kind: TypeErrorKind::Todo {
-                                    message: "coercion".to_owned(),
-                                    line: line!(),
-                                    column: column!(),
-                                    file: &file!(),
-                                }, // TODO.
-                                loc: expression.loc.clone(),
-                            });
-                        }
-                        left_id.inner()
-                    }
-                    BinopFamily::Logical => {
-                        if !left.is_bool() || (left != right) {
-                            return error;
-                        }
-                        left_id.inner()
-                    }
-                    BinopFamily::Ordering => {
-                        if left != right {
-                            return Err(TypeError {
-                                kind: TypeErrorKind::Todo {
-                                    message: "coercion".to_owned(),
-                                    line: line!(),
-                                    column: column!(),
-                                    file: &file!(),
-                                }, // TODO.
-                                loc: expression.loc.clone(),
-                            });
-                        }
-                        TypeId::from_basic(BasicType::Bool)
-                    }
-                };
+                let left_id = left.ty.clone().inner();
+                let right_id = right.ty.clone().inner();
+                let ty = self.typecheck_binop(left_id, right_id, kind, expression.loc.clone())?;
                 expression.ty.set(ty);
             }
             ExpressionKind::Unary { item, operator } => {
                 self.typecheck_expression(item)?;
                 let ty = match operator {
-                    // TODO: ensure that the expression really could be negated.
-                    UnaryKind::Negation => item.ty.inner(),
+                    UnaryKind::Negation | UnaryKind::Not => self.typecheck_unary_basic(
+                        item.ty.inner(),
+                        *operator,
+                        expression.loc.clone(),
+                    )?,
+
                     UnaryKind::Dereferencing => {
                         use Type::*;
 
@@ -138,10 +273,8 @@ impl<'ast, 'types> Typechecker<'types> {
                             Basic(_) | Function(_) | UserDefined(_) => {
                                 return Err(TypeError {
                                     loc: expression.loc.clone(),
-                                    kind: TypeErrorKind::DereferencingNonPointer {
-                                        actual_type: DisplayType(item.ty.inner(), self.types())
-                                            .to_string()
-                                            .into_boxed_str(),
+                                    kind: TypeErrorKind::CouldNotDereference {
+                                        what: item.ty.inner(),
                                     },
                                 });
                             }
@@ -158,21 +291,6 @@ impl<'ast, 'types> Typechecker<'types> {
                                 inner: item.ty.inner(),
                             })
                         }
-                    }
-                    UnaryKind::Not => {
-                        if *item.ty.get(self.types()) != Type::Basic(BasicType::Bool) {
-                            return Err(TypeError {
-                                loc: expression.loc.clone(),
-                                kind: TypeErrorKind::InvalidUnopOperand(
-                                    UnaryKind::Not,
-                                    DisplayType(item.ty.inner(), self.types())
-                                        .to_string()
-                                        .into_boxed_str(),
-                                ),
-                            });
-                        }
-
-                        TypeId::from_basic(BasicType::Bool)
                     }
                 };
                 expression.ty.set(ty);
@@ -213,59 +331,63 @@ impl<'ast, 'types> Typechecker<'types> {
                             .expect("Expression::FunctionCall: null argument")
                     })?;
                 }
-                if let Type::Function(FunctionType {
+                let Type::Function(FunctionType {
                     return_type,
                     parameters,
                     is_variadic,
+                    name,
                 }) = callee.ty.get(self.types())
+                else {
+                    return Err(TypeError {
+                        loc: expression.loc.clone(),
+                        kind: TypeErrorKind::CouldNotCall {
+                            what: callee.ty.inner(),
+                        },
+                    });
+                };
+
+                let expected_parameters = parameters
+                    .iter()
+                    .map(|e| e.inner())
+                    .collect_in::<BumpVec<_>>(self.errors_bump)
+                    .into_bump_slice();
+
+                if (arguments.len() < parameters.len())
+                    || (!is_variadic && arguments.len() != parameters.len())
                 {
-                    let arity_error = TypeError {
+                    return Err(TypeError {
                         loc: if let Some(last) = arguments.last() {
                             unsafe { (**last).loc.clone() }
                         } else {
                             expression.loc.clone()
                         },
                         kind: TypeErrorKind::InvalidArity {
-                            expected_arguments: parameters.len(),
+                            expected_parameters,
                             actual_arguments: arguments.len(),
-                            function_name: None, // TODO: Get function name.
+                            function_name: name.clone_into(self.errors_bump),
                         },
-                    };
-                    if arguments.len() < parameters.len() {
-                        return Err(arity_error);
-                    }
-                    if !is_variadic && arguments.len() != parameters.len() {
-                        return Err(arity_error);
-                    }
-                    for (expected, arg) in parameters.iter().zip(arguments.iter()) {
-                        let arg = unsafe { arg.as_ref().expect("FunctionCall: null argument") };
-                        // TODO: for now, we are comparing TypeIds themselves. Maybe its worth comparing Types themselves, because there would be less
-                        //  restrictions for implementing type coercion, but not sure.
-                        let got = arg.ty.clone(); // .get();
-                        let expected = expected.clone();
-                        if expected.inner() != got.clone().inner() {
-                            return Err(TypeError {
-                                loc: arg.loc.clone(),
-                                kind: TypeErrorKind::MismatchedArgumentType {
-                                    function_location: None,
-                                    function_name: None, // TODO: Get function name and location
-                                    expected_type: Box::from(
-                                        DisplayType(expected.inner(), self.types())
-                                            .to_string()
-                                            .as_str(),
-                                    ),
-                                    actual_type: Box::from(
-                                        DisplayType(got.inner(), self.types()).to_string().as_str(),
-                                    ),
-                                },
-                            });
-                        }
-                    }
-                    let return_type = return_type.clone();
-                    expression.ty.set(return_type.inner());
-                } else {
-                    todo!("Proper error handling")
+                    });
                 }
+                for (i, (expected, arg)) in parameters.iter().zip(arguments.iter()).enumerate() {
+                    let arg = unsafe { arg.as_ref().expect("FunctionCall: null argument") };
+                    // TODO: for now, we are comparing TypeIds themselves. Maybe its worth comparing Types themselves, because there would be less
+                    //  restrictions for implementing type coercion, but not sure.
+                    let got = arg.ty.clone(); // .get();
+                    let expected = expected.clone();
+                    if expected.inner() != got.clone().inner() {
+                        return Err(TypeError {
+                            loc: arg.loc.clone(),
+                            kind: TypeErrorKind::MismatchedArgumentType {
+                                function_name: name.clone_into(self.errors_bump), // TODO: Get function name and location
+                                expected_parameters,
+                                expected: i,
+                                actual_type: got.inner(),
+                            },
+                        });
+                    }
+                }
+                let return_type = return_type.clone();
+                expression.ty.set(return_type.inner());
             }
         }
         Ok(())
@@ -274,8 +396,8 @@ impl<'ast, 'types> Typechecker<'types> {
     pub fn typecheck_statements(
         &mut self,
         statements: &'ast [&'ast Statement<'ast, 'types>],
-    ) -> Result<(), Vec<TypeError>> {
-        let mut errors = Vec::new();
+    ) -> Result<(), BumpVec<'errors, TypeError<'errors>>> {
+        let mut errors = BumpVec::new_in(self.errors_bump);
         for statement in statements {
             if let Err(e) = self.typecheck_statement(statement) {
                 errors.push(e);
@@ -290,7 +412,7 @@ impl<'ast, 'types> Typechecker<'types> {
     pub fn typecheck_statement(
         &mut self,
         statement: &'ast Statement<'ast, 'types>,
-    ) -> Result<(), TypeError> {
+    ) -> TypeResult<'errors, ()> {
         match &statement.kind {
             StatementKind::ExpressionStatement(expression) => {
                 self.typecheck_expression(expression)?
@@ -298,7 +420,7 @@ impl<'ast, 'types> Typechecker<'types> {
 
             StatementKind::FunctionDeclaration(
                 FunctionDeclaration {
-                    name: _name,
+                    name,
                     parameters,
                     body,
                     return_type,
@@ -325,6 +447,7 @@ impl<'ast, 'types> Typechecker<'types> {
                         .collect_in::<BumpVec<_>>(b)
                         .into_bump_slice(),
                     is_variadic: false,
+                    name: name.clone_into(self.types_bump),
                 };
                 let ty = unsafe { (*self.types).allocate(Type::Function(fn_type)) };
                 self.symbols.insert(*id, TypedEntity { ty });
@@ -405,7 +528,7 @@ impl<'ast, 'types> Typechecker<'types> {
             }
             StatementKind::Extern(
                 ExternalFunction {
-                    name: _,
+                    name,
                     kind: _kind,
                     parameters,
                     return_type,
@@ -421,6 +544,7 @@ impl<'ast, 'types> Typechecker<'types> {
                                 return_type: return_type.clone(),
                                 parameters,
                                 is_variadic: *is_variadic,
+                                name: name.clone_into(self.types_bump),
                             }))
                         },
                     },
@@ -464,12 +588,12 @@ impl<'ast, 'types> Typechecker<'types> {
         Ok(())
     }
 }
-pub struct TypeError {
+pub struct TypeError<'errors> {
     pub loc: SourceLocation,
-    pub kind: TypeErrorKind,
+    pub kind: TypeErrorKind<'errors>,
 }
 
-pub enum TypeErrorKind {
+pub enum TypeErrorKind<'errors> {
     Todo {
         message: String,
         file: &'static str,
@@ -477,110 +601,138 @@ pub enum TypeErrorKind {
         column: u32,
     },
     MismatchedArgumentType {
-        function_location: Option<SourceLocation>,
-        function_name: Option<Box<str>>,
-        expected_type: Box<str>,
-        actual_type: Box<str>,
+        function_name: Identifier<'errors>,
+        expected_parameters: &'errors [TypeId],
+
+        expected: usize,
+        actual_type: TypeId,
     },
     InvalidArity {
-        expected_arguments: usize,
+        expected_parameters: &'errors [TypeId],
         actual_arguments: usize,
-        function_name: Option<String>,
+        function_name: Identifier<'errors>,
     },
+
+    CouldNotCall {
+        what: TypeId,
+    },
+    CouldNotDereference {
+        what: TypeId,
+    },
+
+    //                      kind (while, if)
     MismatchedConditionType(&'static str),
 
-    InvalidOperands(ast::binop::BinopKind, Box<str>, Box<str>),
-    InvalidUnopOperand(UnaryKind, Box<str>),
-    DereferencingNonPointer {
-        actual_type: Box<str>,
-    },
+    InvalidBinopOperands(BinopKind, TypeId, TypeId),
+    InvalidUnopOperand(UnaryKind, TypeId),
 }
-impl CompilerError for TypeError {
+impl<'types, 'errors> CompilerError<&TypeCtx<'types>> for TypeError<'errors> {
     fn location(&self) -> SourceLocation {
         self.loc.clone()
     }
 
-    fn message(&self) -> String {
+    fn display_message(&self, f: &mut impl Write, ctx: &TypeCtx<'types>) -> std::fmt::Result {
         match &self.kind {
-            TypeErrorKind::Todo { message, .. } => format!("Not implemented: {}", message),
+            TypeErrorKind::Todo { message, .. } => write!(f, "Not implemented: {}", message)?,
             TypeErrorKind::MismatchedArgumentType {
-                function_location: _function_location,
-                function_name: _function_name,
-                expected_type,
+                function_name: _,
+                expected_parameters,
+                expected,
                 actual_type,
-            } => format!(
+            } => write!(
+                f,
                 "Expected `{}`, found `{}`, Mismatched argument type",
-                expected_type, actual_type
-            ),
+                DisplayType(expected_parameters[*expected], ctx),
+                DisplayType(*actual_type, ctx)
+            )?,
             TypeErrorKind::InvalidArity {
-                expected_arguments,
+                expected_parameters: expected_arguments,
                 actual_arguments,
                 function_name,
+                // expected_function_arguments: _,
             } => {
-                assert_ne!(actual_arguments, expected_arguments);
-                let s = if expected_arguments < actual_arguments {
+                assert_ne!(*actual_arguments, expected_arguments.len());
+                let s = if expected_arguments.len() < *actual_arguments {
                     "too many"
                 } else {
                     "not enough"
                 };
-
-                let function_name = if let Some(function_name) = function_name {
-                    format!(" `{}`", function_name)
-                } else {
-                    "".to_string()
-                };
-                format!(
-                    "{s} arguments were provided. Function{function_name} expects {expected_arguments} arguments, but got {actual_arguments}"
-                )
+                write!(
+                    f,
+                    "{s} arguments were provided. Function `{function_name}` expects {} arguments, but got {}",
+                    expected_arguments.len(),
+                    actual_arguments,
+                )?
             }
             TypeErrorKind::MismatchedConditionType(name) => {
-                format!("{name} condition should evaluate to `bool` type")
+                write!(f, "{name} condition should evaluate to `bool` type")?
             }
-            TypeErrorKind::InvalidOperands(op, a, b) => format!(
+
+            TypeErrorKind::InvalidBinopOperands(op, a, b) => write!(
+                f,
                 "Invalid operands to '{op}' operation ({a}, {b})",
-                op = op.operator()
-            ),
-            TypeErrorKind::DereferencingNonPointer { actual_type } => {
-                format!("Could not dereference `{}`", actual_type)
+                op = op.operator(),
+                a = DisplayType(*a, ctx),
+                b = DisplayType(*b, ctx)
+            )?,
+            TypeErrorKind::CouldNotDereference { what } => {
+                write!(f, "Could not dereference `{}`", DisplayType(*what, ctx))?
             }
+
             TypeErrorKind::InvalidUnopOperand(kind, r#type) => {
-                format!("Could not {} {}", kind.verb(), r#type)
+                write!(f, "Could not {} {}", kind.verb(), DisplayType(*r#type, ctx))?
+            }
+            TypeErrorKind::CouldNotCall { what } => {
+                write!(f, "Could not call {}", DisplayType(*what, ctx))?
             }
         }
+        Ok(())
     }
 
-    fn note(&self) -> Option<String> {
+    fn display_note(&self, f: &mut impl Write, ctx: &TypeCtx<'types>) -> std::fmt::Result {
         match &self.kind {
             TypeErrorKind::Todo {
-                message,
+                message: _,
                 file,
                 line,
                 column,
-            } => Some(format!("{file}:{line}:{column}")),
+            } => write!(f, "{file}:{line}:{column}"),
             TypeErrorKind::MismatchedArgumentType {
-                function_location,
                 function_name,
-                expected_type: _expected_type,
+                expected_parameters,
+                expected: _,
                 actual_type: _actual_type,
             } => {
-                if let Some(function_location) = function_location {
-                    return Some(format!(
-                        "{}is defined here: {loc}",
-                        if let Some(function_name) = function_name {
-                            format!("`{}` ", function_name)
-                        } else {
-                            "function ".to_owned()
-                        },
-                        loc = function_location,
-                    ));
-                }
-                None
+                write!(
+                    f,
+                    "function is defined here: {}: {}({})",
+                    function_name.location,
+                    function_name.name,
+                    Join(
+                        expected_parameters.iter().map(|e| DisplayType(*e, ctx)),
+                        ", "
+                    )
+                )
             }
-            TypeErrorKind::InvalidArity { .. } => None,
-            TypeErrorKind::MismatchedConditionType(_) => None,
-            TypeErrorKind::InvalidOperands(_, _, _) => None,
-            TypeErrorKind::DereferencingNonPointer { .. } => None,
-            TypeErrorKind::InvalidUnopOperand(_, _) => None,
+            TypeErrorKind::InvalidArity {
+                expected_parameters,
+                actual_arguments: _actual_arguments,
+                function_name,
+            } => write!(
+                f,
+                "function is defined here: {}: {}({})",
+                function_name.location,
+                function_name.name,
+                Join(
+                    expected_parameters.iter().map(|e| DisplayType(*e, ctx)),
+                    ", "
+                )
+            ),
+            TypeErrorKind::MismatchedConditionType(_) => Ok(()),
+            TypeErrorKind::InvalidBinopOperands(_, _, _) => Ok(()),
+            TypeErrorKind::CouldNotDereference { .. } => Ok(()),
+            TypeErrorKind::InvalidUnopOperand(_, _) => Ok(()),
+            TypeErrorKind::CouldNotCall { .. } => Ok(()),
         }
     }
 }

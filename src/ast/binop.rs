@@ -5,7 +5,7 @@ macro_rules! binop_enum {
         { $($variant:ident => $token:ident),* $(,)?}
     ) => {
         #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
-        pub(crate) enum $name {
+        pub enum $name {
             $($variant),*
         }
 
@@ -26,6 +26,15 @@ macro_rules! binop_enum {
     };
 }
 
+pub(crate) mod constants {
+    use crate::ast::binop::BinopKind;
+    use crate::ast::binop::BinopKind::*;
+
+    pub const ARITHMETIC_BINOPS: &[BinopKind] = &[Addition, Subtraction, Multiplication, Division];
+    pub const COMPARISON_BINOPS: &[BinopKind] = &[Equality, Inequality, GreaterThan, GreaterEq, LessThan, LessEq];
+    pub const LOGICAL_BINOPS: &[BinopKind] = &[Or, And];
+}
+
 binop_enum! {
     BinopKind {
         // Arithmetic
@@ -40,6 +49,7 @@ binop_enum! {
         GreaterEq      => GreaterEqual,
         LessThan       => Less,
         LessEq         => LessEqual,
+        // Logical
         And            => DoubleAmpersand,
         Or             => DoubleBar
     }

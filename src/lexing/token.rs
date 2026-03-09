@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Token {
+pub struct Token {
     pub kind: TokenType,
 
     pub integer: i64,
@@ -73,63 +73,87 @@ impl Display for Token {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum TokenType {
-    Eof,
 
-    // Keywords
-    Func,
-    Extern,
-    Return,
-    True,
-    False,
-    If,
-    Else,
-    While,
-    Break,
-    Continue,
+macro_rules! token_type {
+    ($name:ident
+        { $($variant:ident => $str:expr),* $(,)?}
+    ) => {
+        #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+        pub enum $name {
+            $($variant),*
+        }
 
-    // Punctuation
-    OpenParen,
-    CloseParen,
-    OpenBrace,
-    CloseBrace,
-    Dot,
-    Comma,
-    Semicolon,
-    Colon,
-    TripleDot,
+        impl $name {
+            pub fn humanize(self) -> &'static str {
+                match self {
+                    $($variant => $str),*,
+                }
+            }
+        }
+    };
+}
+token_type! {
+    TokenType {
+        Eof => "end of file",
 
-    // Ordering operators
-    Equal,
-    EqualEqual,
-    Bang,
-    BangEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-    
-    // Logical Operators
-    DoubleAmpersand,
-    DoubleBar,
+        // Keywords
+        Func => "`func` keyword",
+        Extern => "`extern` keyword",
+        Return => "`return` keyword",
+        True => "`true` keyword",
+        False => "`false` keyword",
+        If => "`if` keyword",
+        Else => "`else` keyword",
+        While => "`while` keyword",
+        Break => "`break` keyword",
+        Continue => "`continue` keyword",
 
-    // Binary Operators
-    Ampersand,
-    Bar,
+        // Punctuation
+        OpenParen => "opening parenthesis",
+        CloseParen => "closing parenthesis",
+        OpenBrace => "opening brace",
+        CloseBrace => "closing brace",
+        Dot => "`.`",
+        Comma => "`,`",
+        Semicolon => "semicolon",
+        Colon => "colon",
+        TripleDot => "`...`",
 
+        // Ordering operators
+        Equal => "`=`",
+        EqualEqual => "`==`",
+        Bang => "`!`",
+        BangEqual => "`!=`",
+        Less => "`<`",
+        LessEqual => "`<=`",
+        Greater => "`>`",
+        GreaterEqual => "`>=`",
 
-    // Other operators
-    Plus,
-    Minus,
-    Star,
-    Slash,
+        // Logical Operators
+        DoubleAmpersand => "`&&`",
+        DoubleBar => "`||`",
 
-    // Other terminals
-    Id,
-    Integer,
-    Double,
-    String,
+        // Binary Operators
+        Ampersand => "`&`",
+        Bar => "`|`",
+
+        // Other operators
+        Plus => "`+`",
+        Minus => "`-`",
+        Star => "`*`",
+        Slash => "`/`",
+
+        // Other terminals
+        Id => "identifier",
+        Integer => "integer literal",
+        Double => "double literal",
+        String => "string literal",
+    }
+}
+impl Display for TokenType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.humanize())
+    }
 }
 
 impl TokenType {

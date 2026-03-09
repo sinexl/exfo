@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use crate::fatal;
 use crate::target::target::{Target, TARGETS};
+use std::path::PathBuf;
 pub struct CompilerArguments {
     pub input: PathBuf,
 

@@ -34,8 +34,8 @@ func main(): int {
             a := to_bool(i);
             b := to_bool(j);
 
-            expected_xnor := memcmp(&a, &b, 1) == 0;
-            expected_xor := memcmp(&a, &b, 1) != 0; // XNOR = !XOR.
+            expected_xnor := a == b;
+            expected_xor := a != b; // XNOR = !XOR.
 
             result_xnor := xnor(a, b);
             result_xor := xor(a, b);

@@ -6,9 +6,9 @@ use crate::compiling::ir::intermediate_representation::{Function, IntermediateRe
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
 use crate::{asm, assert_same, comment};
 use exfo::target::target::x86_64::Os;
+use exfo::target::target::Target;
 use std::cmp;
 use std::fmt::{Display, Formatter, Write};
-use exfo::target::target::Target;
 
 mod constants {
     use crate::code_generation::x86_64::register::Register;
@@ -109,7 +109,7 @@ impl<'ir> Codegen<'ir> {
 
         // Register parameters.
         let reg_params = &arguments[..reg_arg_count];
-        for (_, arg_size) in reg_params.iter().enumerate() {
+        for arg_size in reg_params.iter() {
             let arg_size = *arg_size;
             comment!(self, "Argument {i}. size: {arg_size}");
             arg_offset += arg_size;
@@ -332,7 +332,7 @@ impl<'ir> Codegen<'ir> {
                     "  leaq {lvalue}, {Rax}",
                     lvalue = DisplayLValue(
                         *source,
-                        &self
+                        self
                             .arg_offsets
                             .as_ref()
                             .expect("COMPILER BUG: Codegen: no current function")
@@ -420,7 +420,7 @@ impl<'ir> Codegen<'ir> {
         match arg {
             Arg::RValue(Rvalue::ExternalFunction(name)) => {
                 let name = if self.pic() {
-                    let mut string = format!("{}", name.name);
+                    let mut string = name.name.to_string();
                     if self.os != Os::Windows {
                         write!(string, "@PLT").unwrap();
                     }
@@ -482,7 +482,7 @@ impl<'ir> Codegen<'ir> {
         };
         // Zero-extend and push if size is not 8
         if arg.size() == 1 {
-            let display = DisplayArg(arg, self.pic(), &self.arg_offsets()).to_string();
+            let display = DisplayArg(arg, self.pic(), self.arg_offsets()).to_string();
             asm!(self, "  movzbq {display}, {Rax}");
             asm!(self, "  pushq {Rax}");
             return;

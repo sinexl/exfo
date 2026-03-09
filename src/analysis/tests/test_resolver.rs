@@ -1,8 +1,8 @@
 use crate::analysis::resolver::{Resolver, ResolverError, ResolverErrorKind};
 use crate::analysis::tests::machinery::{error, success, PATH};
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::statement::{Statement, StatementKind};
-use crate::common::identifier::{Identifier, IdentifierBox};
+use crate::common::identifier::Identifier;
 use crate::common::SourceLocation;
 use crate::hashmap;
 use crate::lexing::lexer::Lexer;
@@ -12,15 +12,16 @@ use std::collections::HashMap;
 use std::ptr::addr_of_mut;
 use std::rc::Rc;
 
-
 #[test]
 pub fn undeclared_variable() {
     let file = Rc::from(PATH);
+    let e = &Bump::new();
+
     assert_eq!(
-        error("func main () { a;}").kind,
+        error(e, "func main () { a;}").kind,
         ResolverErrorKind::UndeclaredIdentifier {
-            usage: IdentifierBox::new(
-                "a".to_owned().into_boxed_str(),
+            usage: Identifier::new(
+                "a",
                 SourceLocation {
                     line: 1,
                     offset: 16,
@@ -34,11 +35,12 @@ pub fn undeclared_variable() {
 #[test]
 pub fn reading_from_initializer() {
     let file = Rc::from(PATH);
+    let e = &Bump::new();
     assert_eq!(
-        error("func main () { b := b; }").kind,
+        error(e, "func main () { b := b; }").kind,
         ResolverErrorKind::ReadingFromInitializer {
-            read: IdentifierBox::new(
-                "b".to_owned().into_boxed_str(),
+            read: Identifier::new(
+                "b",
                 SourceLocation {
                     line: 1,
                     offset: 21,
@@ -51,22 +53,17 @@ pub fn reading_from_initializer() {
 
 #[test]
 pub fn simple_resolution() {
-    let p =
-r#"(func `main`(#1) (): unknown_t
+    let p = r#"(func `main`(#1) (): unknown_t
   (`a`(#0): unknown_t = 10)
   (a<#0>)
 )"#;
-    assert_eq!(
-        success("func main () { a:=10; a; }"),
-        p,
-    )
+    assert_eq!(success("func main () { a:=10; a; }"), p,)
 }
 
 #[test]
 pub fn with_blocks() {
     let resolutions = success("func main () { a := 10; a; { a; a := 15; a;} } ");
-    let p =
-r#"(func `main`(#2) (): unknown_t
+    let p = r#"(func `main`(#2) (): unknown_t
   (`a`(#0): unknown_t = 10)
   (a<#0>)
   (block
@@ -75,17 +72,13 @@ r#"(func `main`(#2) (): unknown_t
     (a<#1>)
   )
 )"#;
-    assert_eq!(
-        resolutions,
-        p,
-    )
+    assert_eq!(resolutions, p,)
 }
 
 #[test]
 pub fn shadowing() {
     let resolutions = success("func main() { a := 10; a; a := a + 10; a; }");
-    let p =
-r#"(func `main`(#2) (): unknown_t
+    let p = r#"(func `main`(#2) (): unknown_t
   (`a`(#0): unknown_t = 10)
   (a<#0>)
   (`a`(#1): unknown_t = (+ (a<#0>) 10))
@@ -96,20 +89,21 @@ r#"(func `main`(#2) (): unknown_t
 
 #[test]
 pub fn undefined_loop_label() {
+    let e = &Bump::new();
     let loc = SourceLocation {
         line: 1,
         offset: 26,
         file: Rc::from(PATH),
     };
     assert_eq!(
-        error("i := 0; while true break unknown_label;"),
+        error(e, "i := 0; while true break unknown_label;"),
         ResolverError {
             loc: loc.clone(),
             kind: ResolverErrorKind::UndeclaredLoopLabel {
-                name: IdentifierBox::from_borrowed(&Identifier {
+                name: Identifier {
                     name: "unknown_label",
                     location: loc
-                }),
+                },
             },
         }
     );
@@ -122,19 +116,20 @@ pub fn loop_label_redefinition() {
         offset: 24,
         file: Rc::from(PATH),
     };
+    let e = &Bump::new();
     assert_eq!(
-        error("i := 0; a: while true {a: while true 1 + 1;}"),
+        error(e, "i := 0; a: while true {a: while true 1 + 1;}"),
         ResolverError {
             loc: loc.clone(),
             kind: ResolverErrorKind::LoopLabelRedefinition {
-                original_name: IdentifierBox::from_borrowed(&Identifier {
+                original_name: Identifier {
                     name: "a",
                     location: SourceLocation {
                         line: 1,
                         offset: 9,
                         file: Rc::from(PATH),
                     }
-                }),
+                },
             },
         }
     );
@@ -142,8 +137,9 @@ pub fn loop_label_redefinition() {
 
 #[test]
 pub fn break_continue_outside_of_corresponding_block() {
+    let e = &Bump::new();
     assert_eq!(
-        error("break;"),
+        error(e, "break;"),
         ResolverError {
             loc: SourceLocation {
                 line: 1,
@@ -155,7 +151,7 @@ pub fn break_continue_outside_of_corresponding_block() {
     );
 
     assert_eq!(
-        error("continue;"),
+        error(e, "continue;"),
         ResolverError {
             loc: SourceLocation {
                 line: 1,
@@ -167,7 +163,7 @@ pub fn break_continue_outside_of_corresponding_block() {
     );
 
     assert_eq!(
-        error("return;"),
+        error(e, "return;"),
         ResolverError {
             loc: SourceLocation {
                 line: 1,
@@ -193,13 +189,19 @@ pub fn proper_label_resolution() {
     assert!(errors.is_empty());
     let ast_alloc = Bump::new();
     let type_alloc = Bump::new();
+    let err_alloc = Bump::new();
     let mut type_ctx = TypeCtx::new(&type_alloc);
 
-    let mut parser = Parser::new(tokens.into(), &ast_alloc, addr_of_mut!(type_ctx));
+    let mut parser = Parser::new(
+        tokens.into(),
+        &ast_alloc,
+        &err_alloc,
+        addr_of_mut!(type_ctx),
+    );
     let (ast, errors) = parser.parse_program();
     assert!(errors.is_empty());
 
-    let mut resolver = Resolver::new();
+    let mut resolver = Resolver::new(&err_alloc);
     let errors = resolver.resolve_statements(ast);
     assert!(errors.is_empty());
 
@@ -243,4 +245,3 @@ pub fn proper_label_resolution() {
         }
     );
 }
-

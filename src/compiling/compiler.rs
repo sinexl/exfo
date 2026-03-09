@@ -1,7 +1,7 @@
-use crate::analysis::r#type::{FunctionType, Type, TypeId, TypeIdCell};
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::r#type::{FunctionType, Type, TypeId};
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::binop::{BinopFamily, BinopKind};
-use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, SymId, UnaryKind};
+use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
 use crate::ast::statement::{
     ExternalFunction, FunctionDeclaration, Statement, StatementKind, VariableDeclaration,
 };
@@ -74,7 +74,7 @@ impl StackSize {
     }
 }
 
-impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
+impl<'ir, 'types> Compiler<'ir, 'types> {
     pub fn new(
         ir_bump: &'ir Bump,
         types: *mut TypeCtx<'types>,
@@ -102,8 +102,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
         if let Some(bucket) = self.bucket.take_if(|e| e.size() == size) {
             return bucket;
         }
-        let i = self.allocate_on_stack(size);
-        i
+        self.allocate_on_stack(size)
     }
     pub fn allocate_on_stack(&mut self, size: usize) -> Lvalue {
         self.stack_size.count += size;
@@ -361,14 +360,17 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
 
             ExpressionKind::FunctionCall { callee, arguments } => {
                 let (is_variadic, return_size) = if let Type::Function(FunctionType {
-                    parameters,
+                    parameters: _,
                     is_variadic,
                     return_type,
+                    name: _,
                 }) = callee.ty.get(self.types())
                 {
                     (*is_variadic, return_type.inner().get(self.types()).size())
                 } else {
-                    todo!("Indirect function call")
+                    unreachable!(
+                        "COMPILER BUG: Could not call non-function. This should have been handled by type checker."
+                    )
                 };
                 let callee = self.compile_expression(callee);
                 let b = self.ir_bump;
@@ -379,7 +381,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                         if expr.ty.get(self.types()).size() != 0 {
                             return Some(self.compile_expression(expr));
                         }
-                        return None;
+                        None
                     })
                     .collect_in::<BumpVec<_>>(b)
                     .into_bump_slice();
@@ -434,7 +436,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
 
                 let mut sizes = BumpVec::with_capacity_in(parameters.len(), self.ir_bump);
                 let mut index = 0;
-                for (_, param) in parameters.iter().enumerate() {
+                for param in *parameters {
                     let size = param.ty.get(self.types()).size();
                     self.entities[param.id].kind =
                         Some(EntityKind::Local(Lvalue::Argument { index, size }));

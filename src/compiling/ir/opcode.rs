@@ -64,7 +64,7 @@ pub enum Opcode<'ir> {
     },
 }
 
-impl<'ir> Lvalue {
+impl Lvalue {
     pub fn size(self) -> usize {
         match self {
             Lvalue::StackOffset { size, .. } => size,
@@ -85,11 +85,7 @@ impl Rvalue<'_> {
     }
     // needed because strings differ from other args depending on PIC/non-pic, just to make code simpler.
     pub fn is_string(&self) -> bool {
-        if let Rvalue::String { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Rvalue::String { .. })
     }
 }
 

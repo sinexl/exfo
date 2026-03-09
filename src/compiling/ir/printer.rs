@@ -144,7 +144,7 @@ impl<'a> Display for Arg<'a> {
     }
 }
 
-impl<'a> Display for Lvalue {
+impl Display for Lvalue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         print_lvalue(self, f)
     }

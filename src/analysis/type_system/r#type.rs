@@ -1,4 +1,5 @@
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
+use crate::common::identifier::Identifier;
 use crate::common::Join;
 use std::cell::Cell;
 use std::fmt::{Debug, Display, Formatter};
@@ -25,6 +26,11 @@ pub enum BasicType {
     Bool,
     CharPtr,
 }
+impl BasicType {
+    pub fn id(self) -> TypeId {
+        TypeId::from_basic(self)
+    }
+}
 pub const BASIC_TYPES: &[BasicType] = &[
     BasicType::Void,
     BasicType::Int64,
@@ -44,6 +50,8 @@ pub struct FunctionType<'types> {
     pub return_type: TypeIdCell,
     pub parameters: &'types [TypeIdCell],
     pub is_variadic: bool,
+    // in exfo, each function has different type even if the signatures are the same.
+    pub name: Identifier<'types>
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -79,7 +87,6 @@ impl From<TypeId> for TypeIdCell {
 pub struct TypeIdCell {
     inner: Cell<TypeId>,
 }
-
 
 impl TypeId {
     pub fn get<'types>(self, arena: &'types TypeCtx<'types>) -> &'types Type<'types> {
@@ -134,7 +141,6 @@ impl TypeIdCell {
         self.inner.set(value);
     }
 }
-
 
 pub struct DisplayType<'types>(pub TypeId, pub &'types TypeCtx<'types>);
 impl<'ast> Display for DisplayType<'ast> {

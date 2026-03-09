@@ -1,5 +1,5 @@
 use crate::analysis::r#type::{BasicType, PointerType, TypeId, TypeIdCell};
-use crate::analysis::type_context::TypeCtx;
+use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::binop;
 use crate::ast::binop::BinopKind;
 use crate::ast::expression::ExpressionKind::{
@@ -10,13 +10,10 @@ use crate::ast::statement::{
     ExternKind, ExternalFunction, FunctionDeclaration, FunctionParameter, Statement, StatementKind,
     VariableDeclaration,
 };
-use crate::common::errors_warnings::CompilerError;
 use crate::common::identifier::Identifier;
 use crate::common::{BumpVec, SourceLocation};
 use crate::lexing::token::{Token, TokenType};
-use crate::parsing::parser::ParseErrorKind::{
-    InvalidAssignment, UnbalancedParens, UnexpectedToken, UnknownType,
-};
+use crate::parsing::errors::{ParseError, ParseErrorKind};
 use bumpalo::Bump;
 use std::cell::Cell;
 use std::rc::Rc;
@@ -54,10 +51,11 @@ use std::rc::Rc;
 
 /// Parser
 #[derive(Debug)]
-pub struct Parser<'ast, 'types> {
+pub struct Parser<'ast, 'types, 'errors> {
     current: usize,
     tokens: Rc<[Token]>,
     ast_bump: &'ast Bump,
+    errors_bump: &'errors Bump,
     types: *mut TypeCtx<'types>,
     // All expressions are assigned with unique ID's
     nodes_count: usize,
@@ -65,15 +63,34 @@ pub struct Parser<'ast, 'types> {
     symbols_count: usize,
 }
 
-impl<'ast, 'types> Parser<'ast, 'types> {
+macro_rules! expect {
+    // Case: Just the tokens
+    ($self:ident, $expected:expr) => {
+        $self.expect($expected, "", None)
+    };
+    // Case: Tokens + "where"
+    ($self:ident, $expected:expr, $where:expr) => {
+        $self.expect($expected, $where, None)
+    };
+    // Case: Tokens + "where" + "note"
+    ($self:ident, $expected:expr, $where:expr, $note:expr) => {
+        $self.expect($expected, $where, Some($note))
+    };
+}
+type ParseResult<'errors, T> = Result<T, ParseError<'errors>>;
+
+
+impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     pub fn new(
         tokens: Rc<[Token]>,
         ast_bump: &'ast Bump,
+        errors_bump: &'errors Bump,
         type_ctx: *mut TypeCtx<'types>,
-    ) -> Parser<'ast, 'types> {
+    ) -> Parser<'ast, 'types, 'errors> {
         Self {
             current: 0,
             ast_bump,
+            errors_bump,
             types: type_ctx,
             tokens,
             nodes_count: 0,
@@ -94,20 +111,24 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     }
 }
 
-#[allow(clippy::result_large_err)]
-impl<'ast, 'types> Parser<'ast, 'types> {
-    pub fn parse_program(&mut self) -> (&'ast [&'ast Statement<'ast, 'types>], Box<[ParseError]>) {
+impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
+    pub fn parse_program(
+        &mut self,
+    ) -> (
+        &'ast [&'ast Statement<'ast, 'types>],
+        BumpVec<'errors, ParseError<'errors>>,
+    ) {
         let mut statements = BumpVec::new_in(self.ast_bump);
-        let mut errors = Vec::new();
+        let mut errors = BumpVec::new_in(self.errors_bump);
         if self.tokens.len() == 1 {
-            return (
-                &[],
-                vec![ParseError {
+            return (&[], {
+                let mut x = BumpVec::new_in(self.errors_bump);
+                x.push(ParseError {
                     loc: self.tokens.last().unwrap().loc.clone(),
                     kind: ParseErrorKind::EmptyInput,
-                }]
-                .into_boxed_slice(),
-            );
+                });
+                x
+            });
         }
         while !self.at_eof() {
             match self.parse_declaration() {
@@ -116,10 +137,12 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             }
         }
 
-        (statements.into_bump_slice(), errors.into_boxed_slice())
+        (statements.into_bump_slice(), errors)
     }
 
-    pub fn parse_declaration(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+    pub fn parse_declaration(
+        &mut self,
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let state = self.save_state();
         // --- Variable declaration / Named while Loop ---
         if self.consume(&[TokenType::Id]).is_some() {
@@ -159,9 +182,9 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 
     pub fn parse_variable_declaration(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
-        let name = self.expect(&[TokenType::Id], "Expected variable name")?;
-        let colon = self.expect(&[TokenType::Colon], "Expected colon")?;
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
+        let name = expect!(self, &[TokenType::Id])?;
+        let colon = expect!(self, &[TokenType::Colon])?;
 
         let mut initializer: Option<&'ast Expression<'ast>> = None;
         let mut variable_type = TypeId::Unknown;
@@ -174,10 +197,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             }
         }
 
-        self.expect(
-            &[TokenType::Semicolon],
-            "Expected semicolon after variable declaration",
-        )?;
+        expect!(self, &[TokenType::Semicolon], "after variable declaration")?;
 
         Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::VariableDeclaration(
@@ -194,27 +214,26 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 
     pub fn parse_external_declaration(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
-        let keyword = self.expect(&[TokenType::Extern], "Expected extern keyword")?;
-        let kind = self.expect(
-            &[TokenType::String],
-            "Expected external kind (for example \"C\")",
-        )?;
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
+        let keyword = expect!(self, &[TokenType::Extern])?;
+        let kind = expect!(self, &[TokenType::String])?;
 
         let kind = match kind.string.as_ref() {
             "C" => ExternKind::C,
             _ => {
                 return Err(ParseError {
                     loc: kind.loc.clone(),
-                    kind: ParseErrorKind::UnknownExternKind(String::from(kind.string.as_ref())),
+                    kind: ParseErrorKind::UnknownExternKind(
+                        self.errors_bump.alloc_str(kind.string.as_ref()),
+                    ),
                 });
             }
         };
 
-        self.expect(&[TokenType::Func], "Expected func keyword")?;
-        let name = self.expect(&[TokenType::Id], "Expected identifier")?;
+        expect!(self, &[TokenType::Func])?;
+        let name = expect!(self, &[TokenType::Id])?;
 
-        self.expect(&[TokenType::OpenParen], "Expected open parenthesis")?;
+        expect!(self, &[TokenType::OpenParen])?;
 
         // TODO : On error, we should map error into UnbalancedParens
         let mut is_variadic = false;
@@ -225,7 +244,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             res.push(expr.into());
 
             while self.consume(&[TokenType::Comma]).is_some() {
-                if let Some(_) = self.consume(&[TokenType::TripleDot]) {
+                if self.consume(&[TokenType::TripleDot]).is_some() {
                     is_variadic = true;
                     break;
                 }
@@ -234,21 +253,28 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         }
 
         let parameters: &[TypeIdCell] = res.into_bump_slice();
-        let mut message = String::from("Expected closing parenthesis.");
-        if is_variadic {
-            message += " Variadic parameters should be last in parameter list."
-        }
-        self.expect(&[TokenType::CloseParen], message.as_str())?;
+        let note = if is_variadic {
+            Some("Variadic parameters should be last in parameter list.")
+        } else {
+            None
+        };
         self.expect(
+            &[TokenType::CloseParen],
+            "after function argument declaration",
+            note,
+        )?;
+        expect!(
+            self,
             &[TokenType::Colon],
-            "Expected colon after argument list. \
-            In external functions its mandatory to provide return type of the function explicitly",
+            "after argument list",
+            "In external functions its mandatory to provide return type of the function explicitly"
         )?;
         let return_type = self.parse_type()?;
-        self.expect(
+        expect!(
+            self,
             &[TokenType::Semicolon],
-            "Expected semicolon after external function declaration. \
-        External functions can't have body",
+            "after external function declaration.",
+            "External functions can't have body"
         )?;
 
         Ok(self.ast_bump.alloc(Statement {
@@ -269,9 +295,9 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     /// func name (args) {} ...
     pub fn parse_function_declaration(
         &mut self,
-    ) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
-        let func_keyword = self.expect(&[TokenType::Func], "Expected function declaration")?;
-        let name = self.expect(&[TokenType::Id], "Expected function name")?;
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
+        let func_keyword = expect!(self, &[TokenType::Func])?;
+        let name = expect!(self, &[TokenType::Id])?;
         debug_assert!(name.kind == TokenType::Id);
         let (parameters, body, return_type) = self.parse_function()?;
 
@@ -292,21 +318,17 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     /// (args) {}
     pub fn parse_function(
         &mut self,
-    ) -> Result<
+    ) -> ParseResult<'errors,
         (
             &'ast [FunctionParameter<'ast>],
             &'ast [&'ast Statement<'ast, 'types>],
             TypeId,
         ),
-        ParseError,
     > {
-        let o_paren = self.expect(
-            &[TokenType::OpenParen],
-            "Expected opening parenthesis in function declaration",
-        )?;
+        let o_paren = expect!(self, &[TokenType::OpenParen], "in function declaration")?;
         let peek = |this: &mut Self, tk: Token| {
             this.peek_token().map_err(|mut e| {
-                e.kind = UnbalancedParens;
+                e.kind = ParseErrorKind::UnbalancedParens;
                 e.loc = tk.loc;
                 e
             })
@@ -315,8 +337,8 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         if peek(self, o_paren.clone())?.kind != TokenType::CloseParen {
             arguments = self
                 .parse_comma_separated(|this| {
-                    let id = this.expect(&[TokenType::Id], "Expected parameter name")?;
-                    this.expect(&[TokenType::Colon], "Expected colon")?;
+                    let id = expect!(this, &[TokenType::Id])?;
+                    expect!(this, &[TokenType::Colon])?;
                     let ty = this.parse_type()?;
                     Ok(FunctionParameter {
                         name: Identifier::from_token(id, this.ast_bump),
@@ -325,15 +347,12 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                     })
                 })
                 .map_err(|mut e| {
-                    e.kind = UnbalancedParens;
+                    e.kind = ParseErrorKind::UnbalancedParens;
                     e.loc = o_paren.loc;
                     e
                 })?;
         }
-        self.expect(
-            &[TokenType::CloseParen],
-            "Expected closing parenthesis after argument list",
-        )?;
+        expect!(self, &[TokenType::CloseParen], "after argument list")?;
 
         let mut return_type = TypeId::Unknown;
         if self.consume(&[TokenType::Colon]).is_some() {
@@ -347,7 +366,9 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         Ok((arguments, statements, return_type))
     }
 
-    pub fn parse_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+    pub fn parse_statement(
+        &mut self,
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         use TokenType::*;
         let state = self.save_state();
 
@@ -378,9 +399,12 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 };
 
                 let statement = self.ast_bump.alloc(Statement { kind, loc });
-                self.expect(
+
+                expect!(
+                    self,
                     &[Semicolon],
-                    &format!("expected semicolon after {name} statement"),
+                    bumpalo::format!(in self.errors_bump, "after {} statement", name)
+                        .into_bump_str()
                 )?;
                 Ok(statement)
             }
@@ -388,8 +412,10 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         }
     }
 
-    pub fn parse_if_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
-        let loc = self.expect(&[TokenType::If], "Expected if keyword")?.loc;
+    pub fn parse_if_statement(
+        &mut self,
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
+        let loc = expect!(self, &[TokenType::If])?.loc;
 
         let condition = self.parse_expression()?;
 
@@ -408,15 +434,15 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             loc,
         }))
     }
-    pub fn parse_while_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+    pub fn parse_while_statement(
+        &mut self,
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let mut name: Option<Identifier<'ast>> = None;
         if let Some(id) = self.consume(&[TokenType::Id]) {
             name = Some(Identifier::from_token(id, self.ast_bump));
-            self.expect(&[TokenType::Colon], "Expected colon after 'while' label.")?;
+            expect!(self, &[TokenType::Colon], "after 'while' label")?;
         }
-        let loc = self
-            .expect(&[TokenType::While], "Expected while keyword")?
-            .loc;
+        let loc = expect!(self, &[TokenType::While])?.loc;
 
         let condition = self.parse_expression()?;
         let body = self.parse_statement()?;
@@ -431,19 +457,16 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         }))
     }
 
-    pub fn parse_return_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
-        let loc = self
-            .expect(&[TokenType::Return], "Expected return keyword")?
-            .loc;
+    pub fn parse_return_statement(
+        &mut self,
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
+        let loc = expect!(self, &[TokenType::Return])?.loc;
         let mut val: Option<&'ast Expression<'ast>> = None;
         if self.peek_token()?.kind != TokenType::Semicolon {
             val = Some(self.parse_expression()?);
         }
 
-        self.expect(
-            &[TokenType::Semicolon],
-            "Expected semicolon in return expression",
-        )?;
+        expect!(self, &[TokenType::Semicolon], "in return expression")?;
 
         Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::Return(val),
@@ -451,12 +474,11 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         }))
     }
 
-    pub fn parse_block_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+    pub fn parse_block_statement(
+        &mut self,
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let mut statements = BumpVec::new_in(self.ast_bump);
-        let left_brace = self.expect(
-            &[TokenType::OpenBrace],
-            "Expected opening brace in block statement",
-        )?;
+        let left_brace = expect!(self, &[TokenType::OpenBrace], "in block statement")?;
 
         while !self.at_eof() && self.peek_token()?.kind != TokenType::CloseBrace {
             let statement = self.parse_declaration()?;
@@ -476,22 +498,24 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         }))
     }
 
-    fn parse_expression_statement(&mut self) -> Result<&'ast Statement<'ast, 'types>, ParseError> {
+    fn parse_expression_statement(
+        &mut self,
+    ) -> ParseResult<'errors, &'ast Statement<'ast, 'types>> {
         let loc = self.peek_token()?.loc;
         let expr = self.parse_expression()?;
-        self.expect(&[TokenType::Semicolon], "Expected ';' after expression")?;
+        expect!(self, &[TokenType::Semicolon], "after expression")?;
         Ok(self.ast_bump.alloc(Statement {
             kind: StatementKind::ExpressionStatement(expr),
             loc,
         }))
     }
 
-    pub fn parse_expression(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
+    pub fn parse_expression(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         self.parse_assignment()
     }
 
-    pub fn parse_type(&mut self) -> Result<TypeId, ParseError> {
-        let name = self.expect(&[TokenType::Id], "Expected type name")?;
+    pub fn parse_type(&mut self) -> ParseResult<'errors, TypeId> {
+        let name = expect!(self, &[TokenType::Id])?;
 
         let mut ty = match name.string.as_ref() {
             "int" => Ok(TypeId::from_basic(BasicType::Int64)),
@@ -499,7 +523,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             "bool" => Ok(TypeId::from_basic(BasicType::Bool)),
             "char_ptr" => Ok(TypeId::from_basic(BasicType::CharPtr)),
             _ => Err(ParseError {
-                kind: UnknownType(String::from(name.string.as_ref())),
+                kind: ParseErrorKind::UnknownType(self.errors_bump.alloc_str(name.string.as_ref())),
                 loc: name.loc.clone(),
             }),
         }?;
@@ -509,14 +533,14 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         Ok(ty)
     }
 
-    fn parse_assignment(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
+    fn parse_assignment(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         let target = self.parse_binop(0)?;
         if let Some(tk) = self.consume(&[TokenType::Equal]) {
             let value = self.parse_assignment()?;
             if !target.kind.lvalue() {
                 return Err(ParseError {
                     loc: target.loc.clone(),
-                    kind: InvalidAssignment(target.kind.humanize()),
+                    kind: ParseErrorKind::InvalidAssignment(target.kind.humanize()),
                 });
             }
 
@@ -533,7 +557,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     pub(crate) fn parse_binop(
         &mut self,
         precedence: i32,
-    ) -> Result<&'ast mut Expression<'ast>, ParseError> {
+    ) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         if precedence >= binop::MAX_PRECEDENCE {
             return self.parse_unary();
         }
@@ -561,11 +585,15 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         Ok(left)
     }
 
-    fn parse_unary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
-        if let Some(tok) = self.consume(&[TokenType::Minus, TokenType::Star, TokenType::Ampersand, TokenType::Bang])
-        {
+    fn parse_unary(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
+        if let Some(tok) = self.consume(&[
+            TokenType::Minus,
+            TokenType::Star,
+            TokenType::Ampersand,
+            TokenType::Bang,
+        ]) {
             let item = self.parse_unary()?;
-            let operator =  match tok.kind {
+            let operator = match tok.kind {
                 TokenType::Star => UnaryKind::Dereferencing,
                 TokenType::Minus => UnaryKind::Negation,
                 TokenType::Ampersand => {
@@ -576,16 +604,13 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                         });
                     }
                     UnaryKind::AddressOf
-                },
+                }
                 TokenType::Bang => UnaryKind::Not,
                 _ => unreachable!(),
             };
 
             return Ok(self.ast_bump.alloc(Expression {
-                kind: ExpressionKind::Unary {
-                    item,
-                    operator
-                },
+                kind: ExpressionKind::Unary { item, operator },
                 loc: tok.loc,
                 id: self.id(),
                 ty: TypeId::Unknown.into(),
@@ -595,7 +620,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         self.parse_call()
     }
 
-    fn parse_call(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
+    fn parse_call(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         let mut left = self.parse_primary()?;
         while let Some(tk) = self.consume(&[TokenType::OpenParen]) {
             left = self.ast_bump.alloc(Expression {
@@ -610,7 +635,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
             if self.consume(&[TokenType::CloseParen]).is_none() {
                 return Err(ParseError {
                     loc: tk.loc,
-                    kind: UnbalancedParens,
+                    kind: ParseErrorKind::UnbalancedParens,
                 });
             }
         }
@@ -618,7 +643,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         Ok(left)
     }
 
-    fn parse_args(&mut self) -> Result<&'ast [*mut Expression<'ast>], ParseError> {
+    fn parse_args(&mut self) -> ParseResult<'errors, &'ast [*mut Expression<'ast>]> {
         let mut args = BumpVec::<*mut Expression<'ast>>::new_in(self.ast_bump);
         if self.peek_token()?.kind != TokenType::CloseParen {
             let comma_separated = self.parse_comma_separated::<*mut Expression<'ast>>(|this| {
@@ -629,40 +654,34 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         Ok(args.into_bump_slice())
     }
 
-    fn parse_primary(&mut self) -> Result<&'ast mut Expression<'ast>, ParseError> {
+    fn parse_primary(&mut self) -> ParseResult<'errors, &'ast mut Expression<'ast>> {
         use TokenType::*;
         let token = self.peek_token()?;
         self.skip_token();
         let loc = token.loc.clone();
         let id = self.id();
         match token.kind {
-            Id => {
-                Ok(self.ast_bump.alloc(Expression {
-                    loc,
-                    kind: VariableAccess(
-                        Identifier::from_token(token, self.ast_bump),
-                        RefId::unknown(),
-                    ),
-                    id,
-                    ty: TypeId::Unknown.into(),
-                }))
-            }
-            Integer => {
-                Ok(self.construct_literal(
-                    AstLiteral::Integral(token.integer),
-                    loc,
-                    id,
-                    TypeId::from_basic(BasicType::Int64),
-                ))
-            }
-            Double => {
-                Ok(self.construct_literal(
-                    AstLiteral::FloatingPoint(token.double),
-                    loc,
-                    id,
-                    TypeId::from_basic(BasicType::Float64),
-                ))
-            }
+            Id => Ok(self.ast_bump.alloc(Expression {
+                loc,
+                kind: VariableAccess(
+                    Identifier::from_token(token, self.ast_bump),
+                    RefId::unknown(),
+                ),
+                id,
+                ty: TypeId::Unknown.into(),
+            })),
+            Integer => Ok(self.construct_literal(
+                AstLiteral::Integral(token.integer),
+                loc,
+                id,
+                TypeId::from_basic(BasicType::Int64),
+            )),
+            Double => Ok(self.construct_literal(
+                AstLiteral::FloatingPoint(token.double),
+                loc,
+                id,
+                TypeId::from_basic(BasicType::Float64),
+            )),
             boolean if boolean == True || boolean == False => {
                 let bool = match boolean {
                     False => false,
@@ -689,8 +708,8 @@ impl<'ast, 'types> Parser<'ast, 'types> {
                 let expr = self.parse_expression()?;
                 if self.consume(&[CloseParen]).is_none() {
                     return Err(ParseError {
-                        loc: loc,
-                        kind: UnbalancedParens,
+                        loc,
+                        kind: ParseErrorKind::UnbalancedParens,
                     });
                 }
                 Ok(expr)
@@ -766,12 +785,11 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     }
 }
 /// Helper methods for parsing
-impl<'ast, 'types> Parser<'ast, 'types> {
-    #[allow(clippy::result_large_err)]
+impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     pub fn parse_comma_separated<T>(
         &mut self,
-        mut single_item: impl FnMut(&mut Self) -> Result<T, ParseError>,
-    ) -> Result<&'ast [T], ParseError> {
+        mut single_item: impl FnMut(&mut Self) -> ParseResult<'errors, T>,
+    ) -> ParseResult<'errors, &'ast [T]> {
         let mut res = BumpVec::new_in(self.ast_bump);
         let expr = single_item(self)?;
         res.push(expr);
@@ -784,12 +802,11 @@ impl<'ast, 'types> Parser<'ast, 'types> {
 }
 
 // Machinery for parser.
-#[allow(clippy::result_large_err)]
-impl<'ast, 'types> Parser<'ast, 'types> {
+impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
     pub fn count_symbols(&self) -> usize {
         self.symbols_count
     }
-    fn next_token(&mut self) -> Result<Token, ParseError> {
+    fn next_token(&mut self) -> ParseResult<'errors, Token> {
         let tk = self
             .tokens
             .get(self.current)
@@ -804,7 +821,7 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     pub fn skip_token(&mut self) {
         let _ = self.next_token();
     }
-    pub fn peek_token(&self) -> Result<Token, ParseError> {
+    pub fn peek_token(&self) -> ParseResult<'errors, Token> {
         let r = self.tokens.get(self.current);
         if let Some(token) = r {
             return Ok(token.clone());
@@ -838,7 +855,12 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         None
     }
 
-    pub fn expect(&mut self, expected: &[TokenType], message: &str) -> Result<Token, ParseError> {
+    pub fn expect(
+        &mut self,
+        expected: &[TokenType],
+        r#where: &'errors str,
+        note: Option<&'errors str>,
+    ) -> ParseResult<'errors, Token> {
         if let Some(tk) = self.consume(expected) {
             return Ok(tk);
         }
@@ -846,10 +868,11 @@ impl<'ast, 'types> Parser<'ast, 'types> {
         let token = self.next_token().unwrap_or(last_token_in_input.clone());
         Err(ParseError {
             loc: self.peek_token().unwrap_or(last_token_in_input).loc,
-            kind: UnexpectedToken {
-                expected: Some(expected.to_vec().into_boxed_slice()),
-                got: token,
-                message: message.to_string(),
+            kind: ParseErrorKind::UnexpectedToken {
+                expected: self.errors_bump.alloc_slice_clone(expected),
+                got: token.kind,
+                note,
+                r#where,
             },
         })
     }
@@ -867,71 +890,3 @@ impl<'ast, 'types> Parser<'ast, 'types> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct ParseError {
-    pub loc: SourceLocation,
-    pub kind: ParseErrorKind,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ParseErrorKind {
-    UnknownType(String),
-    AtEof,
-    UnbalancedParens,
-    UnbalancedBraces,
-    InvalidAssignment(String),
-    InvalidAddressOf(String),
-    UnexpectedToken {
-        expected: Option<Box<[TokenType]>>,
-        got: Token,
-        message: String,
-    },
-    UnknownToken(Token),
-    UnknownExternKind(String),
-    EmptyInput,
-}
-
-impl CompilerError for ParseError {
-    fn location(&self) -> SourceLocation {
-        self.loc.clone()
-    }
-
-    fn message(&self) -> String {
-        use ParseErrorKind::*;
-        match &self.kind {
-            AtEof => "Nothing to parse".to_string(),
-            UnbalancedParens => "unbalanced parentheses".to_string(),
-            InvalidAssignment(name) => format!("could not assign to {}", name),
-            UnexpectedToken {
-                expected,
-                got,
-                message: msg,
-            } => {
-                msg.clone()
-                // TODO: Construct better message
-            }
-            UnbalancedBraces => "unbalanced braces".to_string(),
-            UnknownType(b) => format!("unknown type {}", b),
-            UnknownExternKind(k) => format!("unknown extern kind: \"{}\"", k),
-            UnknownToken(tk) => format!("unknown token: {tk}").to_string(),
-            EmptyInput => "empty input: nothing to parse".to_string(),
-            InvalidAddressOf(name) => format!("could not take address of {}", name),
-        }
-    }
-
-    fn note(&self) -> Option<String> {
-        use ParseErrorKind::*;
-        match &self.kind {
-            AtEof => None,
-            UnbalancedParens => Some(format!("last parenthesis located here: {}", self.loc)),
-            InvalidAssignment(_) => None,
-            UnexpectedToken { .. } => None,
-            UnbalancedBraces => Some(format!("last braces located here: {}", self.loc)),
-            UnknownType(_) => None,
-            UnknownExternKind(_) => None, // todo: maybe point out existing external kinds.
-            UnknownToken(_) => None,
-            EmptyInput => None,
-            InvalidAddressOf(_) => None,
-        }
-    }
-}

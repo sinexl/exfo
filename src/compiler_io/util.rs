@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::path::Path;
-use std::process::{Command, exit};
+use std::process::{exit, Command};
 use std::{fs, io};
 
 pub fn get_line(msg: &str) -> String {
