@@ -20,20 +20,16 @@ impl Subcommand {
             target: current_target,
         };
 
-        let args = args.collect::<Vec<_>>();
-        let mut index = 0;
-
-        while index < args.len() {
-            let arg = &args[index];
+        let mut args = args.peekable();
+        while let Some(arg) = args.peek() {
             match arg.as_ref() {
-                "--help" | "help" => {
-                    Self::print_help(program_name);
-                }
+                "--help" | "help" => Self::print_help(program_name),
                 "-t" => {
-                    index += 1;
+                    args.next();
                     if current_target != Target::x86_64_linux() {
                         fatal!("Cross-testing is only available on x86_64-linux.")
                     }
+
                     let current_choice = if let Subcommand::Check {
                         preferred_pic: _preferred_pic,
                         target,
@@ -43,45 +39,46 @@ impl Subcommand {
                     } else {
                         fatal!("error: '-t' option is only available for `check` subcommand");
                     };
-                    let Some(target) = args.get(index) else {
+
+                    let Some(target) = args.peek().cloned() else {
                         fatal!("error: no target provided: {program_name} --help");
                     };
-                    index += 1;
+                    args.next();
+
                     if target == "list" {
                         for i in TARGETS {
                             println!("\t{i}");
                         }
                         std::process::exit(0);
                     }
+
                     let target = match Target::try_from(target.as_str()) {
                         Ok(target) => target,
                         Err(()) => fatal!("error: unsupported target: `{program_name} -t list`"),
                     };
+
                     *current_choice = target;
                 }
-                "record" => {
-                    index += 1;
-                    match args.get(index) {
-                        Some(ch) if ch == "all" => {
-                            command = Subcommand::Record { all: true };
-                        }
-                        _ => {
-                            command = Subcommand::Record { all: false };
-                        }
+                "record" => match args.peek() {
+                    Some(ch) if ch == "all" => {
+                        args.next();
+                        command = Subcommand::Record { all: true };
                     }
-                    index += 1;
-                }
+                    _ => {
+                        command = Subcommand::Record { all: false };
+                    }
+                },
                 "check" => {
-                    index += 1;
-                    match args.get(index) {
+                    args.next();
+                    match args.peek() {
                         None => {
                             command = Subcommand::Check {
                                 preferred_pic: true,
                                 target: current_target,
                             };
-                            index += 1;
                         }
                         Some(str) if str == "--no-pic" => {
+                            args.next();
                             if let Subcommand::Check {
                                 preferred_pic,
                                 target: _target,
@@ -91,7 +88,6 @@ impl Subcommand {
                             } else {
                                 fatal!("`--no-pic` option is only applicable to `check` command");
                             }
-                            index += 1;
                         }
                         _ => {}
                     }
@@ -100,7 +96,7 @@ impl Subcommand {
                     fatal!(
                         "Unknown subcommand: `{str}`. Use `{program_name} help` for list of all commands"
                     );
-               }
+                }
             }
         }
 
