@@ -78,16 +78,23 @@ fn main() -> io::Result<()> {
     static_errors.resolver(errors);
     let symbols_count = parser.count_symbols();
 
+    // TODO: Currently, compiler exits if are any errors at resolution pass, which is not correct.
+    //   Ideally, Resolver and Typechecker should produce dummy-results on error, as much as possible
+    //   errors could be reported.
+    // Error reporting
+    if static_errors.len() != 0 {
+        let mut e = String::new();
+        static_errors.print(&mut e, &types).map_err(|_| io::Error::from(io::ErrorKind::Other))?;
+        eprintln!("{}", e);
+        exit(-1);
+    }
+
     let mut type_checker = Typechecker::new(&type_allocator, &error_allocator, types_ptr, symbols_count);
     let errors = type_checker.typecheck_statements(ast);
     if let Err(r) = errors {
         static_errors.typechecker(r);
     }
 
-
-    // TODO: Currently, compiler exits if are any errors at resolution pass, which is not correct.
-    //   Ideally, Resolver and Typechecker should produce dummy-results on error, as much as possible
-    //   errors could be reported.
     // Error reporting
     if static_errors.len() != 0 {
         let mut e = String::new();
