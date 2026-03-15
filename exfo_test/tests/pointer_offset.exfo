@@ -1,0 +1,47 @@
+extern "C" func printf(char_ptr, ...): void;
+
+func get_bool(a: int): bool {
+    if a == 0 return false;
+    if a == 1 return true;
+    if a == 2 return false;
+    if a == 3 return true;
+    if a == 4 return false;
+}
+func get_string(b: bool): char_ptr {
+    if b return "true";
+    return "false";
+}
+
+func main(): void {
+     printf("<-- Integer -->\n");
+     len := 10;
+     extern "C" func malloc(int): int*;
+     extern "C" func free(int*): void;
+     a := malloc(len * 8);
+     i := 0; while i < len {
+         *(a + i) = i * i;
+         i = i + 1;
+     }
+
+     i := 0; while i < len {
+         printf("(%d, %d) ", i, *(i + a));
+         i = i + 1;
+     }
+
+     free(a);
+     extern "C" func malloc(int): bool*;
+     extern "C" func free(bool*): void;
+     printf("\n<-- Boolean -->\n");
+     len := 5;
+     a := malloc(len);
+     i := 0; while i < len {
+         *(i + a) = get_bool(i);
+         i = i + 1;
+     }
+
+     i := 0; while i < len {
+         printf("(%d, %s) ", i, get_string(*(i + a)));
+         i = i + 1;
+     }
+     free(a);
+}
