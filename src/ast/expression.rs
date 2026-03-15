@@ -54,7 +54,7 @@ impl RefId {
     }
 
     pub fn get(&self) -> SymId  {
-        self.inner.get().expect("COMPILER BUG: RefId::get should never be called on initialized reference")
+        self.inner.get().expect("COMPILER BUG: RefId::get should never be called on uninitialized reference")
     }
     
     pub fn set(&self, id: SymId)  { 

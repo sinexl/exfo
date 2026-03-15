@@ -1,4 +1,4 @@
-use crate::analysis::r#type::{FunctionType, Type, TypeId};
+use crate::analysis::r#type::{FunctionType, PointerType, Type, TypeId};
 use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
@@ -8,7 +8,7 @@ use crate::ast::statement::{
 use crate::common::BumpVec;
 use crate::common::symbol_table::{CompilerEntity, SymbolTable};
 use crate::compiling::ir::binop;
-use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind};
+use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind, IntegerBinop};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
 use bumpalo::Bump;
@@ -124,113 +124,24 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
 
     pub fn compile_expression(&mut self, expression: &'ast Expression<'ast>) -> Arg<'ir> {
         match &expression.kind {
-            ExpressionKind::Binop { left, right, kind }
-                if kind.family() == BinopFamily::Logical =>
-            {
-                let size = expression.ty.get(self.types()).size();
-                assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
-                let left = self.compile_expression(left);
-                let result = self.allocate(size);
-                match kind {
-                    BinopKind::And => {
-                        /*
-                        Scheme of AND in IR that is implemented below.
-                        suppose pseudocode: res = a && b; after;
-                        generated pseudo-IR:
-                          a.
-                          if !a jump FALSE:
-                             b;
-                             res = a && b;
-                             jump out
-                          FALSE:
-                             res = false
-                          out:
-                            after;
-                        */
-                        let short_circuit = self.allocate_label();
-                        // Cases: if lhs is false, jump to do_check.
-                        self.push_opcode(Opcode::JmpIfNot {
-                            label: short_circuit,
-                            condition: left.clone(),
-                        });
-
-                        // Case 1: `a` is true, so b should be evaluated.
-                        let right = self.compile_expression(right);
-                        self.push_opcode(Opcode::Binop {
-                            left,
-                            right,
-                            result,
-                            kind: Binop::Bitwise(BitwiseBinop {
-                                kind: BitwiseKind::And,
-                                is_logical_with_short_circuit: true,
-                            }),
-                        });
-                        let out_label = self.allocate_label();
-                        self.push_opcode(Opcode::Jmp { label: out_label });
-
-                        // Case 2: `a` is false, so && is false.
-                        self.push_opcode(Opcode::Label {
-                            index: short_circuit,
-                        });
-                        self.push_opcode(Opcode::Assign {
-                            result,
-                            source: Arg::RValue(Rvalue::Bool(false)),
-                        });
-                        self.push_opcode(Opcode::Label { index: out_label });
-
-                        Arg::LValue(result)
-                    }
-                    BinopKind::Or => {
-                        /*
-                        Scheme of OR in IR:
-                        suppose pseudocode: res = a || b; after;
-                        generated pseudo-IR:
-                          a.
-                          if !a jump check
-                             res = true
-                             jump out
-                          check:
-                             b;
-                             res = a || b;
-                          out:
-                            after;
-                        */
-                        let do_check = self.allocate_label();
-                        // Cases: if lhs is false, jump to do_check.
-                        self.push_opcode(Opcode::JmpIfNot {
-                            label: do_check,
-                            condition: left.clone(),
-                        });
-                        // Case one: The lhs is true, so entire || is true.
-                        self.push_opcode(Opcode::Assign {
-                            result,
-                            source: Arg::RValue(Rvalue::Bool(true)),
-                        });
-                        let out_label = self.allocate_label();
-                        self.push_opcode(Opcode::Jmp { label: out_label });
-
-                        // Case two: The lhs is false, so rhs should be also evaluated to complete ||.
-                        self.push_opcode(Opcode::Label { index: do_check });
-                        let right = self.compile_expression(right);
-                        self.push_opcode(Opcode::Binop {
-                            left,
-                            right,
-                            result,
-                            kind: Binop::Bitwise(BitwiseBinop {
-                                kind: BitwiseKind::Or,
-                                is_logical_with_short_circuit: true,
-                            }),
-                        });
-
-                        self.push_opcode(Opcode::Label { index: out_label });
-                        Arg::LValue(result)
-                    }
-                    _ => unreachable!("Unknown binary operation"),
-                }
-            }
-
             ExpressionKind::Binop { left, right, kind } => {
                 let size = expression.ty.get(self.types()).size();
+                match kind {
+                    BinopKind::And => {
+                        assert_eq!(size, 1); // TODO: replace 1 to Platform::BoolSize or something
+                        return Arg::LValue(self.compile_logical_and(left, right));
+                    }
+                    BinopKind::Or => {
+                        assert_eq!(size, 1);
+                        return Arg::LValue(self.compile_logical_or(left, right));
+                    }
+                    _ => {
+                        if let Some((ptr, other, ty)) = Self::get_pointer(left, right, self.types())
+                        {
+                            return Arg::LValue(self.compile_pointer_offset(ptr, other, ty));
+                        }
+                    }
+                }
                 let left = self.compile_expression(left);
                 let right = self.compile_expression(right);
                 let result = self.allocate(size);
@@ -611,5 +522,167 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
         for statement in statements {
             self.compile_statement(statement);
         }
+    }
+
+    pub fn get_pointer(
+        left: &'ast Expression<'ast>,
+        right: &'ast Expression<'ast>,
+        types: &TypeCtx<'types>,
+        // If either of expressions has type pointer, return a tuple where first expression
+        // is a pointer and a second is non-pointer
+    ) -> Option<(&'ast Expression<'ast>, &'ast Expression<'ast>, PointerType)> {
+        let a_ty = left.ty.get(types);
+        let b_ty = right.ty.get(types);
+        match (a_ty, b_ty) {
+            (Type::Pointer(a), _) => Some((left, right, a.clone())),
+            (_, Type::Pointer(b)) => Some((right, left, b.clone())),
+            _ => None,
+        }
+    }
+}
+
+impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
+    pub fn compile_logical_and(
+        &mut self,
+        left: &'ast Expression<'ast>,
+        right: &'ast Expression<'ast>,
+    ) -> Lvalue {
+        let size = 1;
+        let left = self.compile_expression(left);
+        let result = self.allocate(size);
+        /*
+        Scheme of AND in IR that is implemented below.
+        suppose pseudocode: res = a && b; after;
+        generated pseudo-IR:
+          a.
+          if !a jump FALSE:
+             b;
+             res = a && b;
+             jump out
+          FALSE:
+             res = false
+          out:
+            after;
+        */
+
+        let short_circuit = self.allocate_label();
+        // Cases: if lhs is false, jump to do_check.
+        self.push_opcode(Opcode::JmpIfNot {
+            label: short_circuit,
+            condition: left.clone(),
+        });
+
+        // Case 1: `a` is true, so b should be evaluated.
+        let right = self.compile_expression(right);
+        self.push_opcode(Opcode::Binop {
+            left,
+            right,
+            result,
+            kind: Binop::Bitwise(BitwiseBinop {
+                kind: BitwiseKind::And,
+                is_logical_with_short_circuit: true,
+            }),
+        });
+        let out_label = self.allocate_label();
+        self.push_opcode(Opcode::Jmp { label: out_label });
+
+        // Case 2: `a` is false, so && is false.
+        self.push_opcode(Opcode::Label {
+            index: short_circuit,
+        });
+        self.push_opcode(Opcode::Assign {
+            result,
+            source: Arg::RValue(Rvalue::Bool(false)),
+        });
+        self.push_opcode(Opcode::Label { index: out_label });
+
+        result
+    }
+    pub fn compile_logical_or(
+        &mut self,
+        left: &'ast Expression<'ast>,
+        right: &'ast Expression<'ast>,
+    ) -> Lvalue {
+        let size = 1;
+        let left = self.compile_expression(left);
+        let result = self.allocate(size);
+        /*
+        Scheme of OR in IR:
+        suppose pseudocode: res = a || b; after;
+        generated pseudo-IR:
+          a.
+          if !a jump check
+             res = true
+             jump out
+          check:
+             b;
+             res = a || b;
+          out:
+            after;
+        */
+        let do_check = self.allocate_label();
+        // Cases: if lhs is false, jump to do_check.
+        self.push_opcode(Opcode::JmpIfNot {
+            label: do_check,
+            condition: left.clone(),
+        });
+        // Case one: The lhs is true, so entire || is true.
+        self.push_opcode(Opcode::Assign {
+            result,
+            source: Arg::RValue(Rvalue::Bool(true)),
+        });
+        let out_label = self.allocate_label();
+        self.push_opcode(Opcode::Jmp { label: out_label });
+
+        // Case two: The lhs is false, so rhs should be also evaluated to complete ||.
+        self.push_opcode(Opcode::Label { index: do_check });
+        let right = self.compile_expression(right);
+        self.push_opcode(Opcode::Binop {
+            left,
+            right,
+            result,
+            kind: Binop::Bitwise(BitwiseBinop {
+                kind: BitwiseKind::Or,
+                is_logical_with_short_circuit: true,
+            }),
+        });
+
+        self.push_opcode(Opcode::Label { index: out_label });
+        result
+    }
+    pub fn compile_pointer_offset(
+        &mut self,
+        ptr: &'ast Expression<'ast>,
+        offset: &'ast Expression<'ast>,
+        ty: PointerType,
+    ) -> Lvalue {
+        let ptr = self.compile_expression(ptr);
+        let offset = self.compile_expression(offset);
+        let ptr_size = 8;
+        assert_eq!(ptr.size(), ptr_size);
+        let result = self.allocate(ptr_size);
+
+        // Size of value pointed by pointer
+        let inner_size = ty.inner.get(self.types()).size();
+        if  inner_size > 1 {
+            self.push_opcode(Opcode::Binop {
+                left: offset.clone(),
+                right: Arg::RValue(Rvalue::Int64 {
+                    bits: inner_size.to_le_bytes(),
+                    signed: true,
+                }),
+                result,
+                // TODO: Perform sign extension when the index is 32/16-bit value.
+                //  Maybe even put pointer arithmetic as a separate instruction in the IR.
+                kind: IntegerBinop::from_ast(true, 8, BinopKind::Multiplication),
+            });
+        }
+        self.push_opcode(Opcode::Binop {
+            left: ptr,
+            right: if inner_size > 1 { Arg::LValue(result) } else { offset },
+            result,
+            kind: IntegerBinop::from_ast(true, 8, BinopKind::Addition),
+        });
+        result
     }
 }

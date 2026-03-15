@@ -84,7 +84,6 @@ fn main() -> io::Result<()> {
         static_errors.typechecker(r);
     }
 
-    let compiler_entities = type_checker.symbols.transform();
 
     // TODO: Currently, compiler exits if are any errors at resolution pass, which is not correct.
     //   Ideally, Resolver and Typechecker should produce dummy-results on error, as much as possible
@@ -96,6 +95,8 @@ fn main() -> io::Result<()> {
         eprintln!("{}", e);
         exit(-1);
     }
+
+    let compiler_entities = type_checker.symbols.transform();
 
     // Compilation to IR.
     let mut compiler = Compiler::new(&ir_allocator, types_ptr, compiler_entities);

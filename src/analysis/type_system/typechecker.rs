@@ -253,7 +253,17 @@ impl<'errors, 'ast, 'types> Typechecker<'types, 'errors> {
                 self.typecheck_expression(right)?;
                 let left_id = left.ty.clone().inner();
                 let right_id = right.ty.clone().inner();
-                let ty = self.typecheck_binop(left_id, right_id, kind, expression.loc.clone())?;
+
+
+                let left_ty = left_id.get(self.types());
+                let right_ty = right_id.get(self.types());
+
+                let ty = match (left_ty, right_ty) {
+                    (Type::Pointer(_), Type::Basic(BasicType::Int64)) => left_id,
+                    (Type::Basic(BasicType::Int64), Type::Pointer(_)) => right_id,
+                    _ => self.typecheck_binop(left_id, right_id, kind, expression.loc.clone())?,
+                };
+
                 expression.ty.set(ty);
             }
             ExpressionKind::Unary { item, operator } => {

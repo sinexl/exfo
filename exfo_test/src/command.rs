@@ -59,15 +59,18 @@ impl Subcommand {
 
                     *current_choice = target;
                 }
-                "record" => match args.peek() {
-                    Some(ch) if ch == "all" => {
-                        args.next();
-                        command = Subcommand::Record { all: true };
+                "record" => {
+                    args.next();
+                    match args.peek() {
+                        Some(ch) if ch == "all" => {
+                            args.next();
+                            command = Subcommand::Record { all: true };
+                        }
+                        _ => {
+                            command = Subcommand::Record { all: false };
+                        }
                     }
-                    _ => {
-                        command = Subcommand::Record { all: false };
-                    }
-                },
+                }
                 "check" => {
                     args.next();
                     match args.peek() {
