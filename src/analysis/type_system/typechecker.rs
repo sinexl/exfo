@@ -1,6 +1,4 @@
-use crate::analysis::r#type::{
-    BasicType, DisplayType, FunctionType, PointerType, Type, TypeId, TypeIdCell,
-};
+use crate::analysis::r#type::{BasicType, DisplayType, FunctionType, PointerType, Type, TypeId, TypeIdCell, INTEGRAL_TYPES};
 use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast;
 use crate::ast::binop::BinopKind;
@@ -77,26 +75,30 @@ impl<'types, 'errors> Typechecker<'types, 'errors> {
         use UnaryKind::*;
         use ast::binop::constants;
 
-        let int = Int64.id();
         let bool = Bool.id();
         let type_commutative = true;
+
         for kind in constants::ARITHMETIC_BINOPS.iter().copied() {
-            self.binary_operators.push(BinaryOperator {
-                kind,
-                x: int,
-                y: int,
-                result: int,
-                type_commutative,
-            });
+            for number_type in INTEGRAL_TYPES {
+                self.binary_operators.push(BinaryOperator {
+                    kind,
+                    x: number_type.id(),
+                    y: number_type.id(),
+                    result: number_type.id(),
+                    type_commutative,
+                });
+            }
         }
         for kind in constants::COMPARISON_BINOPS.iter().copied() {
-            self.binary_operators.push(BinaryOperator {
-                kind,
-                x: int,
-                y: int,
-                result: bool,
-                type_commutative,
-            });
+            for number_type in INTEGRAL_TYPES {
+                self.binary_operators.push(BinaryOperator {
+                    kind,
+                    x: number_type.id(),
+                    y: number_type.id(),
+                    result: bool,
+                    type_commutative,
+                });
+            }
         }
 
         for kind in constants::LOGICAL_BINOPS
@@ -114,11 +116,13 @@ impl<'types, 'errors> Typechecker<'types, 'errors> {
         }
 
         // Unary operations
-        self.unary_operators.push(UnaryOperator {
-            kind: Negation,
-            x: int,
-            result: int,
-        });
+        for number_type in INTEGRAL_TYPES {
+            self.unary_operators.push(UnaryOperator {
+                kind: Negation,
+                x: number_type.id(),
+                result: number_type.id(),
+            });
+        }
         self.unary_operators.push(UnaryOperator {
             kind: Not,
             x: bool,
@@ -259,8 +263,9 @@ impl<'errors, 'ast, 'types> Typechecker<'types, 'errors> {
                 let right_ty = right_id.get(self.types());
 
                 let ty = match (left_ty, right_ty) {
-                    (Type::Pointer(_), Type::Basic(BasicType::Int64)) => left_id,
-                    (Type::Basic(BasicType::Int64), Type::Pointer(_)) => right_id,
+                    // TODO: Offsets of i32
+                    (Type::Pointer(_), Type::Basic(BasicType::Int64_)) => left_id,
+                    (Type::Basic(BasicType::Int64_), Type::Pointer(_)) => right_id,
                     _ => self.typecheck_binop(left_id, right_id, kind, expression.loc.clone())?,
                 };
 

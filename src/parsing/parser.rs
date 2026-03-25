@@ -518,7 +518,8 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
         let name = expect!(self, &[TokenType::Id])?;
 
         let mut ty = match name.string.as_ref() {
-            "int" => Ok(TypeId::from_basic(BasicType::Int64)),
+            "i32" => Ok(TypeId::from_basic(BasicType::Int32)),
+            "i64" => Ok(TypeId::from_basic(BasicType::Int64_)),
             "void" => Ok(TypeId::from_basic(BasicType::Void)),
             "bool" => Ok(TypeId::from_basic(BasicType::Bool)),
             "char_ptr" => Ok(TypeId::from_basic(BasicType::CharPtr)),
@@ -674,7 +675,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
                 AstLiteral::Integral(token.integer),
                 loc,
                 id,
-                TypeId::from_basic(BasicType::Int64),
+                TypeId::from_basic(BasicType::Int32),
             )),
             Double => Ok(self.construct_literal(
                 AstLiteral::FloatingPoint(token.double),

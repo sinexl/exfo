@@ -1,6 +1,6 @@
 extern "C" func printf(char_ptr, ...): void;
 
-func main(): int {
+func main(): i32 {
     a := 2;
     b := 3;
     c := 4;

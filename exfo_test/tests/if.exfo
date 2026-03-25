@@ -5,7 +5,7 @@ func side_true(): bool {
     return true;
 }
 
-func main(): int {
+func main(): i32 {
 
     puts("------------");
     puts("Basic cases: expect: then 2, else 3, outer, if.else.if 4.1.1");

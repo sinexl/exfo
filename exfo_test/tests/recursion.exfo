@@ -1,12 +1,12 @@
 extern "C" func printf(char_ptr, ...): void;
 extern "C" func puts(char_ptr): void;
 
-func factorial(n: int): int {
+func factorial(n: i32): i32 {
     if n == 0 return 1;
     return n * factorial(n - 1);
 }
 
-func fib(n: int): int {
+func fib(n: i32): i32 {
     if n == 0 return 0;
     if n == 1 return 1;
 
@@ -14,26 +14,26 @@ func fib(n: int): int {
 
 }
 
-func hanoi(n: int): int {
+func hanoi(n: i32): i32 {
     if n == 1 return 1;
     return 2 * hanoi (n - 1) + 1;
 }
 
 
 // TODO: Mutually recursive functions. Either would require resolver work or implementing some forward declaration
-// func is_even(n: int): bool {
+// func is_even(n: i32): bool {
 //     if n == 0 return true;
 //     else return is_odd(n - 1);
 // }
 
-// func is_odd(n: int): bool {
+// func is_odd(n: i32): bool {
 //     if n == 0 return false;
 //     else return is_even(n - 1);
 // }
 
 
 
-func main(): int {
+func main(): i32 {
     puts("< --- Basic: Fibonacci --- >");
     printf("fib(7): %d (Expected: 13)\n", fib(7));
 

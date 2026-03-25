@@ -1,4 +1,4 @@
-extern "C" func memcmp(int*, int*, int): int;
+extern "C" func memcmp(int*, int*, i64): i32;
 extern "C" func printf(char_ptr, ...): void;
 
 func get_string(a: bool): char_ptr {
@@ -29,7 +29,7 @@ func test_ordering(): void {
     }
 }
 
-func main(): int {
+func main(): i32 {
     test_ordering();
 
     return 0;

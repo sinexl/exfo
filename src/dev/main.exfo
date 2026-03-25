@@ -1,52 +1,33 @@
 extern "C" func printf(char_ptr, ...): void;
 
-func get_bool(a: int): bool {
-    if a == 0 return false;
-    if a == 1 return true;
-    if a == 2 return false;
-    if a == 3 return true;
-    if a == 4 return false;
-}
-func get_string(b: bool): char_ptr {
-    if b return "true";
+func to_string(a: bool): char_ptr {
+    if a return "true";
     return "false";
 }
 
-func main(): void {
-     printf("<-- Integer -->\n");
-     len := 10;
-     extern "C" func malloc(int): int*;
-     a := malloc(len * 8);
-     i := 0; while i < len {
-         *(a + i) = i;
-         i = i + 1;
-     }
+// Copy of scoping example
+func main(): i32 {
+    a := 1;
+    printf("before shadowing: a = %d\n", a);
+    a := a + 1;
+    printf("after shadowing:  a = %d (a is still integer)\n", a); // prints "2"
 
-     i := 0; while i < len {
-         printf("a[%d] = %d\n", i, *(i + a));
-         i = i + 1;
-     }
+    a := false;
+    printf("after shadowing:  a = %s (a is boolean now)\n", to_string(a));  // prints "false"
 
-     free(a);
-     extern "C" func malloc(int): bool*;
-     extern "C" func free(bool*): void;
-     printf("<-- Boolean -->\n");
-     len := 5;
-     a := malloc(len);
-     i := 0; while i < len {
-         *(i + a) = get_bool(i);
-         i = i + 1;
-     }
+    a := 2;
+    a = a + 1;
+    printf("after mutation & shadowing: a = %d\n", a);
 
-     i := 0; while i < len {
-         printf("a[%d] = %s\n", i, get_string(*(i + a)));
-         i = i + 1;
-     }
-     free(a);
+    b := 10;
+    c := 15;
+    printf("Outer scope: b = %d, c = %d\n", b, c);
+    {
+        b := b + 1;
+        c = c * c;
+        printf("Inner scope: b = %d, c = %d\n", b, c);
+    }
+    printf("Outer scope: b = %d, c = %d (b left unchanged)\n", b, c);
 
-
-
-
-
+    return 0;
 }
-

@@ -5,7 +5,7 @@ func get_string(a: bool): char_ptr {
     return "false";
 }
 
-func main(): int {
+func main(): i32 {
     a := true;
     printf("true  = %5s, !true  = %5s, !!true  = %5s\n", get_string(a), get_string(!a), get_string(!!a));
     a = !a;

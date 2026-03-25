@@ -1,12 +1,12 @@
 extern "C" func printf(char_ptr, ...): void;
-extern "C" func memcmp(bool*, bool*, int): int;
+extern "C" func memcmp(bool*, bool*, i64): i32;
 func side(b: bool, message: char_ptr): bool {
     printf("%s\n", message);
     return b;
 }
 
 
-func to_bool(a: int): bool {
+func to_bool(a: i32): bool {
     if a == 0 return false;
     return true;
 }
@@ -18,7 +18,7 @@ func get_string(a: bool): char_ptr {
 
 
 // This test is meta program-ish but i think it should be like this.
-func main(): int {
+func main(): i32 {
     never := "YOU SHOULD NEVER SEE THIS!";
     always := "you should see this";
     True := true;

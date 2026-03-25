@@ -1,6 +1,6 @@
 use crate::analysis::type_system::type_context::TypeCtx;
-use crate::common::identifier::Identifier;
 use crate::common::Join;
+use crate::common::identifier::Identifier;
 use std::cell::Cell;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -21,7 +21,9 @@ pub enum Type<'types> {
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub enum BasicType {
     Void,
-    Int64,
+    Int32,
+    Int64_,
+    Float32,
     Float64,
     Bool,
     CharPtr,
@@ -33,11 +35,15 @@ impl BasicType {
 }
 pub const BASIC_TYPES: &[BasicType] = &[
     BasicType::Void,
-    BasicType::Int64,
+    BasicType::Int64_,
+    BasicType::Int32,
+    BasicType::Float32,
     BasicType::Float64,
     BasicType::Bool,
     BasicType::CharPtr,
 ];
+
+pub const INTEGRAL_TYPES: &[BasicType] = &[BasicType::Int64_, BasicType::Int32];
 
 #[derive(PartialEq, Debug)]
 pub struct UserType<'types> {
@@ -51,7 +57,7 @@ pub struct FunctionType<'types> {
     pub parameters: &'types [TypeIdCell],
     pub is_variadic: bool,
     // in exfo, each function has different type even if the signatures are the same.
-    pub name: Identifier<'types>
+    pub name: Identifier<'types>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -155,8 +161,10 @@ impl<'ast> Display for DisplayType<'ast> {
                         BasicType::Void => write!(f, "void")?,
                         BasicType::Bool => write!(f, "bool")?,
                         BasicType::CharPtr => write!(f, "char_ptr")?,
-                        BasicType::Int64 => write!(f, "int64")?,
-                        BasicType::Float64 => write!(f, "float64")?,
+                        BasicType::Int32 => write!(f, "i32")?,
+                        BasicType::Int64_ => write!(f, "i64")?,
+                        BasicType::Float32 => write!(f, "f32")?,
+                        BasicType::Float64 => write!(f, "f64")?,
                     },
                     Type::Function(fun) => {
                         write!(
@@ -189,7 +197,9 @@ impl<'types> Type<'types> {
         match self {
             Type::Basic(primitive) => match primitive {
                 BasicType::Void => 0,
-                BasicType::Int64 => 8,
+                BasicType::Int32 => 4,
+                BasicType::Int64_ => 8,
+                BasicType::Float32 => 4,
                 BasicType::Float64 => 8,
                 BasicType::Bool => 1,
                 BasicType::CharPtr => 8,

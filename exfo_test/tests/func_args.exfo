@@ -10,18 +10,18 @@ func void(): void {
 }
 
 func reading(
-    _0: int,
-    _1: int*,
+    _0: i32,
+    _1: i32*,
     _2: bool,
     _3: bool*,
     _4: void,
-    _5: int,
-    _6: int*,
+    _5: i32,
+    _6: i32*,
     _7: void,
     _8: bool,
     _9: bool*,
-    _10: int,
-    _11: int*
+    _10: i32,
+    _11: i32*
 ): void {
     // "Spill" all (non-void) arguments onto the stack
     r0 := _0; r1 := _1; r2 := _2; r3 := _3;
@@ -59,7 +59,7 @@ func reading(
     printf("    r8=%5s   , r9=<ptr>(%5s),    r10=%3d,        r11=<ptr>(%3d)\n", get_string(r8), get_string(*r9), r10, *r11);
 }
 
-func main(): int {
+func main(): i32 {
     f := false; tt := true;
     a := 1; b := 6; c := 11;
 

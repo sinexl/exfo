@@ -1,20 +1,20 @@
 extern "C" func printf(char_ptr, ...): void;
 
-func set_value(p: int*, value: int): void {
+func set_value(p: i32*, value: i32): void {
     *p = value;
 }
 
-func set_pointer(pp: int**, new_target: int*): void {
+func set_pointer(pp: i32**, new_target: i32*): void {
     *pp = new_target;
 }
 
-func swap_ptrs(pp1: int**, pp2: int**): void {
+func swap_ptrs(pp1: i32**, pp2: i32**): void {
     temp := *pp1;
     *pp1 = *pp2;
     *pp2 = temp;
 }
 
-func main(): int {
+func main(): i32 {
     a := 111;
     b := 222;
 

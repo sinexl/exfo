@@ -1,5 +1,5 @@
 extern "C" func printf(char_ptr, ...): void;
-extern "C" func memcmp(bool*, bool*, int): int;
+extern "C" func memcmp(bool*, bool*, i64): i32;
 
 
 // XNOR Function. Note ((A XNOR B) == true) <=> (A == B) for booleans
@@ -19,13 +19,13 @@ func get_string(a: bool): char_ptr {
     else return "false";
 }
 
-func to_bool(a: int): bool {
+func to_bool(a: i32): bool {
     if a == 0 return false;
     else return true;
 }
 
 
-func main(): int {
+func main(): i32 {
     printf("< --- XNOR \t\t\t\t\t XOR --- >\n");
     i := 0;
     while i <= 1 {

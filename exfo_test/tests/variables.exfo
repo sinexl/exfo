@@ -6,7 +6,7 @@ func to_string(a: bool): char_ptr {
 }
 
 // Copy of scoping example
-func main(): int {
+func main(): i32 {
     a := 1;
     printf("before shadowing: a = %d\n", a);
     a := a + 1;

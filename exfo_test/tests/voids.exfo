@@ -2,7 +2,7 @@ func void(): void {
     return;
 }
 
-func main(): int {
+func main(): i32 {
     a := void();
     b := void();
     a = b;

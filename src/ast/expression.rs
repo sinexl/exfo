@@ -98,7 +98,7 @@ impl ExpressionKind<'_> {
     pub fn lvalue(&self) -> bool {
         match self {
             ExpressionKind::Assignment { .. } => true,
-            ExpressionKind::VariableAccess(_, ..) => true,
+            ExpressionKind::VariableAccess(..) => true,
             ExpressionKind::Binop { .. } => false,
             ExpressionKind::Unary { operator, ..} =>
                 match operator {
@@ -116,7 +116,7 @@ impl ExpressionKind<'_> {
             ExpressionKind::Unary { .. } => "unary operation",
             ExpressionKind::Assignment { .. } => "assignment",
             ExpressionKind::Literal(_) => "literal",
-            ExpressionKind::VariableAccess(_, ..) => "variable access",
+            ExpressionKind::VariableAccess(..) => "variable access",
             ExpressionKind::FunctionCall { .. } => "function call",
         }
     }
@@ -157,20 +157,6 @@ pub enum AstLiteral<'a> {
     String(&'a str),
 }
 impl Eq for AstLiteral<'_> {}
-
-impl Hash for AstLiteral<'_> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            AstLiteral::Integral(i) => i.hash(state),
-            //  NOTE. It's unclear how to approach this.
-            // I guess, we will only care for structural identity, not mathematical one.
-            // So -0.0 and 0.0 will be considered "distinct", and NaN will be equal to NaN
-            AstLiteral::FloatingPoint(f) => f.to_bits().hash(state),
-            AstLiteral::Boolean(b) => b.hash(state),
-            AstLiteral::String(s) => s.hash(state),
-        }
-    }
-}
 
 impl<'a> Display for AstLiteral<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

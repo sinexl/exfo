@@ -1,6 +1,6 @@
 extern "C" func puts(char_ptr): void;
 extern "C" func printf(char_ptr, ...): void;
-func main(): int {
+func main(): i32 {
     puts("< --- Basic Case: no iterations. --- >");
     puts("expect: after");
     while false {
