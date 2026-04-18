@@ -1,4 +1,3 @@
-extern "C" func memcmp(int*, int*, i64): i32;
 extern "C" func printf(char_ptr, ...): void;
 
 func get_string(a: bool): char_ptr {

@@ -519,7 +519,7 @@ impl<'ast, 'types, 'errors> Parser<'ast, 'types, 'errors> {
 
         let mut ty = match name.string.as_ref() {
             "i32" => Ok(TypeId::from_basic(BasicType::Int32)),
-            "i64" => Ok(TypeId::from_basic(BasicType::Int64_)),
+            "i64" => Ok(TypeId::from_basic(BasicType::Int64)),
             "void" => Ok(TypeId::from_basic(BasicType::Void)),
             "bool" => Ok(TypeId::from_basic(BasicType::Bool)),
             "char_ptr" => Ok(TypeId::from_basic(BasicType::CharPtr)),

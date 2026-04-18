@@ -98,7 +98,7 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::AddressOf { result, source } => writeln!(f, "{tab}{result} = &{source}")?,
         Opcode::Store { result, source } => writeln!(f, "{tab}*{result} = {source}")?,
         Opcode::Load { result, source } => writeln!(f, "{tab}{result} = *{source}")?,
-        Opcode::Not { result, item } =>  writeln!(f, "{tab}{result} = !{item}")?,
+        Opcode::Not { result, item } => writeln!(f, "{tab}{result} = !{item}")?,
     }
 
     Ok(())
@@ -117,6 +117,13 @@ pub fn print_rvalue(rvalue: &Rvalue, f: &mut impl Write) -> std::fmt::Result {
             let literal = match *signed {
                 true => i64::from_le_bytes(*bits).to_string(),
                 false => u64::from_le_bytes(*bits).to_string(),
+            };
+            write!(f, "{literal}")?;
+        }
+        Rvalue::Int32 { bits, signed } => {
+            let literal = match *signed {
+                true => i32::from_le_bytes(*bits).to_string(),
+                false => u32::from_le_bytes(*bits).to_string(),
             };
             write!(f, "{literal}")?;
         }

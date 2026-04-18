@@ -81,6 +81,7 @@ impl Rvalue<'_> {
             Rvalue::Int64 { .. } => 8,
             Rvalue::String { .. } => 8,
             Rvalue::ExternalFunction(_) => 8,
+            Rvalue::Int32 { .. } => 4,
         }
     }
     // needed because strings differ from other args depending on PIC/non-pic, just to make code simpler.
@@ -110,6 +111,7 @@ pub enum Rvalue<'ir> {
 
     Bool(bool),
     Int64 { bits: [u8; 8], signed: bool },
+    Int32 { bits: [u8; 4], signed: bool },
     String { index: usize }, // Index is in ir.strings
     ExternalFunction(Identifier<'ir>),
 }

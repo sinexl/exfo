@@ -3,19 +3,19 @@ mod util;
 use crate::command::Subcommand;
 use crate::util::colors::*;
 use crate::util::{DisplayBox, ensure_compiler_exists, remove_dir_contents};
-use serde::{Deserialize, Serialize};
-use similar::{DiffableStr, TextDiff};
-use std::collections::{BTreeMap, BTreeSet};
-use std::ffi::OsStr;
-use std::fs::OpenOptions;
-use std::io::{Stderr, Write};
-use std::path::Path;
-use std::path::PathBuf;
-use std::process::{Command, Stdio, exit, Child, Output};
-use std::{cmp, env, fs, io};
 use exfo::compiler_io::util::DisplayCommand;
 use exfo::target::target::Target;
 use exfo::target::target::x86_64::Os;
+use serde::{Deserialize, Serialize};
+use similar::{TextDiff};
+use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::Path;
+use std::path::PathBuf;
+use std::process::{Child, Command, Output, Stdio, exit};
+use std::{cmp, env, fs, io};
 
 #[derive(Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq, Eq, Clone)]
 pub enum TestResult {
@@ -40,7 +40,7 @@ pub fn load_test_results_from_file(json_path: impl AsRef<Path>) -> io::Result<Te
     let json = match fs::read_to_string(json_path) {
         Ok(recorded) => recorded,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(TestResults::new()),
-        Err(e) => return Err(e.into()),
+        Err(e) => return Err(e),
     };
     let test_results: TestResults = serde_json::from_str(&json)?;
     Ok(test_results)
@@ -108,10 +108,7 @@ fn main() -> io::Result<()> {
     }
 
     let mut test_results = load_test_results_from_file(&json_path)?;
-    let recorded = test_results
-        .keys()
-        .map(|k| k.clone())
-        .collect::<BTreeSet<_>>();
+    let recorded = test_results.keys().cloned().collect::<BTreeSet<_>>();
 
     // CASE: There are more tests in the json file then in the folder.
     if all_found.len() < recorded.len() {
@@ -132,7 +129,7 @@ fn main() -> io::Result<()> {
     assert!(recorded.len() <= all_found.len());
     let difference = all_found
         .difference(&recorded)
-        .map(|e| e.clone())
+        .cloned()
         .collect::<BTreeSet<_>>();
     match &command {
         Subcommand::Record { all } => {
@@ -141,8 +138,14 @@ fn main() -> io::Result<()> {
             println!("Recording tests...");
             let to_record = if new { &difference } else { &all_found };
 
-            let mut results =
-                evaluate_tests(&compiler_path, to_record, test_folder, test_bin, true, Target::get_current_target().unwrap())?;
+            let mut results = evaluate_tests(
+                &compiler_path,
+                to_record,
+                test_folder,
+                test_bin,
+                true,
+                Target::get_current_target().unwrap(),
+            )?;
             assert_eq!(results.len(), to_record.len());
             for test in &difference {
                 let value = results.get(test).unwrap();
@@ -175,7 +178,10 @@ fn main() -> io::Result<()> {
 
             print!("{message}", message = DisplayBox(&message, Some(BLUE)));
         }
-        Subcommand::Check { preferred_pic, target } => {
+        Subcommand::Check {
+            preferred_pic,
+            target,
+        } => {
             // unwrap because subcommand::parse should always return Some
             let got: TestResults = evaluate_tests(
                 compiler_path,
@@ -232,15 +238,14 @@ fn evaluate_tests(
     // Compilation
     for test in tests {
         let test_path = test_folder.join(test).with_extension("exfo");
-        let test_output = test_bin
-            .join(test)
-            .with_extension(target.exe_extension());
+        let test_output = test_bin.join(test).with_extension(target.exe_extension());
 
         let mut compiler = Command::new(compiler_path);
         compiler
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
-            .arg("-t").arg(target.to_string())
+            .arg("-t")
+            .arg(target.to_string())
             .arg(&test_path)
             .arg("-o")
             .arg(&test_output);
@@ -254,6 +259,7 @@ fn evaluate_tests(
         if compiler.wait()?.success() {
             compiled_tests.insert(test, test_output);
         } else {
+            info!("{test} failed to compile");
             results.insert(test.clone(), TestResult::CompilerFailure);
         }
     }
@@ -273,20 +279,23 @@ fn evaluate_tests(
         exe.stderr(Stdio::piped());
         info!("Running executable: {}", DisplayCommand(&exe));
 
-
         running_tests.insert(test, exe.spawn()?);
     }
 
     let mut got_tests = BTreeMap::<&str, Output>::new();
     for (test, exe) in running_tests {
-        got_tests.insert(&test, exe.wait_with_output()?);
+        got_tests.insert(test, exe.wait_with_output()?);
     }
 
     for (test, output) in got_tests {
         let stdout = String::from_utf8_lossy(&output.stdout)
             .replace("\r\n", "\n") // we love windows
             .to_string();
-        let return_code = output.status.code().ok_or(io::ErrorKind::NotFound)?;
+        let return_code = output.status.code().unwrap_or_else(|| {
+            err!("{test} was terminated by signal");
+            -1
+        });
+
 
         results.insert(
             String::from(test),
@@ -360,7 +369,11 @@ fn check_tests(
                             .context_radius(lines)
                             .header("EXPECTED STDOUT", "GOT STDOUT")
                             .to_string();
-                        let mut file = OpenOptions::new().create(true).write(true).open(&path)?;
+                        let mut file = OpenOptions::new()
+                            .create(true)
+                            .truncate(true)
+                            .write(true)
+                            .open(&path)?;
                         file.write_all(diff.as_bytes())?;
                     }
                     // Put :1:1 because some editors/terminals only recognize <filepath>:<line>:<column>-kind-of format

@@ -22,7 +22,7 @@ pub enum Type<'types> {
 pub enum BasicType {
     Void,
     Int32,
-    Int64_,
+    Int64,
     Float32,
     Float64,
     Bool,
@@ -35,7 +35,7 @@ impl BasicType {
 }
 pub const BASIC_TYPES: &[BasicType] = &[
     BasicType::Void,
-    BasicType::Int64_,
+    BasicType::Int64,
     BasicType::Int32,
     BasicType::Float32,
     BasicType::Float64,
@@ -43,7 +43,7 @@ pub const BASIC_TYPES: &[BasicType] = &[
     BasicType::CharPtr,
 ];
 
-pub const INTEGRAL_TYPES: &[BasicType] = &[BasicType::Int64_, BasicType::Int32];
+pub const INTEGRAL_TYPES: &[BasicType] = &[BasicType::Int64, BasicType::Int32];
 
 #[derive(PartialEq, Debug)]
 pub struct UserType<'types> {
@@ -162,7 +162,7 @@ impl<'ast> Display for DisplayType<'ast> {
                         BasicType::Bool => write!(f, "bool")?,
                         BasicType::CharPtr => write!(f, "char_ptr")?,
                         BasicType::Int32 => write!(f, "i32")?,
-                        BasicType::Int64_ => write!(f, "i64")?,
+                        BasicType::Int64 => write!(f, "i64")?,
                         BasicType::Float32 => write!(f, "f32")?,
                         BasicType::Float64 => write!(f, "f64")?,
                     },
@@ -198,7 +198,7 @@ impl<'types> Type<'types> {
             Type::Basic(primitive) => match primitive {
                 BasicType::Void => 0,
                 BasicType::Int32 => 4,
-                BasicType::Int64_ => 8,
+                BasicType::Int64 => 8,
                 BasicType::Float32 => 4,
                 BasicType::Float64 => 8,
                 BasicType::Bool => 1,

@@ -1,4 +1,4 @@
-use crate::analysis::r#type::{FunctionType, PointerType, Type, TypeId};
+use crate::analysis::r#type::{BasicType, FunctionType, INTEGRAL_TYPES, PointerType, Type, TypeId};
 use crate::analysis::type_system::type_context::TypeCtx;
 use crate::ast::binop::{BinopFamily, BinopKind};
 use crate::ast::expression::{AstLiteral, Expression, ExpressionKind, UnaryKind};
@@ -7,7 +7,6 @@ use crate::ast::statement::{
 };
 use crate::common::BumpVec;
 use crate::common::symbol_table::{CompilerEntity, SymbolTable};
-use crate::compiling::ir::binop;
 use crate::compiling::ir::binop::{Binop, BitwiseBinop, BitwiseKind, IntegerBinop};
 use crate::compiling::ir::intermediate_representation::{Function, IntermediateRepresentation};
 use crate::compiling::ir::opcode::{Arg, Lvalue, Opcode, Rvalue};
@@ -152,7 +151,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                     kind: match kind.family() {
                         BinopFamily::Arithmetic | BinopFamily::Ordering => {
                             //                         TODO: Unsigned
-                            binop::IntegerBinop::from_ast(true, size, *kind)
+                            IntegerBinop::from_ast(true, size, *kind)
                         }
                         BinopFamily::Logical => {
                             unreachable!("This should be handled by another match arm")
@@ -240,13 +239,24 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
                 }
             }
             ExpressionKind::Literal(l) => {
+                let expr_type = expression.ty.get(self.types());
+                let Type::Basic(expr_type) = expr_type else {
+                    panic!("Compiler bug: Expression literal has non-basic type");
+                };
                 match l {
-                    AstLiteral::Integral(i) => {
-                        Arg::RValue(Rvalue::Int64 {
-                            signed: true, // TODO
-                            bits: i.to_le_bytes(),
-                        })
-                    }
+                    AstLiteral::Integral(i) => match expr_type {
+                        BasicType::Int32 => Arg::RValue(Rvalue::Int32 {
+                            signed: true,
+                            bits: (*i as i32).to_le_bytes(),
+                        }),
+                        BasicType::Int64 => Arg::RValue(Rvalue::Int64 {
+                            signed: false,
+                            bits: (*i).to_le_bytes(),
+                        }),
+                        _ => todo!(
+                            "IMPLICIT CONVERSIONS FROM INT LITERAL TO FLOAT ARE NOT IMPLEMENTED YET"
+                        ),
+                    },
                     AstLiteral::FloatingPoint(_) => {
                         todo!("Floats are not supported by compiler yet")
                     }
@@ -664,7 +674,7 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
 
         // Size of value pointed by pointer
         let inner_size = ty.inner.get(self.types()).size();
-        if  inner_size > 1 {
+        if inner_size > 1 {
             self.push_opcode(Opcode::Binop {
                 left: offset.clone(),
                 right: Arg::RValue(Rvalue::Int64 {
@@ -679,7 +689,11 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
         }
         self.push_opcode(Opcode::Binop {
             left: ptr,
-            right: if inner_size > 1 { Arg::LValue(result) } else { offset },
+            right: if inner_size > 1 {
+                Arg::LValue(result)
+            } else {
+                offset
+            },
             result,
             kind: IntegerBinop::from_ast(true, 8, BinopKind::Addition),
         });

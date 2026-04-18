@@ -232,7 +232,12 @@ impl<'ir> Codegen<'ir> {
                                     Subtraction => asm!(self, "  sub{p} {rhs}, {lhs}"),
                                     Multiplication => asm!(self, "  imul{p} {rhs}, {lhs}"),
                                     Division => {
-                                        asm!(self, "  cqto");
+                                        let op = match size {
+                                            4 => "cltd",
+                                            8 => "cqto",
+                                            _ => panic!("unsupported operation size")
+                                        };
+                                        asm!(self, "  {op}");
                                         asm!(self, "  idiv{p} {rhs}");
                                     }
                                 }
@@ -479,17 +484,24 @@ impl<'ir> Codegen<'ir> {
     fn push_arg(&mut self, arg: &Arg<'ir>) {
         if arg.size() == 0 {
             return;
-        };
+        }
         // Zero-extend and push if size is not 8
-        if arg.size() == 1 {
+        if arg.size() != 8 {
             let display = DisplayArg(arg, self.pic(), self.arg_offsets()).to_string();
-            asm!(self, "  movzbq {display}, {Rax}");
+            let (prefix, reg) = match arg.size() {
+                1 => ("zbq", Rax),
+                4 => ("l", Eax),
+                _ => {
+                    panic!("Unknown argument size")
+                }
+            };
+            asm!(self, "  mov{prefix} {display}, {reg}");
             asm!(self, "  pushq {Rax}");
             return;
         }
         let p = Register::prefix_from_size(arg.size());
 
-        assert_eq!(arg.size(), 8, "4 byte operations are not supported yet");
+        assert_eq!(arg.size(), 8);
         let offsets = self.arg_offsets();
         match arg {
             Arg::RValue(rvalue) => {
@@ -547,6 +559,12 @@ impl<'ir> Display for DisplayRValue<'ir> {
                     false => write!(f, "${}", u64::from_le_bytes(*bits))?,
                 };
             }
+            Rvalue::Int32 { bits, signed } => {
+                match *signed {
+                    true => write!(f, "${}", i32::from_le_bytes(*bits))?,
+                    false => write!(f, "${}", u32::from_le_bytes(*bits))?,
+                };
+            },
             Rvalue::String { index } => {
                 match *pic {
                     true => write!(f, ".STR{index}(%rip)")?,

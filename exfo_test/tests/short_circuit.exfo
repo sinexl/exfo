@@ -1,5 +1,5 @@
 extern "C" func printf(char_ptr, ...): void;
-extern "C" func memcmp(bool*, bool*, i64): i32;
+extern "C" func memcmp(bool*, bool*, i32): i32;
 func side(b: bool, message: char_ptr): bool {
     printf("%s\n", message);
     return b;

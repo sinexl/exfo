@@ -15,7 +15,7 @@ func get_string(b: bool): char_ptr {
 func main(): void {
     printf("<-- Integer -->\n");
     len := 10;
-    extern "C" func malloc(i64): i32*;
+    extern "C" func malloc(i32): i32*;
     extern "C" func free(i32*): void;
     a := malloc(len * 8);
     i := 0; while i < len {
