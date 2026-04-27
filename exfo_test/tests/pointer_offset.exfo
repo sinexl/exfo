@@ -29,7 +29,7 @@ func main(): void {
     }
 
     free(a);
-    extern "C" func malloc(i64): bool*;
+    extern "C" func malloc(i32): bool*;
     extern "C" func free(bool*): void;
     printf("\n<-- Boolean -->\n");
     len := 5;

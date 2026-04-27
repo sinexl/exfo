@@ -218,7 +218,7 @@ impl<'ir> Codegen<'ir> {
                             left.size(),
                             right.size(),
                         );
-                        // Left hand side: Rax appropriate bytes, Right hand side: Rcx appropriate bytes.
+                        // Left hand side: Rax appropriate bytes (also put into result), Right hand side: Rcx appropriate bytes.
                         let lhs = Rax.lower_bytes_register(size);
                         let rhs = Rcx.lower_bytes_register(size);
                         let p = lhs.prefix();

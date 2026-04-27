@@ -262,10 +262,12 @@ impl<'errors, 'ast, 'types> Typechecker<'types, 'errors> {
                 let left_ty = left_id.get(self.types());
                 let right_ty = right_id.get(self.types());
 
+                use Type::*;
+                use BasicType::*;
                 let ty = match (left_ty, right_ty) {
-                    // TODO: Offsets of i32
-                    (Type::Pointer(_), Type::Basic(BasicType::Int64)) => left_id,
-                    (Type::Basic(BasicType::Int64), Type::Pointer(_)) => right_id,
+                    // TODO: Make this more generic
+                    (Pointer(_), Basic(Int64) | Basic(Int32)) => left_id,
+                    (Basic(Int64) | Basic(Int32), Pointer(_)) => right_id,
                     _ => self.typecheck_binop(left_id, right_id, kind, expression.loc.clone())?,
                 };
 
