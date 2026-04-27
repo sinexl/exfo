@@ -277,6 +277,36 @@ impl<'ir> Codegen<'ir> {
                 }
             }
 
+            Opcode::ComputeOffset64 { left, right, result, step_size } => {
+                comment!(self, "Compute offset");
+                assert_same!("ComputeOffset64: left hand side must always be 64 bits", left.size(), 8);
+
+                // left:  Rax
+                // right: Rcx
+                self.load_arg_to_reg(left, Rax);
+
+                // load (or size extend if needed)
+                if right.size() != 8 {
+                    // TODO: This woudn't work with unsigned numbers
+                    self.sign_extend64(right, Rcx)
+                } else {
+                    self.load_arg_to_reg(right, Rcx);
+                }
+
+                // Handle step_size
+                let step_size = *step_size;
+                if step_size > 1 {
+                    if step_size.is_power_of_two()  {
+                        let base = step_size.trailing_zeros();
+                        asm!(self, "  shl ${base}, {Rcx}")
+                    } else {
+                        asm!(self, "  imulq ${step_size}, {Rcx}")
+                    }
+                }
+                asm!(self, "  addq {Rcx}, {Rax}");
+                self.store_reg_to_lvalue(Rax, result);
+            }
+
             Opcode::Negate { result, item } => {
                 let size = assert_same!(
                     "Opcode::Negate: destination and source cannot have different sizes",
@@ -481,21 +511,25 @@ impl<'ir> Codegen<'ir> {
         }
     }
 
+    fn sign_extend64(&mut self, arg: &Arg<'ir>, result: Register) {
+        assert_same!("COMPILER BUG: sign_extend64: destination register should be 64 bits", result.size(), 8);
+        if arg.size() == 8 {
+            panic!("COMPILER BUG: sign_extend64: argument is already 64 bits")
+        }
+        if arg.size() == 0 {
+            return;
+        }
+        let display = DisplayArg(arg, self.pic(), self.arg_offsets()).to_string();
+        let prefix = Register::prefix_from_size(arg.size());
+        asm!(self, "  movs{prefix}q {display}, {result}");
+    }
     fn push_arg(&mut self, arg: &Arg<'ir>) {
         if arg.size() == 0 {
             return;
         }
-        // Zero-extend and push if size is not 8
+        // Size-extend and push if size is not 8
         if arg.size() != 8 {
-            let display = DisplayArg(arg, self.pic(), self.arg_offsets()).to_string();
-            let (prefix, reg) = match arg.size() {
-                1 => ("zbq", Rax),
-                4 => ("l", Eax),
-                _ => {
-                    panic!("Unknown argument size")
-                }
-            };
-            asm!(self, "  mov{prefix} {display}, {reg}");
+            self.sign_extend64(arg, Rax);
             asm!(self, "  pushq {Rax}");
             return;
         }

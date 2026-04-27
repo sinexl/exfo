@@ -10,6 +10,16 @@ pub enum Opcode<'ir> {
         result: Lvalue,
         kind: Binop,
     },
+    // This implements
+    // result = left + right*step_size
+    // Unlike addition Binop, this instruction allows right hand side to have different size from left. 
+    // In this case, right will be sign extended.
+    ComputeOffset64 {
+        left: Arg<'ir>, // left is always 64 bits 
+        right: Arg<'ir>, 
+        result: Lvalue,
+        step_size: usize
+    },
     Negate {
         result: Lvalue,
         item: Arg<'ir>,
@@ -44,7 +54,8 @@ pub enum Opcode<'ir> {
     Return(Option<Arg<'ir>>),
 
     // Writes
-    // a = b.
+
+    // result = source.
     Assign {
         result: Lvalue,
         source: Arg<'ir>,

@@ -672,30 +672,12 @@ impl<'ir, 'ast, 'types> Compiler<'ir, 'types> {
         assert_eq!(ptr.size(), ptr_size);
         let result = self.allocate(ptr_size);
 
-        // Size of value pointed by pointer
-        let inner_size = ty.inner.get(self.types()).size();
-        if inner_size > 1 {
-            self.push_opcode(Opcode::Binop {
-                left: offset.clone(),
-                right: Arg::RValue(Rvalue::Int64 {
-                    bits: inner_size.to_le_bytes(),
-                    signed: true,
-                }),
-                result,
-                // TODO: Perform sign extension when the index is 32/16-bit value.
-                //  Maybe even put pointer arithmetic as a separate instruction in the IR.
-                kind: IntegerBinop::from_ast(true, 8, BinopKind::Multiplication),
-            });
-        }
-        self.push_opcode(Opcode::Binop {
+        let step_size = ty.inner.get(self.types()).size();
+        self.push_opcode(Opcode::ComputeOffset64 {
             left: ptr,
-            right: if inner_size > 1 {
-                Arg::LValue(result)
-            } else {
-                offset
-            },
+            right: offset,
+            step_size,
             result,
-            kind: IntegerBinop::from_ast(true, 8, BinopKind::Addition),
         });
         result
     }

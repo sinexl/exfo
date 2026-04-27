@@ -99,6 +99,8 @@ pub fn print_opcode(opcode: &Opcode, f: &mut impl Write, indent: usize) -> std::
         Opcode::Store { result, source } => writeln!(f, "{tab}*{result} = {source}")?,
         Opcode::Load { result, source } => writeln!(f, "{tab}{result} = *{source}")?,
         Opcode::Not { result, item } => writeln!(f, "{tab}{result} = !{item}")?,
+        Opcode::ComputeOffset64 { left, right, result, step_size } => writeln!(f, "{tab}{result} = {left} + {step_size}*{right}")?,
+
     }
 
     Ok(())
